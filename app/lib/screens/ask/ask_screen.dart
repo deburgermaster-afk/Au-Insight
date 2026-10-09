@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -22,6 +23,17 @@ const _suggestions = [
   'Which documents prove skilled employment?',
   'How long is the 189 taking right now?',
 ];
+
+/// First message for someone who hasn't told their story yet. It's part of the chat history,
+/// so the agent knows it asked.
+const _welcome =
+    "Hi, I'm Immi Insight. To answer for **your** situation, I'd like to know your story first.\n\n"
+    'Tell me everything that has happened since you first came to Australia (or started planning to): '
+    "when you arrived, every visa you've held or applied for, study, work, family, any refusals, "
+    'your current visa and when it ends, and what you want next. Write it however it comes. '
+    "I'll keep it in your case file.\n\n"
+    "After that I'll ask you to upload your documents so I can read them. "
+    'Or skip all this and just ask me anything.';
 
 class AskScreen extends StatefulWidget {
   const AskScreen({super.key});
@@ -63,11 +75,15 @@ class _AskScreenState extends State<AskScreen> {
     final row = await _sb.from('chats').select('id, messages').order('updated_at', ascending: false).limit(1).maybeSingle();
     if (!mounted) return;
     if (row != null) {
+      final saved = row['messages'] as List? ?? const [];
+      final firstTime = saved.isEmpty && await _isFirstTime();
+      if (!mounted) return;
       setState(() {
         _chatId = row['id'] as String;
         _messages
           ..clear()
-          ..addAll([for (final m in (row['messages'] as List? ?? const [])) ChatMessage.fromJson((m as Map).cast())]);
+          ..addAll([for (final m in saved) ChatMessage.fromJson((m as Map).cast())]);
+        if (firstTime) _messages.add(ChatMessage(role: 'assistant', text: _welcome));
       });
       _toBottom(jump: true);
     } else {
@@ -78,12 +94,24 @@ class _AskScreenState extends State<AskScreen> {
   Future<void> _newChat() async {
     _sub?.cancel();
     final row = await _sb.from('chats').insert({}).select('id').single();
+    final firstTime = await _isFirstTime();
     if (!mounted) return;
     setState(() {
       _sub = null;
       _chatId = row['id'] as String;
       _messages.clear();
+      if (firstTime) _messages.add(ChatMessage(role: 'assistant', text: _welcome));
     });
+  }
+
+  /// No story in the case file yet.
+  Future<bool> _isFirstTime() async {
+    try {
+      final c = await _sb.from('cases').select('story').order('created_at').limit(1).maybeSingle();
+      return ((c?['story'] as String?) ?? '').trim().isEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _save() async {
@@ -158,6 +186,8 @@ class _AskScreenState extends State<AskScreen> {
                   );
                 case 'decision':
                   reply.decisions = [for (final d in e['results'] as List) (d as Map).cast<String, dynamic>()];
+                case 'action':
+                  if (!reply.actions.contains(e['action'])) reply.actions.add(e['action'] as String);
                 case 'error':
                   reply.error = e['message'] as String;
               }
@@ -343,7 +373,59 @@ class _AssistantTurn extends StatelessWidget {
             Padding(padding: const EdgeInsets.only(bottom: 8), child: DecisionCard(assessmentFromJson(d)).enter(i)),
         ],
         if (m.sources.isNotEmpty) _Sources(m.sources),
+        if (m.actions.isNotEmpty && !streaming)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final (i, a) in m.actions.indexed)
+                  _ActionChip(
+                    primary: i == 0,
+                    icon: a == 'upload_documents' ? LucideIcons.upload : LucideIcons.folderOpen,
+                    label: a == 'upload_documents' ? 'Upload documents' : 'Open case file',
+                    onTap: () => runQuickAction(
+                      StatefulNavigationShell.of(context).goBranch,
+                      a == 'upload_documents' ? QuickAction.upload : QuickAction.caseFile,
+                    ),
+                  ).enter(i),
+              ],
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  const _ActionChip({required this.icon, required this.label, required this.onTap, this.primary = false});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = primary ? AppColors.bg : AppColors.fg;
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(color: primary ? AppColors.fg : AppColors.raised, borderRadius: BorderRadius.circular(17)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AppText.small.copyWith(color: fg, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -15,20 +15,23 @@ const _tabs = [
   (LucideIcons.database, 'Sources'),
 ];
 
+/// Opens the tab an action belongs to, then tells that screen to act.
+void runQuickAction(void Function(int index) goBranch, QuickAction a) {
+  goBranch(switch (a) {
+    QuickAction.newChat => 0,
+    QuickAction.caseFile => 1,
+    QuickAction.upload => 2,
+  });
+  quickActions.value = QuickActionEvent(a);
+}
+
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.shell});
   final StatefulNavigationShell shell;
 
   void _go(int i) => shell.goBranch(i, initialLocation: i == shell.currentIndex);
 
-  void _action(QuickAction a) {
-    shell.goBranch(switch (a) {
-      QuickAction.newChat => 0,
-      QuickAction.caseFile => 1,
-      QuickAction.upload => 2,
-    });
-    quickActions.value = QuickActionEvent(a);
-  }
+  void _action(QuickAction a) => runQuickAction(shell.goBranch, a);
 
   @override
   Widget build(BuildContext context) {

@@ -54,8 +54,10 @@ class ChatMessage {
     List<ChatStep>? steps,
     List<SourceRef>? sources,
     List<Map<String, dynamic>>? decisions,
+    List<String>? actions,
     this.error,
   }) : steps = steps ?? [],
+       actions = actions ?? [],
        sources = sources ?? [],
        decisions = decisions ?? [];
   final String role;
@@ -66,6 +68,9 @@ class ChatMessage {
 
   /// Raw VisaAssessment JSON from the server-side rules engine.
   List<Map<String, dynamic>> decisions;
+
+  /// Buttons the agent asked to show under this turn: "upload_documents" | "open_case_file".
+  final List<String> actions;
   String? error;
 
   Map<String, dynamic> toJson() => {
@@ -75,6 +80,7 @@ class ChatMessage {
     if (steps.isNotEmpty) 'steps': [for (final s in steps) s.toJson()],
     if (sources.isNotEmpty) 'sources': [for (final s in sources) s.toJson()],
     if (decisions.isNotEmpty) 'decisions': decisions,
+    if (actions.isNotEmpty) 'actions': actions,
     if (error != null) 'error': error,
   };
 
@@ -85,6 +91,7 @@ class ChatMessage {
     steps: [for (final s in (j['steps'] as List? ?? const [])) ChatStep.fromJson((s as Map).cast())],
     sources: [for (final s in (j['sources'] as List? ?? const [])) SourceRef.fromJson((s as Map).cast())],
     decisions: [for (final d in (j['decisions'] as List? ?? const [])) (d as Map).cast<String, dynamic>()],
+    actions: [for (final a in (j['actions'] as List? ?? const [])) a as String],
     error: j['error'] as String?,
   );
 }

@@ -1,9 +1,9 @@
 // Agentic chat endpoint. See agent.ts for the event protocol and the tools.
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { todayISO } from "../_shared/engine/index.ts";
 import { type Emit, type Msg, runAgent } from "./agent.ts";
-import { systemPrompt } from "./prompt.ts";
+import { systemPrompt, type UserContext } from "./prompt.ts";
 
 // Defaults: xKiro's OpenAI-compatible gateway with the free models that did best on this
 // agent's tool-calling loop (correct arguments, used every tool, no invented numbers).
@@ -21,6 +21,19 @@ async function apiKey(): Promise<string> {
   const { data } = await admin.rpc("llm_api_key");
   llm.apiKey = typeof data === "string" ? data : "";
   return llm.apiKey;
+}
+
+/** Whether the user has told their story yet and what they've uploaded, so the agent knows where to start. */
+async function userContext(supabase: SupabaseClient): Promise<UserContext> {
+  const [caseRow, docs] = await Promise.all([
+    supabase.from("cases").select("facts, story").order("created_at").limit(1).maybeSingle(),
+    supabase.from("documents").select("id", { count: "exact", head: true }),
+  ]);
+  return {
+    hasStory: Boolean(caseRow.data?.story?.trim()),
+    documents: docs.count ?? 0,
+    savedFacts: Object.keys(caseRow.data?.facts ?? {}).length,
+  };
 }
 
 const cors = {
@@ -41,14 +54,18 @@ Deno.serve(async (req) => {
   if (!auth?.claims) return new Response("Unauthorized", { status: 401, headers: cors });
 
   const body = await req.json().catch(() => ({}));
+  const user = await userContext(supabase);
   const history = Array.isArray(body.messages) ? body.messages.slice(-24) : [];
   const messages: Msg[] = [
-    { role: "system", content: systemPrompt(todayISO()) },
+    { role: "system", content: systemPrompt(todayISO(), user) },
     ...history
       .filter((m: { role?: string; content?: unknown }) =>
         (m.role === "user" || m.role === "assistant") && typeof m.content === "string"
       )
-      .map((m: { role: "user" | "assistant"; content: string }) => ({ role: m.role, content: m.content.slice(0, 12000) })),
+      .map((m: { role: "user" | "assistant"; content: string }) => ({
+        role: m.role,
+        content: m.content.slice(0, 12000),
+      })),
   ];
 
   const stream = new ReadableStream({

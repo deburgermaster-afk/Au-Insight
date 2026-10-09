@@ -1,6 +1,6 @@
 import { expect } from "jsr:@std/expect@1";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { type Msg, runAgent } from "./agent.ts";
+import { datesVersusToday, documentText, type Msg, runAgent } from "./agent.ts";
 
 // A fake OpenAI-compatible server: 1st call streams a tool call (arguments split
 // across chunks, as real providers do), 2nd call streams the final answer.
@@ -22,20 +22,32 @@ function fakeModel() {
         { choices: [{ delta: { reasoning: "Need the engine." } }] },
         {
           choices: [{
-            delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "assess_visas", arguments: args.slice(0, 20) } }] },
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: "call_1",
+                function: { name: "assess_visas", arguments: args.slice(0, 20) },
+              }],
+            },
           }],
         },
         { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: args.slice(20) } }] } }] },
         {
           choices: [{
             delta: {
-              tool_calls: [{ index: 1, id: "call_2", function: { name: "search_law", arguments: '{"query":"age 45"}' } }],
+              tool_calls: [{
+                index: 1,
+                id: "call_2",
+                function: { name: "search_law", arguments: '{"query":"age 45"}' },
+              }],
             },
           }],
         },
       ]);
     }
-    return sse([{ choices: [{ delta: { content: "Eligible for the 189 " } }] }, { choices: [{ delta: { content: "[1]." } }] }]);
+    return sse([{ choices: [{ delta: { content: "Eligible for the 189 " } }] }, {
+      choices: [{ delta: { content: "[1]." } }],
+    }]);
   });
   return { server, bodies, url: `http://localhost:${server.addr.port}` };
 }
@@ -146,4 +158,45 @@ Deno.test("falls back to the next model when one is rate-limited", async () => {
   }
   expect(seen).toEqual(["busy", "next"]);
   expect(events.filter((e) => e.type === "text").map((e) => e.delta).join("")).toBe("ok");
+});
+
+// A one-page PDF with a text layer, built by hand so the test needs no fixture file.
+function tinyPdf(text: string) {
+  const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = objects.map((o, i) => {
+    const at = pdf.length;
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+    return at;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  pdf += offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("");
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new TextEncoder().encode(pdf);
+}
+
+Deno.test("reads text from PDFs and text files, not images", async () => {
+  expect(await documentText("application/pdf", "grant.pdf", tinyPdf("Visa grant notice subclass 500"))).toContain(
+    "Visa grant notice subclass 500",
+  );
+  expect(await documentText("text/plain", "notes.txt", new TextEncoder().encode("arrived 2019"))).toBe("arrived 2019");
+  expect(await documentText("image/jpeg", "passport.jpg", new Uint8Array([1, 2, 3]))).toBeNull();
+});
+
+Deno.test("tells past dates from upcoming ones", () => {
+  const d = datesVersusToday(
+    "485 granted March 2021, extended to Mar 2026. Passport expires 2027-01-05. Moved Oct 2026.",
+    "2026-10-09",
+  );
+  expect(d.past).toEqual(["March 2021", "Mar 2026"]);
+  expect(d.thisMonth).toEqual(["Oct 2026"]);
+  expect(d.upcoming).toEqual(["2027-01-05"]);
 });

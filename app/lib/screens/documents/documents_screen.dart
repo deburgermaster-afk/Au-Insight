@@ -63,6 +63,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     super.initState();
     _load();
     quickActions.addListener(_onQuickAction);
+    // Opened by the action itself (first visit to this tab): the tap still counts as the user gesture
+    // the browser's file picker needs.
+    final pending = quickActions.value;
+    if (pending?.action == QuickAction.upload && DateTime.now().difference(pending!.at) < const Duration(seconds: 2)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onQuickAction());
+    }
   }
 
   void _onQuickAction() {

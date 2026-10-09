@@ -14,7 +14,7 @@ Australian migration decisions computed from the law itself. A Flutter web app (
  ART · JSA · ABS · OMARA ┘  browser)  search_law()  keyword + vector, as-at
                                       cases · chats · documents (RLS) · storage
                                       pg_cron: re-queue pages every hour
-                                      edge fn `chat`: agent loop, read-only tools, rules engine
+                                      edge fn `chat`: agent loop, tools, rules engine        
 ```
 
 | Folder | What it is |
@@ -34,7 +34,10 @@ Australian migration decisions computed from the law itself. A Flutter web app (
    - `at risk`, for discretionary criteria (health, character, debts), which are flagged and never decided.
 
    The points test matches Schedule 6D item by item (6D11–6D131). Missing facts give a points range, so a decision is still made when the unknowns can't change the outcome.
-2. **The AI explains.** It must call `assess_visas` for eligibility and `search_law` for every requirement it mentions, cite sources as `[n]`, and quote the provision. It can only read, never write.
+2. **The AI explains.** It must call `assess_visas` for eligibility and `search_law` for every requirement it mentions, cite sources as `[n]`, and quote the provision. It also chats naturally: small talk gets a plain reply with no tools.
+   - **First visit:** the chat opens by asking for the user's story since coming to Australia. The agent saves it to the case file (`save_story`, the only thing it can write), then asks for documents and shows an **Upload documents** button. Users can skip this and just ask.
+   - **Documents:** the agent lists and reads the user's uploads (PDF and text; scans and photos have no text layer yet), read-only, through row-level security.
+   - **Dates:** the server tags which dates in the story are already past, so an expired visa is flagged instead of being called current.
 3. **Every claim links to its source:** the Act, the Regulations, a migration instrument, or the Home Affairs page section it came from.
 
 Visa rules are marked `draft` until a person checks each criterion against its cited source. That review is what turns "computed" into "correct".

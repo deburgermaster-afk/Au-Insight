@@ -3,7 +3,8 @@
 <head>
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- App-like: no pinch or double-tap zoom, and no zoom-in when a text field gets focus (iOS). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="description" content="Australian visa decisions from the law itself — cited, instant, private.">
   <meta name="theme-color" content="#0B0B0C">
 
@@ -15,7 +16,15 @@
   <link rel="manifest" href="manifest.json">
   <title>Immi Insight</title>
   <style>
-    html, body { margin: 0; height: 100%; background: #0B0B0C; }
+    html, body {
+      margin: 0; height: 100%; background: #0B0B0C;
+      overflow: hidden;
+      overscroll-behavior: none;      /* no rubber-band bounce or pull-to-refresh */
+      touch-action: pan-x pan-y;      /* scrolling only: the browser never zooms */
+      -webkit-text-size-adjust: 100%;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
     /* Shown until Flutter paints its first frame, then fades out. */
     #splash { position: fixed; inset: 0; display: grid; place-items: center; transition: opacity .35s cubic-bezier(.22,1,.36,1); }
     #splash img { width: 56px; height: 56px; animation: breathe 1.6s ease-in-out infinite; }
@@ -25,6 +34,11 @@
 <body>
   <div id="splash"><img src="icon.svg" alt=""></div>
   <script>
+    // iOS Safari ignores user-scalable=no in a browser tab, so block its pinch gestures directly.
+    for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
+      document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+    }
+    document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
     window.addEventListener('flutter-first-frame', () => {
       const s = document.getElementById('splash');
       s.style.opacity = '0';

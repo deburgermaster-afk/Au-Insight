@@ -5,15 +5,23 @@
 //   { type: "step", id, tool, label, status: "running" | "done", hits? }
 //   { type: "source", n, title, section, url }
 //   { type: "decision", results }        (VisaAssessment[] from the rules engine)
+//   { type: "action", action }           (a button the app shows: "upload_documents" | "open_case_file")
 //   { type: "reasoning", delta } | { type: "text", delta } | { type: "error", message } | { type: "done" }
 //
 // Works with any OpenAI-compatible provider (LLM_BASE_URL / LLM_API_KEY / LLM_MODEL).
-// The model can only read: tools query as the signed-in user (RLS applies) and never write.
+// Tools run as the signed-in user (RLS applies). Documents and the law are read-only; the one
+// write is save_story, which keeps the user's own background in their case file.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assessAll, type CaseFacts, caseFactsSchema, todayISO } from "../_shared/engine/index.ts";
 
+const BUCKET = "case-documents";
+const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
+const MAX_DOCUMENT_CHARS = 20000;
+
 const MAX_STEPS = 8;
+/** Caps a reply so a model stuck repeating itself can't run on. */
+const MAX_OUTPUT_TOKENS = 3000;
 
 /** `models` is tried in order: free tiers rate-limit, so a busy model falls through to the next. */
 export type LLMConfig = { baseUrl: string; apiKey: string; models: string[] };
@@ -81,7 +89,7 @@ const toolDefs = [
     type: "function",
     function: {
       name: "get_case_file",
-      description: "Read the facts the user saved in their case file.",
+      description: "Read the user's case file: the facts they saved and their story (their migration history so far).",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -89,8 +97,39 @@ const toolDefs = [
     type: "function",
     function: {
       name: "list_documents",
-      description: "List the user's uploaded documents and facts extracted from them.",
+      description: "List the user's uploaded documents (id, file name, folder, type, size).",
       parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_document",
+      description:
+        "Read the text of one of the user's uploaded documents (PDF or text). Use the id from list_documents. Scanned images have no text.",
+      parameters: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_story",
+      description:
+        "Save the user's migration story to their case file so future chats know it. Write the complete story so far (it replaces the saved one) as a short dated timeline: arrivals, visas held and applied for, study, work, family, refusals, current visa and expiry, goals. Only what the user said or their documents show.",
+      parameters: { type: "object", properties: { story: { type: "string" } }, required: ["story"] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "show_button",
+      description:
+        "Show the user a button under your reply: upload_documents opens the document upload, open_case_file opens their case file.",
+      parameters: {
+        type: "object",
+        properties: { action: { type: "string", enum: ["upload_documents", "open_case_file"] } },
+        required: ["action"],
+      },
     },
   },
   {
@@ -114,6 +153,12 @@ function stepLabel(name: string, args: Record<string, unknown>): string {
       return "Checking your documents";
     case "assess_visas":
       return "Running the decision engine";
+    case "read_document":
+      return "Reading a document";
+    case "save_story":
+      return "Saving your story to your case file";
+    case "show_button":
+      return "Preparing a shortcut";
     default:
       return name;
   }
@@ -151,25 +196,75 @@ function makeTools(supabase: SupabaseClient, emit: Emit) {
             seen.set(r.section_id, n);
             emit({ type: "source", n, title: r.title, section, url: r.url });
           }
-          return { n, title: r.title, section, url: r.url, retrieved: r.version_fetched_at, text: r.content.slice(0, 2500) };
+          return {
+            n,
+            title: r.title,
+            section,
+            url: r.url,
+            retrieved: r.version_fetched_at,
+            text: r.content.slice(0, 2500),
+          };
         },
       );
       return { results };
     },
 
     async get_case_file() {
-      const { data, error } = await supabase.from("cases").select("title, facts, updated_at").order("created_at").limit(1)
-        .maybeSingle();
-      return error ? { error: error.message } : (data ?? { facts: {} });
+      const { data, error } = await supabase.from("cases").select("title, facts, story, updated_at").order("created_at")
+        .limit(1).maybeSingle();
+      if (error) return { error: error.message };
+      return data ? { ...data, storyDates: datesVersusToday(data.story ?? "", todayISO()) } : { facts: {}, story: "" };
     },
 
     async list_documents() {
       const { data, error } = await supabase
         .from("documents")
-        .select("filename, mime_type, status, extracted, created_at, folders(name)")
+        .select("id, filename, mime_type, size_bytes, created_at, folders(name)")
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(100);
       return error ? { error: error.message } : { documents: data };
+    },
+
+    async read_document(args: { id?: string }) {
+      const { data: doc, error } = await supabase.from("documents").select(
+        "filename, mime_type, size_bytes, storage_path",
+      )
+        .eq("id", String(args.id ?? "")).maybeSingle();
+      if (error || !doc) return { error: error?.message ?? "No document with that id" };
+      if (doc.size_bytes > MAX_DOCUMENT_BYTES) {
+        return { filename: doc.filename, error: "Too large to read (over 15 MB)" };
+      }
+      const { data: file, error: dlError } = await supabase.storage.from(BUCKET).download(doc.storage_path);
+      if (dlError || !file) return { filename: doc.filename, error: dlError?.message ?? "Download failed" };
+      const text = await documentText(doc.mime_type, doc.filename, new Uint8Array(await file.arrayBuffer()));
+      if (text === null) {
+        return { filename: doc.filename, error: "This file type has no readable text (e.g. a photo or scan)." };
+      }
+      return {
+        filename: doc.filename,
+        text: text.slice(0, MAX_DOCUMENT_CHARS),
+        truncated: text.length > MAX_DOCUMENT_CHARS,
+      };
+    },
+
+    async save_story(args: { story?: string }) {
+      const story = String(args.story ?? "").trim().slice(0, 8000);
+      if (!story) return { error: "Empty story" };
+      const { data: row } = await supabase.from("cases").select("id").order("created_at").limit(1).maybeSingle();
+      if (!row) return { error: "No case file" };
+      const { error } = await supabase.from("cases").update({ story, updated_at: new Date().toISOString() }).eq(
+        "id",
+        row.id,
+      );
+      return error ? { error: error.message } : { saved: true, storyDates: datesVersusToday(story, todayISO()) };
+    },
+
+    show_button(args: { action?: string }) {
+      if (args.action !== "upload_documents" && args.action !== "open_case_file") {
+        return Promise.resolve({ error: "Unknown action" });
+      }
+      emit({ type: "action", action: args.action });
+      return Promise.resolve({ shown: true });
     },
 
     async assess_visas(args: { facts?: unknown }) {
@@ -188,6 +283,44 @@ function makeTools(supabase: SupabaseClient, emit: Emit) {
   };
 }
 
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/**
+ * Month-year dates in the text, split into past and upcoming relative to today. Models misjudge
+ * whether e.g. "March 2026" has passed, so the tools hand them the comparison.
+ */
+export function datesVersusToday(text: string, today: string) {
+  const [ty, tm] = today.split("-").map(Number);
+  const found = new Map<string, number>(); // label → months from today
+  const add = (label: string, y: number, m: number) => found.set(label, (y - ty) * 12 + (m - tm));
+  for (
+    const x of text.matchAll(
+      /\b(\d{1,2}\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(\d{4})\b/gi,
+    )
+  ) {
+    add(x[0].trim(), Number(x[3]), MONTHS.indexOf(x[2].toLowerCase()) + 1);
+  }
+  for (const x of text.matchAll(/\b(\d{4})-(\d{2})(-\d{2})?\b/g)) {
+    if (Number(x[2]) >= 1 && Number(x[2]) <= 12) add(x[0], Number(x[1]), Number(x[2]));
+  }
+  const out = { today, past: [] as string[], thisMonth: [] as string[], upcoming: [] as string[] };
+  for (const [label, diff] of found) (diff < 0 ? out.past : diff === 0 ? out.thisMonth : out.upcoming).push(label);
+  return out;
+}
+
+/** Plain text of a PDF or text file; null for files without a text layer (images, scans, Word). */
+export async function documentText(mime: string, filename: string, bytes: Uint8Array): Promise<string | null> {
+  const name = filename.toLowerCase();
+  if (mime === "application/pdf" || name.endsWith(".pdf")) {
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const { text } = await extractText(await getDocumentProxy(bytes), { mergePages: true });
+    const clean = text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+    return clean || null;
+  }
+  if (mime.startsWith("text/") || /\.(txt|md|csv|json)$/.test(name)) return new TextDecoder().decode(bytes);
+  return null;
+}
+
 /** One streamed completion. Emits text/reasoning deltas as they arrive; returns the full assistant turn. */
 async function complete(llm: LLMConfig, messages: Msg[], emit: Emit, signal: AbortSignal, allowTools = true) {
   let res: Response | undefined;
@@ -203,6 +336,7 @@ async function complete(llm: LLMConfig, messages: Msg[], emit: Emit, signal: Abo
         ...(allowTools ? { tools: toolDefs, tool_choice: "auto" } : {}),
         stream: true,
         temperature: 0.1,
+        max_tokens: MAX_OUTPUT_TOKENS,
       }),
     });
     if (res.ok && res.body) break;
@@ -251,7 +385,13 @@ async function complete(llm: LLMConfig, messages: Msg[], emit: Emit, signal: Abo
 }
 
 /** Runs tool rounds until the model answers without calling a tool. */
-export async function runAgent(llm: LLMConfig, supabase: SupabaseClient, messages: Msg[], emit: Emit, signal: AbortSignal) {
+export async function runAgent(
+  llm: LLMConfig,
+  supabase: SupabaseClient,
+  messages: Msg[],
+  emit: Emit,
+  signal: AbortSignal,
+) {
   const tools = makeTools(supabase, emit);
   for (let step = 0; step < MAX_STEPS; step++) {
     const { content, calls } = await complete(llm, messages, emit, signal);
