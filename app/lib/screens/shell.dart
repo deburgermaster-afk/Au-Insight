@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/quick_actions.dart';
+import '../data/uploads.dart';
 import '../motion.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -17,6 +18,8 @@ const _tabs = [
 
 /// Opens the tab an action belongs to, then tells that screen to act.
 void runQuickAction(void Function(int index) goBranch, QuickAction a) {
+  // Open the file picker first, while still inside the tap; then show Documents for the progress.
+  if (a == QuickAction.upload) uploads.pickAndUpload();
   goBranch(switch (a) {
     QuickAction.newChat => 0,
     QuickAction.caseFile => 1,

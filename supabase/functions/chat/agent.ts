@@ -5,6 +5,7 @@
 //   { type: "step", id, tool, label, status: "running" | "done", hits? }
 //   { type: "source", n, title, section, url }
 //   { type: "decision", results }        (VisaAssessment[] from the rules engine)
+//   steps from analysts carry { agent: "<analyst name>" }
 //   { type: "action", action }           (a button the app shows: "upload_documents" | "open_case_file")
 //   { type: "reasoning", delta } | { type: "text", delta } | { type: "error", message } | { type: "done" }
 //
@@ -14,12 +15,17 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assessAll, type CaseFacts, caseFactsSchema, todayISO } from "../_shared/engine/index.ts";
+import { analystPrompt, ANALYSTS } from "./analysts.ts";
 
 const BUCKET = "case-documents";
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 const MAX_DOCUMENT_CHARS = 20000;
 
 const MAX_STEPS = 8;
+/** Tool rounds each analyst gets before it must report. */
+const ANALYST_STEPS = 3;
+/** Tools analysts may use: reading only. */
+const ANALYST_TOOLS = ["search_law", "get_case_file", "list_documents", "read_document", "assess_visas"];
 /** Caps a reply so a model stuck repeating itself can't run on. */
 const MAX_OUTPUT_TOKENS = 3000;
 
@@ -135,6 +141,24 @@ const toolDefs = [
   {
     type: "function",
     function: {
+      name: "consult_analysts",
+      description:
+        "Ask four specialist analysts to work on the user's situation in parallel: visa pathways, points and eligibility, documents and evidence, timeline and status. Use for open questions about their options, plans or best way forward. Returns each analyst's report; you then write one answer from them.",
+      parameters: {
+        type: "object",
+        properties: {
+          question: {
+            type: "string",
+            description: "What the user wants to know, with the key facts from the conversation.",
+          },
+        },
+        required: ["question"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "assess_visas",
       description:
         "Run the deterministic rules engine for skilled visas (189, 190, 491). Returns the decision per visa, each criterion with status and source, the points range and the questions that would settle anything unknown.",
@@ -159,6 +183,8 @@ function stepLabel(name: string, args: Record<string, unknown>): string {
       return "Saving your story to your case file";
     case "show_button":
       return "Preparing a shortcut";
+    case "consult_analysts":
+      return "Consulting the analyst team";
     default:
       return name;
   }
@@ -322,7 +348,15 @@ export async function documentText(mime: string, filename: string, bytes: Uint8A
 }
 
 /** One streamed completion. Emits text/reasoning deltas as they arrive; returns the full assistant turn. */
-async function complete(llm: LLMConfig, messages: Msg[], emit: Emit, signal: AbortSignal, allowTools = true) {
+type ToolDef = (typeof toolDefs)[number];
+
+async function complete(
+  llm: LLMConfig,
+  messages: Msg[],
+  emit: Emit,
+  signal: AbortSignal,
+  defs: ToolDef[] | null = toolDefs,
+) {
   let res: Response | undefined;
   let lastError = "";
   for (const model of llm.models) {
@@ -333,7 +367,7 @@ async function complete(llm: LLMConfig, messages: Msg[], emit: Emit, signal: Abo
       body: JSON.stringify({
         model,
         messages,
-        ...(allowTools ? { tools: toolDefs, tool_choice: "auto" } : {}),
+        ...(defs?.length ? { tools: defs, tool_choice: "auto" } : {}),
         stream: true,
         temperature: 0.1,
         max_tokens: MAX_OUTPUT_TOKENS,
@@ -384,18 +418,24 @@ async function complete(llm: LLMConfig, messages: Msg[], emit: Emit, signal: Abo
   return { content, calls: calls.filter(Boolean) };
 }
 
-/** Runs tool rounds until the model answers without calling a tool. */
-export async function runAgent(
+type ToolFn = (a: Record<string, unknown>) => Promise<unknown>;
+
+/**
+ * Runs tool rounds until the model answers without calling a tool, or forces an answer after
+ * `maxSteps` rounds. Returns the final answer text.
+ */
+async function runLoop(
   llm: LLMConfig,
-  supabase: SupabaseClient,
   messages: Msg[],
+  tools: Record<string, ToolFn>,
+  defs: ToolDef[],
   emit: Emit,
   signal: AbortSignal,
-) {
-  const tools = makeTools(supabase, emit);
-  for (let step = 0; step < MAX_STEPS; step++) {
-    const { content, calls } = await complete(llm, messages, emit, signal);
-    if (!calls.length) return;
+  maxSteps: number,
+): Promise<string> {
+  for (let step = 0; step < maxSteps; step++) {
+    const { content, calls } = await complete(llm, messages, emit, signal, defs);
+    if (!calls.length) return content;
     messages.push({ role: "assistant", content: content || null, tool_calls: calls });
     for (const call of calls) {
       let args: Record<string, unknown> = {};
@@ -404,9 +444,7 @@ export async function runAgent(
       } catch { /* model sent invalid JSON: run with no args */ }
       const label = stepLabel(call.function.name, args);
       emit({ type: "step", id: call.id, tool: call.function.name, label, status: "running" });
-      const fn = tools[call.function.name as keyof typeof tools] as
-        | ((a: Record<string, unknown>) => Promise<unknown>)
-        | undefined;
+      const fn = tools[call.function.name];
       const result = fn ? await fn(args).catch((e: Error) => ({ error: e.message })) : { error: "unknown tool" };
       const hits = call.function.name === "search_law"
         ? ((result as { results?: { n: number; section: string; title: string }[] }).results ?? []).map((h) => ({
@@ -420,5 +458,56 @@ export async function runAgent(
   }
   // Out of tool rounds: the model must now answer from what it has gathered.
   messages.push({ role: "user", content: "Answer now using only the tool results above. Do not call more tools." });
-  await complete(llm, messages, emit, signal, false);
+  return (await complete(llm, messages, emit, signal, null)).content;
+}
+
+/** The lead agent: chats, uses tools, and can hand deep questions to the analyst team. */
+export async function runAgent(
+  llm: LLMConfig,
+  supabase: SupabaseClient,
+  messages: Msg[],
+  emit: Emit,
+  signal: AbortSignal,
+) {
+  const base = makeTools(supabase, emit) as unknown as Record<string, ToolFn>;
+  const analystDefs = toolDefs.filter((d) => ANALYST_TOOLS.includes(d.function.name));
+
+  // The conversation so far, as plain text, so analysts know what was said.
+  const transcript = () =>
+    messages
+      .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content)
+      .slice(-8)
+      .map((m) => `${m.role}: ${m.content}`)
+      .join("\n\n");
+
+  const consult_analysts: ToolFn = async (args) => {
+    const question = String(args.question ?? "");
+    const context = transcript();
+    const reports = await Promise.all(
+      ANALYSTS.map(async (a, i) => {
+        // Stagger starts a little: free model tiers rate-limit bursts.
+        await new Promise((r) => setTimeout(r, i * 400));
+        // Analysts' steps show in the UI under their name; their drafts don't stream to the user.
+        const analystEmit: Emit = (e) => {
+          if (e.type === "text" || e.type === "reasoning") return;
+          if (e.type === "step") {
+            emit({ ...e, id: `${a.id}:${e.id}`, agent: a.name, label: `${a.name}: ${e.label}` });
+          } else emit(e);
+        };
+        const thread: Msg[] = [
+          { role: "system", content: analystPrompt(a, todayISO()) },
+          { role: "user", content: `Question: ${question}\n\nConversation so far:\n${context}` },
+        ];
+        try {
+          const report = await runLoop(llm, thread, base, analystDefs, analystEmit, signal, ANALYST_STEPS);
+          return { analyst: a.name, report };
+        } catch (e) {
+          return { analyst: a.name, error: e instanceof Error ? e.message : String(e) };
+        }
+      }),
+    );
+    return { reports };
+  };
+
+  await runLoop(llm, messages, { ...base, consult_analysts }, toolDefs, emit, signal, MAX_STEPS);
 }

@@ -1,13 +1,12 @@
 import 'dart:math';
 
 import 'package:animations/animations.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../data/quick_actions.dart';
+import '../../data/uploads.dart';
 import '../../motion.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
@@ -15,7 +14,7 @@ import '../auth/auth_screens.dart' show toast;
 import '../onboarding.dart' show CountBadge, FolderGlyph;
 import '../shell.dart';
 
-const _bucket = 'case-documents';
+const _bucket = documentsBucket;
 const _tints = [Color(0xCC7DD3FC), AppColors.brand, Color(0xE6FDE68A), Color(0xE6FECDD3), Color(0xCCC4B5FD), Color(0xE6A7F3D0)];
 
 class _Folder {
@@ -40,11 +39,6 @@ class _Doc {
   final String path;
 }
 
-String _uuid() {
-  final r = Random.secure();
-  return List.generate(16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
-}
-
 class DocumentsScreen extends StatefulWidget {
   const DocumentsScreen({super.key});
   @override
@@ -56,28 +50,33 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   List<_Folder> _folders = [];
   List<_Doc> _docs = [];
   String _filter = 'All';
-  final Map<String, bool> _uploading = {};
+  Map<String, bool> get _uploading => uploads.inProgress;
+  int _seenBatches = uploads.finished;
 
   @override
   void initState() {
     super.initState();
     _load();
-    quickActions.addListener(_onQuickAction);
-    // Opened by the action itself (first visit to this tab): the tap still counts as the user gesture
-    // the browser's file picker needs.
-    final pending = quickActions.value;
-    if (pending?.action == QuickAction.upload && DateTime.now().difference(pending!.at) < const Duration(seconds: 2)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onQuickAction());
-    }
+    uploads.addListener(_onUploads);
   }
 
-  void _onQuickAction() {
-    if (quickActions.value?.action == QuickAction.upload) upload(null);
+  /// Uploads can start from any screen (the "+" menu, the chat), so this screen follows them.
+  void _onUploads() {
+    if (!mounted) return;
+    for (final e in uploads.errors) {
+      toast(context, e, error: true);
+    }
+    uploads.errors.clear();
+    setState(() {});
+    if (uploads.finished != _seenBatches) {
+      _seenBatches = uploads.finished;
+      _load();
+    }
   }
 
   @override
   void dispose() {
-    quickActions.removeListener(_onQuickAction);
+    uploads.removeListener(_onUploads);
     super.dispose();
   }
 
@@ -128,53 +127,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     _load();
   }
 
-  Future<void> upload(String? folderId) async {
-    final files = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'doc', 'docx'],
-    );
-    if (files.isEmpty) return;
-    final uid = _sb.auth.currentUser!.id;
-    setState(() {
-      for (final f in files) {
-        _uploading[f.name] = false;
-      }
-    });
-    // Upload the whole batch in parallel, each under the user's private prefix.
-    await Future.wait(
-      files.map((f) async {
-        try {
-          final bytes = await f.xFile.readAsBytes();
-          final mime = f.xFile.mimeType ?? _mimeFor(f.name);
-          final path = '$uid/${_uuid()}/${f.name}';
-          await _sb.storage.from(_bucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
-          await _sb.from('documents').insert({
-            'storage_path': path,
-            'filename': f.name,
-            'mime_type': mime,
-            'size_bytes': bytes.length,
-            'folder_id': folderId,
-          });
-        } catch (e) {
-          if (mounted) toast(context, '${f.name}: $e', error: true);
-        }
-        if (mounted) setState(() => _uploading[f.name] = true);
-      }),
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (mounted) setState(_uploading.clear);
-    await _load();
-  }
-
-  static String _mimeFor(String name) => switch (name.split('.').last.toLowerCase()) {
-    'pdf' => 'application/pdf',
-    'png' => 'image/png',
-    'jpg' || 'jpeg' => 'image/jpeg',
-    'heic' => 'image/heic',
-    'doc' => 'application/msword',
-    'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    _ => 'application/octet-stream',
-  };
+  // Called straight from the tap: the browser only opens the file picker inside a user gesture.
+  Future<void> upload(String? folderId) => uploads.pickAndUpload(folderId: folderId);
 
   Future<void> open(_Doc d) async {
     final url = await _sb.storage.from(_bucket).createSignedUrl(d.path, 60);

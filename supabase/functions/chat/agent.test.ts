@@ -200,3 +200,59 @@ Deno.test("tells past dates from upcoming ones", () => {
   expect(d.thisMonth).toEqual(["Oct 2026"]);
   expect(d.upcoming).toEqual(["2027-01-05"]);
 });
+
+Deno.test("consults four analysts in parallel and answers from their reports", async () => {
+  const analystSystems: string[] = [];
+  let leadCalls = 0;
+  const sse = (chunks: unknown[]) =>
+    new Response(chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") + "data: [DONE]\n\n");
+  const server = Deno.serve({ port: 0, onListen() {} }, async (req) => {
+    const body = await req.json();
+    const system = body.messages[0].content as string;
+    if (system.includes("Immi Insight's Australian migration team")) {
+      analystSystems.push(system);
+      expect(body.tools.map((t: { function: { name: string } }) => t.function.name)).not.toContain("consult_analysts");
+      return sse([{ choices: [{ delta: { content: `report from ${system.match(/You are the (.+?) on/)?.[1]}` } }] }]);
+    }
+    leadCalls++;
+    if (leadCalls === 1) {
+      return sse([{
+        choices: [{
+          delta: {
+            tool_calls: [{
+              index: 0,
+              id: "c1",
+              function: { name: "consult_analysts", arguments: '{"question":"What are my options?"}' },
+            }],
+          },
+        }],
+      }]);
+    }
+    const tool = body.messages.find((m: { role: string }) => m.role === "tool");
+    const reports = JSON.parse(tool.content).reports as { analyst: string; report: string }[];
+    return sse([{
+      choices: [{ delta: { content: `${reports.length} reports: ${reports.map((r) => r.report).join("; ")}` } }],
+    }]);
+  });
+  const events: Record<string, unknown>[] = [];
+  try {
+    await runAgent(
+      { baseUrl: `http://localhost:${server.addr.port}`, apiKey: "k", models: ["m"] },
+      supabase,
+      [{ role: "system", content: "lead" }, { role: "user", content: "What are my options?" }],
+      (e) => events.push(e),
+      new AbortController().signal,
+    );
+  } finally {
+    await server.shutdown();
+  }
+  expect(analystSystems.length).toBe(4);
+  const text = events.filter((e) => e.type === "text").map((e) => e.delta).join("");
+  expect(text).toContain("4 reports");
+  expect(text).toContain("report from Pathways analyst");
+  // Analysts' own drafts never stream to the user.
+  expect(text.match(/report from/g)?.length).toBe(4);
+  expect(events.filter((e) => e.type === "step" && e.status === "done").map((e) => e.tool)).toEqual([
+    "consult_analysts",
+  ]);
+});

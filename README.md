@@ -37,6 +37,7 @@ Australian migration decisions computed from the law itself. A Flutter web app (
 2. **The AI explains.** It must call `assess_visas` for eligibility and `search_law` for every requirement it mentions, cite sources as `[n]`, and quote the provision. It also chats naturally: small talk gets a plain reply with no tools.
    - **First visit:** the chat opens by asking for the user's story since coming to Australia. The agent saves it to the case file (`save_story`, the only thing it can write), then asks for documents and shows an **Upload documents** button. Users can skip this and just ask.
    - **Documents:** the agent lists and reads the user's uploads (PDF and text; scans and photos have no text layer yet), read-only, through row-level security.
+   - **Analyst team:** for open questions about the user's own situation ("what are my options?"), the agent calls `consult_analysts`. Four specialists (`supabase/functions/chat/analysts.ts`) research in parallel with read-only tools: pathways, points and eligibility, documents and evidence, timeline and status. The lead agent then writes one solution-focused answer: the best way forward, the alternatives, and a dated plan. Every obstacle is paired with the way to address it, and nothing is hidden.
    - **Dates:** the server tags which dates in the story are already past, so an expired visa is flagged instead of being called current.
 3. **Every claim links to its source:** the Act, the Regulations, a migration instrument, or the Home Affairs page section it came from.
 
