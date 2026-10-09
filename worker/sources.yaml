@@ -1,0 +1,44 @@
+# What the crawler reads. Each source is crawled breadth-first from its seeds,
+# following only links that start with one of `allow` (after the host).
+sources:
+  - id: homeaffairs
+    host: https://immi.homeaffairs.gov.au
+    seeds:
+      - /visas/getting-a-visa/visa-listing
+      - /visas/working-in-australia/skill-occupation-list
+      - /visas/getting-a-visa/visa-processing-times
+      - /visas/getting-a-visa/fees-and-charges
+      - /help-support/meeting-our-requirements
+      - /visas/working-in-australia/skillselect
+      - /what-we-do/whats-new
+    allow:
+      - /visas/
+      - /help-support/meeting-our-requirements/
+      - /what-we-do/whats-new
+      - /citizenship/become-a-citizen
+    deny:
+      - /visas/getting-a-visa/visa-finder
+      - /help-text/
+      - /sitesearch
+    # The site renders every collapsed accordion and tab into the DOM but hides
+    # them with a print-only class. Unhide them and label each tab with a heading.
+    content_selector: "#contentBox"
+    expand_js: |
+      document.querySelectorAll("ha-tab[tabtext]").forEach(t => {
+        const h = document.createElement("h1");
+        h.textContent = t.getAttribute("tabtext");
+        t.prepend(h);
+      });
+      document.querySelectorAll(".d-print-block, .d-print-inline, .d-print-flex")
+        .forEach(e => e.classList.remove("d-none", "collapse", "collapsed"));
+      document.querySelectorAll(".d-print-none").forEach(e => e.remove());
+      document.querySelectorAll("[aria-expanded='false']").forEach(e => e.setAttribute("aria-expanded", "true"));
+    max_pages: 1500
+
+  - id: legislation
+    kind: frl_api      # Federal Register of Legislation API (the website blocks headless browsers)
+    host: https://www.legislation.gov.au
+    titles:
+      - C1958A00062    # Migration Act 1958
+      - F1996B03551    # Migration Regulations 1994 (Schedules 1, 2, 4, 6D …)
+      # Add legislative instruments here (occupation lists, English test thresholds, …)

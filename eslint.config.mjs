@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored, CLI-generated components (Vercel AI Elements).
+    "src/components/ai-elements/**",
+    "worker/**",
   ]),
 ]);
 

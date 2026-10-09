@@ -1,0 +1,36 @@
+name: Crawl immigration law
+
+on:
+  schedule:
+    - cron: "17 16 * * *" # daily, ~3am Sydney
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Only this source id (homeaffairs | legislation)"
+        required: false
+
+concurrency: crawl
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: worker/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Crawl
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EMBEDDING_BASE_URL: ${{ secrets.EMBEDDING_BASE_URL }}
+          EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
+          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
+        run: python crawler.py ${{ inputs.source && format('--source {0}', inputs.source) || '' }}

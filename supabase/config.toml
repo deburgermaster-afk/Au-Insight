@@ -1,0 +1,21 @@
+# Local development config (`supabase start`). For the hosted project, set the
+# same options in the dashboard: Authentication → Sign In / Providers → Email,
+# and Authentication → Emails (paste the templates from supabase/templates).
+project_id = "immi-insight"
+
+[auth]
+site_url = "http://localhost:3000"
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+otp_length = 6
+otp_expiry = 3600
+
+[auth.email.template.confirmation]
+subject = "Your Immi Insight code"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Immi Insight password"
+content_path = "./supabase/templates/recovery.html"
