@@ -11,7 +11,9 @@ import '../shell.dart';
 
 /// Intake sections, in the order the chat asks about them (see supabase/functions/chat/profile.ts).
 const _sections = [
+  ('personal', LucideIcons.userRound, 'Personal'),
   ('arrival', LucideIcons.plane, 'Arrival'),
+  ('residence', LucideIcons.house, 'Where you live'),
   ('study', LucideIcons.graduationCap, 'Study'),
   ('currentVisa', LucideIcons.idCard, 'Visa now'),
   ('work', LucideIcons.briefcase, 'Work'),

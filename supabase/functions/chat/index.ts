@@ -6,12 +6,12 @@ import { type Emit, type Msg, runAgent } from "./agent.ts";
 import { missingSections } from "./profile.ts";
 import { systemPrompt, type UserContext } from "./prompt.ts";
 
-// Defaults: xKiro's OpenAI-compatible gateway with the free models that did best on this
-// agent's tool-calling loop (correct arguments, used every tool, no invented numbers).
+// Defaults: xKiro's OpenAI-compatible gateway with the free models that did best on a full
+// plan request (accurate facts, the user's own state, citations) within the 150 s limit.
 const llm = {
   baseUrl: (Deno.env.get("LLM_BASE_URL") ?? "https://api.xkiro.com/v1").replace(/\/$/, ""),
   apiKey: Deno.env.get("LLM_API_KEY") ?? "",
-  models: (Deno.env.get("LLM_MODEL") ?? "cohere/command-a-plus,mistralai/mistral-large-4-0,qwen/qwen3.8-max:free")
+  models: (Deno.env.get("LLM_MODEL") ?? "qwen/qwen3.7-max:free,qwen/qwen3.8-max:free,cohere/command-a-plus")
     .split(",").map((m) => m.trim()).filter(Boolean),
 };
 

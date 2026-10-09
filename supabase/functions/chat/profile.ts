@@ -1,6 +1,16 @@
 // The structured profile the chat builds during the guided intake (cases.profile).
 
-export const INTAKE_SECTIONS = ["arrival", "study", "currentVisa", "work", "partner", "english", "goals"] as const;
+export const INTAKE_SECTIONS = [
+  "personal",
+  "arrival",
+  "residence",
+  "study",
+  "currentVisa",
+  "work",
+  "partner",
+  "english",
+  "goals",
+] as const;
 
 const str = { type: "string" };
 const bool = { type: "boolean" };
@@ -10,9 +20,24 @@ export const profileJsonSchema = {
   description:
     "Only what the user said or their documents show. Send just the parts you learned; they are merged into the saved profile (lists replace the saved list, so send the whole list).",
   properties: {
+    personal: {
+      type: "object",
+      properties: { dateOfBirth: { ...str, description: "YYYY-MM-DD" }, citizenship: str },
+    },
+    residence: {
+      type: "object",
+      description: "Where they live now",
+      properties: {
+        city: str,
+        state: { ...str, description: "Australian state or territory" },
+        since: str,
+        regional: { ...bool, description: "Only if they or an official source said so" },
+        willingToMove: str,
+      },
+    },
     arrival: {
       type: "object",
-      properties: { date: str, visa: { ...str, description: "e.g. 500 Student" }, city: str },
+      properties: { date: str, visa: { ...str, description: "Visa name or subclass" }, city: str },
     },
     study: {
       type: "array",
@@ -22,7 +47,7 @@ export const profileJsonSchema = {
         properties: {
           provider: str,
           course: str,
-          level: { ...str, description: "e.g. Diploma, Bachelor, Master" },
+          level: { ...str, description: "Qualification level" },
           start: str,
           end: str,
           status: { type: "string", enum: ["completed", "ongoing", "withdrawn", "deferred", "transferred"] },

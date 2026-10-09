@@ -185,25 +185,27 @@ class _AssessScreenState extends State<AssessScreen> {
             ),
           ),
           _pairs([
-            ('Australian study requirement', 'australianStudyRequirement'),
-            ('Specialist education (STEM research)', 'specialistEducation'),
-            ('Professional Year', 'professionalYear'),
-            ('Regional study', 'regionalStudy'),
-            ('NAATI community language', 'credentialledCommunityLanguage'),
+            ('Australian study requirement', 'australianStudyRequirement', false),
+            ('Specialist education (STEM research)', 'specialistEducation', false),
+            ('Professional Year', 'professionalYear', false),
+            ('Regional study', 'regionalStudy', false),
+            ('NAATI community language', 'credentialledCommunityLanguage', false),
           ]),
         ]),
         _section(3, 'Invitation & nomination', [
           _pairs([
-            ('Invited to apply', 'invitationReceived'),
-            ('State nomination (190)', 'stateNomination'),
-            ('Regional nomination / sponsorship (491)', 'regionalNominationOrSponsorship'),
+            ('Invited to apply', 'invitationReceived', false),
+            ('State nomination (190)', 'stateNomination', false),
+            ('Regional nomination / sponsorship (491)', 'regionalNominationOrSponsorship', false),
           ]),
         ]),
         _section(4, 'Health, character & debts', [
+          // Asked as plain questions: "Yes" means there is an issue. The engine stores the opposite
+          // (meetsHealth / meetsCharacter), so these two are inverted.
           _pairs([
-            ('No known health issues', 'meetsHealth'),
-            ('No known character issues', 'meetsCharacter'),
-            ('Owe the Government money', 'hasCommonwealthDebt'),
+            ('Any health condition that could affect a visa?', 'meetsHealth', true),
+            ('Any conviction or past visa problem?', 'meetsCharacter', true),
+            ('Owe the Australian Government money?', 'hasCommonwealthDebt', false),
           ]),
         ]),
         const SizedBox(height: 4),
@@ -318,16 +320,29 @@ class _AssessScreenState extends State<AssessScreen> {
     ],
   );
 
-  Widget _yn(String key) => Segmented<bool>(value: _facts.flag(key), onChanged: (v) => _set(key, v), options: _yesNo);
+  Widget _yn(String key, {bool invert = false}) {
+    final v = _facts.flag(key);
+    return Segmented<bool>(
+      value: v == null ? null : (invert ? !v : v),
+      onChanged: (a) => _set(key, a == null ? null : (invert ? !a : a)),
+      options: _yesNo,
+    );
+  }
 
-  Widget _pairs(List<(String, String)> items) => LayoutBuilder(
+  Widget _pairs(List<(String, String, bool)> items) => LayoutBuilder(
     builder: (context, c) {
       final cols = c.maxWidth > 460 ? 2 : 1;
       final w = (c.maxWidth - (cols - 1) * 10) / cols;
       return Wrap(
         spacing: 10,
         runSpacing: 12,
-        children: [for (final (label, key) in items) SizedBox(width: w, child: _field(label, _yn(key)))],
+        children: [
+          for (final (label, key, invert) in items)
+            SizedBox(
+              width: w,
+              child: _field(label, _yn(key, invert: invert)),
+            ),
+        ],
       );
     },
   );

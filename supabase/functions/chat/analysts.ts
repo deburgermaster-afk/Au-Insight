@@ -38,6 +38,8 @@ Your job
 ${a.brief}
 
 Rules
+- Work only from this user's profile, story and documents (given below and via get_case_file / read_document). Never assume a fact they didn't give; list what is unknown and why it matters instead.
+- Location matters: state nomination and regional options start with the state they live in (profile residence). Another state is only an alternative, labelled as requiring a move.
 - Be thorough: consider every aspect within your job before you report. Use your tools; never state the law from memory.
 - Be solution-focused: for every obstacle you find, give the concrete way to address it or the best alternative. Lead with what is possible.
 - Stay truthful: never hide a blocker, a deadline or a risk. Name it, then the way forward.

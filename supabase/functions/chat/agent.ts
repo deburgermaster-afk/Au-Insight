@@ -29,8 +29,16 @@ const MAX_STEPS = 8;
 const ANALYST_STEPS = 3;
 /** Tools analysts may use: reading only. */
 const ANALYST_TOOLS = ["search_law", "get_case_file", "list_documents", "read_document", "assess_visas"];
+/** Tools that only record or display something: they need no reply from the model. */
+const BOOKKEEPING_TOOLS = new Set(["save_story", "save_profile", "create_case", "show_button"]);
 /** Caps a reply so a model stuck repeating itself can't run on. */
 const MAX_OUTPUT_TOKENS = 3000;
+// A request may run 150 s in total (Supabase free plan wall clock). The lead stops calling tools
+// after TURN_BUDGET_MS so its answer always finishes in time; analysts report after
+// ANALYST_BUDGET_MS and are cut off at ANALYST_HARD_MS.
+const TURN_BUDGET_MS = 95_000;
+const ANALYST_BUDGET_MS = 45_000;
+const ANALYST_HARD_MS = 70_000;
 
 /** `models` is tried in order: free tiers rate-limit, so a busy model falls through to the next. */
 export type LLMConfig = { baseUrl: string; apiKey: string; models: string[] };
@@ -87,7 +95,7 @@ const toolDefs = [
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Focused search terms, e.g. 'subclass 189 age invitation 45'" },
+          query: { type: "string", description: "Focused search terms for one requirement" },
           asAt: { type: "string", description: "YYYY-MM-DD: search the law in force on this date. Defaults to today." },
         },
         required: ["query"],
@@ -133,7 +141,7 @@ const toolDefs = [
     function: {
       name: "save_profile",
       description:
-        "Save what you learned in the guided intake to the user's profile: arrival, every course and provider (including changes), current visa, work, partner and dependents, English, goals. Returns the sections still missing.",
+        "Save what you learned in the guided intake to the user's profile: personal details, arrival, where they live now, every course and provider (including changes), current visa, work, partner and dependents, English, goals. Returns the sections still missing.",
       parameters: { type: "object", properties: { profile: profileJsonSchema }, required: ["profile"] },
     },
   },
@@ -146,7 +154,7 @@ const toolDefs = [
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Short, e.g. 'Path to PR via 190 (NSW)'" },
+          title: { type: "string", description: "Short and specific to this user's plan" },
           question: { type: "string", description: "What the user asked" },
           summary: { type: "string", description: "Your answer in markdown, with its [n] citations" },
           pathways: {
@@ -247,11 +255,15 @@ function stepLabel(name: string, args: Record<string, unknown>): string {
 
 function makeTools(supabase: SupabaseClient, emit: Emit) {
   const seen = new Map<number, number>();
+  const searches = new Map<string, { results: unknown[] }>();
   let count = 0;
 
   return {
     async search_law(args: { query?: string; asAt?: string }) {
       const query = String(args.query ?? "").slice(0, 300);
+      const key = `${query.toLowerCase().trim()}|${args.asAt ?? ""}`;
+      const earlier = searches.get(key);
+      if (earlier) return { note: "Same search as before: these are the same results, use them.", ...earlier };
       const { data, error } = await supabase.rpc("search_law", {
         query_text: query,
         query_embedding: null,
@@ -287,6 +299,7 @@ function makeTools(supabase: SupabaseClient, emit: Emit) {
           };
         },
       );
+      searches.set(key, { results });
       return { results };
     },
 
@@ -372,8 +385,10 @@ function makeTools(supabase: SupabaseClient, emit: Emit) {
     },
 
     async assess_visas(args: { facts?: unknown }) {
-      const { data } = await supabase.from("cases").select("facts").order("created_at").limit(1).maybeSingle();
-      const saved = caseFactsSchema.safeParse(data?.facts ?? {});
+      const { data } = await supabase.from("cases").select("facts, profile").order("created_at").limit(1).maybeSingle();
+      // The date of birth the user gave in the chat counts too.
+      const dob = (data?.profile as { personal?: { dateOfBirth?: string } } | null)?.personal?.dateOfBirth;
+      const saved = caseFactsSchema.safeParse({ ...(dob ? { dateOfBirth: dob } : {}), ...(data?.facts ?? {}) });
       const given = caseFactsSchema.partial().safeParse(args.facts ?? {});
       const merged: CaseFacts = { ...(saved.success ? saved.data : {}), ...(given.success ? given.data : {}) };
       const results = assessAll(merged);
@@ -506,13 +521,15 @@ async function runLoop(
   llm: LLMConfig,
   messages: Msg[],
   tools: Record<string, ToolFn>,
-  defs: ToolDef[],
+  defs: ToolDef[] | (() => ToolDef[]),
   emit: Emit,
   signal: AbortSignal,
   maxSteps: number,
+  deadline = Infinity,
 ): Promise<string> {
   for (let step = 0; step < maxSteps; step++) {
-    const { content, calls } = await complete(llm, messages, emit, signal, defs);
+    if (step > 0 && Date.now() > deadline) break;
+    const { content, calls } = await complete(llm, messages, emit, signal, typeof defs === "function" ? defs() : defs);
     if (!calls.length) return content;
     messages.push({ role: "assistant", content: content || null, tool_calls: calls });
     for (const call of calls) {
@@ -533,10 +550,33 @@ async function runLoop(
       emit({ type: "step", id: call.id, tool: call.function.name, label, status: "done", hits });
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 30000) });
     }
+    // The model answered and only saved things alongside: the answer stands. Asking it to continue
+    // makes models repeat the whole answer.
+    if (content.trim().length > 40 && calls.every((c) => BOOKKEEPING_TOOLS.has(c.function.name))) return content;
   }
-  // Out of tool rounds: the model must now answer from what it has gathered.
-  messages.push({ role: "user", content: "Answer now using only the tool results above. Do not call more tools." });
-  return (await complete(llm, messages, emit, signal, null)).content;
+  // Out of tool rounds: the model must now answer from what it has gathered. It may still save or
+  // show a button (offering no tools makes some gateways answer with an error text instead).
+  messages.push({
+    role: "user",
+    content: "Answer now using only the tool results above. Don't search or read anything more.",
+  });
+  const allowed = (typeof defs === "function" ? defs() : defs).filter((d) => BOOKKEEPING_TOOLS.has(d.function.name));
+  const { content, calls } = await complete(llm, messages, emit, signal, allowed);
+  for (const call of calls) {
+    const fn = BOOKKEEPING_TOOLS.has(call.function.name) ? tools[call.function.name] : undefined;
+    if (!fn) continue;
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(call.function.arguments || "{}");
+    } catch {
+      /* invalid JSON: skip */ continue;
+    }
+    const label = stepLabel(call.function.name, args);
+    emit({ type: "step", id: call.id, tool: call.function.name, label, status: "running" });
+    await fn(args).catch(() => undefined);
+    emit({ type: "step", id: call.id, tool: call.function.name, label, status: "done" });
+  }
+  return content;
 }
 
 /** The lead agent: chats, uses tools, and can hand deep questions to the analyst team. */
@@ -558,6 +598,7 @@ export async function runAgent(
   };
   const base = makeTools(supabase, emit) as unknown as Record<string, ToolFn>;
   const analystDefs = toolDefs.filter((d) => ANALYST_TOOLS.includes(d.function.name));
+  let leadDefs: ToolDef[] = toolDefs;
 
   // The conversation so far, as plain text, so analysts know what was said.
   const transcript = () =>
@@ -570,6 +611,8 @@ export async function runAgent(
   const consult_analysts: ToolFn = async (args) => {
     const question = String(args.question ?? "");
     const context = transcript();
+    // Every analyst starts from the same facts about this user, not from memory or typical cases.
+    const caseFile = JSON.stringify(await base.get_case_file({})).slice(0, 12000);
     const reports = await Promise.all(
       ANALYSTS.map(async (a, i) => {
         // Stagger starts a little: free model tiers rate-limit bursts.
@@ -583,10 +626,23 @@ export async function runAgent(
         };
         const thread: Msg[] = [
           { role: "system", content: analystPrompt(a, todayISO()) },
-          { role: "user", content: `Question: ${question}\n\nConversation so far:\n${context}` },
+          {
+            role: "user",
+            content:
+              `Question: ${question}\n\nThis user's case file (profile, story, dates):\n${caseFile}\n\nConversation so far:\n${context}`,
+          },
         ];
         try {
-          const report = await runLoop(llm, thread, base, analystDefs, analystEmit, signal, ANALYST_STEPS);
+          const report = await runLoop(
+            llm,
+            thread,
+            base,
+            analystDefs,
+            analystEmit,
+            AbortSignal.any([signal, AbortSignal.timeout(ANALYST_HARD_MS)]),
+            ANALYST_STEPS,
+            Date.now() + ANALYST_BUDGET_MS,
+          );
           return { analyst: a.name, report };
         } catch (e) {
           return { analyst: a.name, error: e instanceof Error ? e.message : String(e) };
@@ -594,6 +650,8 @@ export async function runAgent(
       }),
     );
     lastReports = reports;
+    // From here the lead writes the answer from the reports; it can still save and show buttons.
+    leadDefs = toolDefs.filter((d) => BOOKKEEPING_TOOLS.has(d.function.name));
     return { reports };
   };
 
@@ -619,5 +677,14 @@ export async function runAgent(
     return { created: true, id: data.id };
   };
 
-  await runLoop(llm, messages, { ...base, consult_analysts, create_case }, toolDefs, emit, signal, MAX_STEPS);
+  await runLoop(
+    llm,
+    messages,
+    { ...base, consult_analysts, create_case },
+    () => leadDefs,
+    emit,
+    signal,
+    MAX_STEPS,
+    Date.now() + TURN_BUDGET_MS,
+  );
 }

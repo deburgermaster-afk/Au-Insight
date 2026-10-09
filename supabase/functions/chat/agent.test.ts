@@ -267,7 +267,7 @@ Deno.test("merges intake answers into the profile and reports what's missing", (
   });
   expect(merged.arrival).toEqual({ date: "2019-02", visa: "500", city: "Melbourne" });
   expect((merged.study as unknown[]).length).toBe(2);
-  expect(missingSections(merged)).toEqual(["currentVisa", "work", "english", "goals"]);
+  expect(missingSections(merged)).toEqual(["personal", "residence", "currentVisa", "work", "english", "goals"]);
 });
 
 Deno.test("saves the plan as a Case with the turn's sources and analyst reports", async () => {
@@ -329,4 +329,40 @@ Deno.test("saves the plan as a Case with the turn's sources and analyst reports"
     sources: [{ n: 1, title: "Skilled Independent visa" }],
   });
   expect(events.find((e) => e.type === "case")).toEqual({ type: "case", id: "case-1", title: "Path to PR via 190" });
+});
+
+Deno.test("an answer written alongside bookkeeping tools isn't repeated", async () => {
+  let calls = 0;
+  const server = Deno.serve({ port: 0, onListen() {} }, () => {
+    calls++;
+    const chunks = [
+      { choices: [{ delta: { content: "Here is your full plan, step by step, with every detail you need." } }] },
+      {
+        choices: [{
+          delta: {
+            tool_calls: [{
+              index: 0,
+              id: "s1",
+              function: { name: "show_button", arguments: '{"action":"upload_documents"}' },
+            }],
+          },
+        }],
+      },
+    ];
+    return new Response(chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") + "data: [DONE]\n\n");
+  });
+  const events: Record<string, unknown>[] = [];
+  try {
+    await runAgent(
+      { baseUrl: `http://localhost:${server.addr.port}`, apiKey: "k", models: ["m"] },
+      supabase,
+      [{ role: "user", content: "plan?" }],
+      (e) => events.push(e),
+      new AbortController().signal,
+    );
+  } finally {
+    await server.shutdown();
+  }
+  expect(calls).toBe(1);
+  expect(events.filter((e) => e.type === "action")).toEqual([{ type: "action", action: "upload_documents" }]);
 });
