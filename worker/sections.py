@@ -16,7 +16,7 @@ MAX_SECTION_CHARS = 6000
 MAX_HEADING_CHARS = 150
 
 # Bump when splitting changes; stored versions from an older parser get re-split.
-PARSER_VERSION = "p2"
+PARSER_VERSION = "p3"
 
 
 @dataclass
@@ -111,13 +111,31 @@ def content_hash(markdown: str) -> str:
     return f"{PARSER_VERSION}:{sha256(markdown)}"
 
 
+def _humanize(segment: str) -> str:
+    return re.sub(r"[-_]+", " ", segment).strip().capitalize()
+
+
 def title_for(markdown: str, url: str, meta_title: str | None = None) -> str:
-    """Page title from metadata, else a short first heading, else the URL slug."""
+    """Page title from metadata, else a short first heading, else the URL slug.
+
+    Sub-pages get their parent page's name appended when the title doesn't already
+    say it, e.g. "Points-tested stream (Skilled independent 189)", so searches for
+    "189" find them.
+    """
+    title = None
     if meta_title and len(meta_title.split("|")[0].strip()) <= MAX_HEADING_CHARS:
-        return meta_title.split("|")[0].strip()
-    for line in markdown.splitlines():
-        m = HEADING.match(line)
-        if m and 0 < len(m.group(2).strip()) <= MAX_HEADING_CHARS:
-            return m.group(2).strip()
-    slug_part = url.rstrip("/").rsplit("/", 1)[-1] or url
-    return re.sub(r"[-_]+", " ", slug_part).strip().capitalize()
+        title = meta_title.split("|")[0].strip()
+    if not title:
+        for line in markdown.splitlines():
+            m = HEADING.match(line)
+            if m and 0 < len(m.group(2).strip()) <= MAX_HEADING_CHARS:
+                title = m.group(2).strip()
+                break
+    parts = [p for p in url.split("://", 1)[-1].split("/")[1:] if p]
+    if not title:
+        title = _humanize(parts[-1]) if parts else url
+    if len(parts) >= 2:
+        parent = _humanize(parts[-2])
+        if parent.lower() not in title.lower() and parts[-2] not in ("visa-listing", "latest", "visas"):
+            title = f"{title} ({parent})"
+    return title[:200]

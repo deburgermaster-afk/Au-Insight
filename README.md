@@ -1,5 +1,7 @@
 # Immi Insight
 
+**Live:** https://au-insight.vercel.app (Vercel, Sydney; deploys automatically on every push)
+
 Australian migration decisions computed from the law itself. A Flutter web app (PWA) with a cited, agentic chat; a deterministic visa rules engine; and a background crawler that keeps a versioned copy of every official source up to date.
 
 ```
@@ -95,11 +97,12 @@ insert into private.worker_tokens (token_hash, name)
 values (encode(extensions.digest('<new long random token>', 'sha256'), 'hex'), 'github');
 ```
 
-### 4. Deploy the web app (Vercel, Sydney)
-`.github/workflows/deploy-web.yml` builds the Flutter web app and deploys it to Vercel on every push to `main`. It needs `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`. `app/vercel.json` adds:
-- the single-page-app fallback;
-- cross-origin isolation, so the WebAssembly renderer can use threads;
-- long-lived caching for the engine files.
+### 4. Web app hosting (Vercel, Sydney): done
+The Vercel project `au-insight` (team Xerox) is linked to this repo with root directory `app/`:
+- Vercel has no Flutter image, so `app/scripts/vercel-install.sh` clones the pinned Flutter SDK, and `app/vercel.json` builds with `flutter build web --release --wasm`.
+- Pushes that don't touch `app/` skip the build.
+- `vercel.json` also adds the single-page-app fallback, cross-origin isolation (lets the WebAssembly renderer use threads) and long-lived asset caching.
+- `.github/workflows/deploy-web.yml` is an optional alternative that builds in GitHub Actions.
 
 ## Tests
 - `app/`: `flutter analyze && flutter test` (16 engine tests).
