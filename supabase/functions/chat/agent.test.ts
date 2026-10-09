@@ -366,3 +366,46 @@ Deno.test("an answer written alongside bookkeeping tools isn't repeated", async 
   expect(calls).toBe(1);
   expect(events.filter((e) => e.type === "action")).toEqual([{ type: "action", action: "upload_documents" }]);
 });
+
+Deno.test("routes @provider models and sends Gemini thought signatures back", async () => {
+  const bodies: { model: string; messages: { role: string; tool_calls?: { extra_content?: unknown }[] }[] }[] = [];
+  let call = 0;
+  const server = Deno.serve({ port: 0, onListen() {} }, async (req) => {
+    bodies.push(await req.json());
+    call++;
+    const chunk = call === 1
+      ? {
+        choices: [{
+          delta: {
+            tool_calls: [{
+              index: 0,
+              id: "g1",
+              extra_content: { google: { thought_signature: "sig-1" } },
+              function: { name: "search_law", arguments: '{"query":"age"}' },
+            }],
+          },
+        }],
+      }
+      : { choices: [{ delta: { content: "done" } }] };
+    return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+  });
+  try {
+    await runAgent(
+      {
+        baseUrl: "http://127.0.0.1:9",
+        apiKey: "unused",
+        models: ["@gemini/gemini-test"],
+        providers: { gemini: { baseUrl: `http://localhost:${server.addr.port}`, apiKey: "g" } },
+      },
+      supabase,
+      [{ role: "user", content: "age limit?" }],
+      () => {},
+      new AbortController().signal,
+    );
+  } finally {
+    await server.shutdown();
+  }
+  expect(bodies[0].model).toBe("gemini-test");
+  const assistant = bodies[1].messages.find((m) => m.role === "assistant");
+  expect(assistant?.tool_calls?.[0].extra_content).toEqual({ google: { thought_signature: "sig-1" } });
+});

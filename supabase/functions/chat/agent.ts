@@ -41,13 +41,39 @@ const ANALYST_BUDGET_MS = 45_000;
 const ANALYST_HARD_MS = 70_000;
 
 /** `models` is tried in order: free tiers rate-limit, so a busy model falls through to the next. */
-export type LLMConfig = { baseUrl: string; apiKey: string; models: string[] };
+export type LLMConfig = {
+  baseUrl: string;
+  apiKey: string;
+  models: string[];
+  /** Other OpenAI-compatible providers, used by models written "@name/model" (e.g. "@gemini/…"). */
+  providers?: Record<string, { baseUrl: string; apiKey: string }>;
+  /** Google AI key for reading scans and photos. */
+  geminiKey?: string;
+};
+
+/** Gemini models that read documents (fast, light), tried in order. */
+const OCR_MODELS = ["gemini-3.5-flash", "gemini-flash-lite-latest"];
+const OCR_MAX_BYTES = 15 * 1024 * 1024;
+
+function endpoint(llm: LLMConfig, model: string) {
+  const m = /^@([\w-]+)\/(.+)$/.exec(model);
+  const p = m ? llm.providers?.[m[1]] : undefined;
+  return p
+    ? { ...p, model: m![2], provider: m![1] }
+    : { baseUrl: llm.baseUrl, apiKey: llm.apiKey, model, provider: "" };
+}
 
 export type Msg =
   | { role: "system" | "user"; content: string }
   | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
   | { role: "tool"; tool_call_id: string; content: string };
-type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
+type ToolCall = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+  /** Provider data to send back unchanged (Gemini's thought signature). */
+  extra_content?: unknown;
+};
 export type Emit = (event: Record<string, unknown>) => void;
 
 const factsJsonSchema = {
@@ -253,7 +279,7 @@ function stepLabel(name: string, args: Record<string, unknown>): string {
   }
 }
 
-function makeTools(supabase: SupabaseClient, emit: Emit) {
+function makeTools(supabase: SupabaseClient, emit: Emit, llm?: LLMConfig) {
   const seen = new Map<number, number>();
   const searches = new Map<string, { results: unknown[] }>();
   let count = 0;
@@ -326,25 +352,42 @@ function makeTools(supabase: SupabaseClient, emit: Emit) {
     },
 
     async read_document(args: { id?: string }) {
+      const id = String(args.id ?? "");
       const { data: doc, error } = await supabase.from("documents").select(
-        "filename, mime_type, size_bytes, storage_path",
+        "filename, mime_type, size_bytes, storage_path, extracted_text, extracted_with",
       )
-        .eq("id", String(args.id ?? "")).maybeSingle();
+        .eq("id", id).maybeSingle();
       if (error || !doc) return { error: error?.message ?? "No document with that id" };
+      const answer = (text: string, method: string) => ({
+        filename: doc.filename,
+        method,
+        text: text.slice(0, MAX_DOCUMENT_CHARS),
+        truncated: text.length > MAX_DOCUMENT_CHARS,
+        dates: datesVersusToday(text, todayISO()),
+      });
+      // Read before: no need to download or spend vision quota again.
+      if (doc.extracted_text) return answer(doc.extracted_text, doc.extracted_with ?? "text layer");
       if (doc.size_bytes > MAX_DOCUMENT_BYTES) {
         return { filename: doc.filename, error: "Too large to read (over 15 MB)" };
       }
       const { data: file, error: dlError } = await supabase.storage.from(BUCKET).download(doc.storage_path);
       if (dlError || !file) return { filename: doc.filename, error: dlError?.message ?? "Download failed" };
-      const text = await documentText(doc.mime_type, doc.filename, new Uint8Array(await file.arrayBuffer()));
-      if (text === null) {
-        return { filename: doc.filename, error: "This file type has no readable text (e.g. a photo or scan)." };
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let text = await documentText(doc.mime_type, doc.filename, bytes).catch(() => null);
+      let method = "text layer";
+      // Photos and scanned PDFs have no text layer: read them with a vision model.
+      if ((text === null || text.trim().length < 40) && llm?.geminiKey && ocrable(doc.mime_type, doc.filename)) {
+        const read = await readWithGemini(llm.geminiKey, ocrMime(doc.mime_type, doc.filename), bytes);
+        if (read) [text, method] = [read, "read from the image"];
       }
-      return {
-        filename: doc.filename,
-        text: text.slice(0, MAX_DOCUMENT_CHARS),
-        truncated: text.length > MAX_DOCUMENT_CHARS,
-      };
+      if (!text) {
+        return { filename: doc.filename, error: "This file has no readable text and couldn't be read as an image." };
+      }
+      await supabase.from("documents").update({ extracted_text: text, extracted_with: method, status: "extracted" }).eq(
+        "id",
+        id,
+      );
+      return answer(text, method);
     },
 
     async save_story(args: { story?: string }) {
@@ -440,8 +483,80 @@ export async function documentText(mime: string, filename: string, bytes: Uint8A
   return null;
 }
 
+function ocrable(mime: string, filename: string) {
+  return mime.startsWith("image/") || mime === "application/pdf" || /\.(pdf|png|jpe?g|webp|heic|heif)$/i.test(filename);
+}
+
+function ocrMime(mime: string, filename: string) {
+  if (mime && mime !== "application/octet-stream") return mime;
+  const ext = filename.toLowerCase().split(".").pop() ?? "";
+  return ({
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+  } as Record<
+    string,
+    string
+  >)[ext] ?? "application/pdf";
+}
+
+/** Transcribes a scan or photo with Gemini. Returns null if no model could read it. */
+export async function readWithGemini(key: string, mime: string, bytes: Uint8Array): Promise<string | null> {
+  if (bytes.length > OCR_MAX_BYTES) return null;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  const body = JSON.stringify({
+    contents: [{
+      parts: [
+        { inline_data: { mime_type: mime, data: btoa(binary) } },
+        {
+          text:
+            "Transcribe all text in this document exactly, keeping its structure (headings, labels and values, tables as rows). If it is a photo of an ID or card, transcribe every field. Output only the transcription.",
+        },
+      ],
+    }],
+  });
+  for (const model of OCR_MODELS) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body,
+        signal: AbortSignal.timeout(40_000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const parts = data?.candidates?.[0]?.content?.parts as { text?: string; thought?: boolean }[] | undefined;
+      const text = parts?.filter((p) => p.text && !p.thought).map((p) => p.text).join("\n").trim();
+      if (text) return text;
+    } catch { /* try the next model */ }
+  }
+  return null;
+}
+
 /** One streamed completion. Emits text/reasoning deltas as they arrive; returns the full assistant turn. */
 type ToolDef = (typeof toolDefs)[number];
+
+/**
+ * Gemini rejects earlier tool calls without a thought signature. Calls made by another model in the
+ * same turn (after a fallback) get Google's documented placeholder.
+ */
+function withThoughtSignatures(messages: Msg[]): Msg[] {
+  return messages.map((m) =>
+    m.role === "assistant" && m.tool_calls?.length
+      ? {
+        ...m,
+        tool_calls: m.tool_calls.map((c) =>
+          c.extra_content
+            ? c
+            : { ...c, extra_content: { google: { thought_signature: "skip_thought_signature_validator" } } }
+        ),
+      }
+      : m
+  );
+}
 
 async function complete(
   llm: LLMConfig,
@@ -453,13 +568,15 @@ async function complete(
   let res: Response | undefined;
   let lastError = "";
   for (const model of llm.models) {
-    res = await fetch(`${llm.baseUrl}/chat/completions`, {
+    const ep = endpoint(llm, model);
+    if (!ep.apiKey) continue;
+    res = await fetch(`${ep.baseUrl}/chat/completions`, {
       method: "POST",
       signal,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.apiKey}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${ep.apiKey}` },
       body: JSON.stringify({
-        model,
-        messages,
+        model: ep.model,
+        messages: ep.provider === "gemini" ? withThoughtSignatures(messages) : messages,
         ...(defs?.length ? { tools: defs, tool_choice: "auto" } : {}),
         stream: true,
         temperature: 0.1,
@@ -505,6 +622,7 @@ async function complete(
         if (tc.id) calls[i].id = tc.id;
         if (tc.function?.name) calls[i].function.name += tc.function.name;
         if (tc.function?.arguments) calls[i].function.arguments += tc.function.arguments;
+        if (tc.extra_content) calls[i].extra_content = tc.extra_content;
       }
     }
   }
@@ -596,7 +714,7 @@ export async function runAgent(
     if (e.type === "source") sources.push({ n: e.n, title: e.title, section: e.section, url: e.url });
     outer(e);
   };
-  const base = makeTools(supabase, emit) as unknown as Record<string, ToolFn>;
+  const base = makeTools(supabase, emit, llm) as unknown as Record<string, ToolFn>;
   const analystDefs = toolDefs.filter((d) => ANALYST_TOOLS.includes(d.function.name));
   let leadDefs: ToolDef[] = toolDefs;
 

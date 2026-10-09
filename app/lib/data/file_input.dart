@@ -58,3 +58,21 @@ Future<List<PickedFile>> pickFiles() {
   input.click();
   return done.future;
 }
+
+/// Opens [url] in a new tab. Must run synchronously inside a tap: iOS Safari silently blocks
+/// windows opened after an `await`.
+void openInNewTab(String url) {
+  if (web.window.open(url, '_blank') == null) web.window.location.href = url;
+}
+
+/// For when the URL isn't ready yet: opens an empty tab inside the tap, then points it at the URL
+/// once known (or uses this tab if the browser blocked the new one).
+Future<void> openWhenReady(Future<String> url) async {
+  final tab = web.window.open('', '_blank');
+  final resolved = await url;
+  if (tab != null) {
+    tab.location.href = resolved;
+  } else {
+    web.window.location.href = resolved;
+  }
+}

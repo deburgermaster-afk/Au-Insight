@@ -2,25 +2,35 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { todayISO } from "../_shared/engine/index.ts";
-import { type Emit, type Msg, runAgent } from "./agent.ts";
+import { type Emit, type LLMConfig, type Msg, runAgent } from "./agent.ts";
 import { missingSections } from "./profile.ts";
 import { systemPrompt, type UserContext } from "./prompt.ts";
 
 // Defaults: xKiro's OpenAI-compatible gateway with the free models that did best on a full
 // plan request (accurate facts, the user's own state, citations) within the 150 s limit.
-const llm = {
+// Models written "@gemini/<model>" go to Google's OpenAI-compatible endpoint (key in Vault).
+const GEMINI_OPENAI_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
+const llm: LLMConfig = {
   baseUrl: (Deno.env.get("LLM_BASE_URL") ?? "https://api.xkiro.com/v1").replace(/\/$/, ""),
   apiKey: Deno.env.get("LLM_API_KEY") ?? "",
-  models: (Deno.env.get("LLM_MODEL") ?? "qwen/qwen3.7-max:free,qwen/qwen3.8-max:free,cohere/command-a-plus")
+  geminiKey: Deno.env.get("GEMINI_API_KEY") ?? undefined,
+  models: (Deno.env.get("LLM_MODEL") ??
+    "qwen/qwen3.7-max:free,qwen/qwen3.8-max:free,cohere/command-a-plus,@gemini/gemini-3.5-flash")
     .split(",").map((m) => m.trim()).filter(Boolean),
 };
 
-/** Key from the function secret, else from Vault via the service role (cached per instance). */
+/** Keys from function secrets, else from Vault via the service role (cached per instance). */
 async function apiKey(): Promise<string> {
-  if (llm.apiKey) return llm.apiKey;
+  if (llm.apiKey && llm.providers) return llm.apiKey;
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data } = await admin.rpc("llm_api_key");
-  llm.apiKey = typeof data === "string" ? data : "";
+  const [xkiro, gemini] = await Promise.all([
+    admin.rpc("llm_api_key"),
+    llm.geminiKey ? Promise.resolve({ data: llm.geminiKey }) : admin.rpc("gemini_api_key"),
+  ]);
+  llm.apiKey ||= typeof xkiro.data === "string" ? xkiro.data : "";
+  const key = typeof gemini.data === "string" ? gemini.data : "";
+  llm.geminiKey = key || undefined;
+  llm.providers = key ? { gemini: { baseUrl: GEMINI_OPENAI_URL, apiKey: key } } : {};
   return llm.apiKey;
 }
 

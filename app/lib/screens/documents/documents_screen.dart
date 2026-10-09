@@ -4,8 +4,8 @@ import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../data/file_input.dart';
 import '../../data/uploads.dart';
 import '../../motion.dart';
 import '../../theme.dart';
@@ -91,6 +91,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       _folders = [for (final r in f) _Folder(r['id'] as String, r['name'] as String)];
       _docs = [for (final r in d) _Doc(r)];
     });
+    _sign([
+      for (final doc in _docs)
+        if (!_links.containsKey(doc.path)) doc.path,
+    ]);
   }
 
   List<_Doc> _in(_Folder f) => _docs
@@ -130,9 +134,30 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   // Called straight from the tap: the browser only opens the file picker inside a user gesture.
   Future<void> upload(String? folderId) => uploads.pickAndUpload(folderId: folderId);
 
+  /// Signed links, made when the list loads so a tap can open a file immediately.
+  final Map<String, (String, DateTime)> _links = {};
+  static const _linkLife = Duration(hours: 1);
+
+  Future<void> _sign(List<String> paths) async {
+    if (paths.isEmpty) return;
+    try {
+      final signed = await _sb.storage.from(_bucket).createSignedUrlsResult(paths, _linkLife.inSeconds);
+      final at = DateTime.now();
+      for (final s in signed.whereType<SignedUrlSuccess>()) {
+        _links[s.path] = (s.signedUrl, at);
+      }
+    } catch (_) {
+      // Opening falls back to signing on tap.
+    }
+  }
+
   Future<void> open(_Doc d) async {
-    final url = await _sb.storage.from(_bucket).createSignedUrl(d.path, 60);
-    await launchUrl(Uri.parse(url));
+    final link = _links[d.path];
+    if (link != null && DateTime.now().difference(link.$2) < _linkLife - const Duration(minutes: 5)) {
+      openInNewTab(link.$1);
+      return;
+    }
+    await openWhenReady(_sb.storage.from(_bucket).createSignedUrl(d.path, _linkLife.inSeconds));
   }
 
   @override
@@ -341,7 +366,7 @@ class _FolderPage extends StatelessWidget {
                                   Expanded(
                                     child: Text(d.filename, style: AppText.body.copyWith(fontSize: 12.5), overflow: TextOverflow.ellipsis),
                                   ),
-                                  Text('${(d.size / 1048576).toStringAsFixed(1)} MB', style: AppText.tiny),
+                                  Text(_size(d.size), style: AppText.tiny),
                                   const SizedBox(width: 8),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -433,3 +458,5 @@ class _UploadPanel extends StatelessWidget {
     );
   }
 }
+
+String _size(int bytes) => bytes >= 1048576 ? '${(bytes / 1048576).toStringAsFixed(1)} MB' : '${(bytes / 1024).ceil()} KB';
