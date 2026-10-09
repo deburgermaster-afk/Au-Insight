@@ -96,7 +96,7 @@ class _AskScreenState extends State<AskScreen> {
           ..addAll([for (final m in saved) ChatMessage.fromJson((m as Map).cast())]);
         if (firstTime) _messages.add(ChatMessage(role: 'assistant', text: _welcome));
       });
-      _toBottom(jump: true);
+      _settleAtBottom();
     } else {
       await _newChat();
     }
@@ -141,6 +141,21 @@ class _AskScreenState extends State<AskScreen> {
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         })
         .eq('id', _chatId!);
+  }
+
+  /// Opens a chat at its newest message. The list builds lazily, so its height keeps growing for
+  /// a few frames after the first jump: keep jumping until it stops growing.
+  Future<void> _settleAtBottom() async {
+    var last = -1.0;
+    var stable = 0;
+    for (var i = 0; i < 40 && stable < 3 && mounted; i++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!_scroll.hasClients) continue;
+      final end = _scroll.position.maxScrollExtent;
+      _scroll.jumpTo(end);
+      stable = end == last ? stable + 1 : 0;
+      last = end;
+    }
   }
 
   void _toBottom({bool jump = false}) {
