@@ -1,20 +1,25 @@
-name: Crawl immigration law
+name: Crawl official sources
 
+# Runs every 3 hours. Each run works through the shared queue in Supabase
+# (pages discovered, re-due after 24h, or retried) and stops when it is empty
+# or after 5.5 hours, so runs never overlap and the crawl always resumes.
 on:
   schedule:
-    - cron: "17 16 * * *" # daily, ~3am Sydney
+    - cron: "17 */3 * * *"
   workflow_dispatch:
     inputs:
       source:
-        description: "Only this source id (homeaffairs | legislation)"
+        description: "Only re-seed this source id (e.g. homeaffairs, legislation, state-vic)"
         required: false
 
-concurrency: crawl
+concurrency:
+  group: crawl
+  cancel-in-progress: false
 
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 345
     defaults:
       run:
         working-directory: worker
@@ -29,8 +34,11 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Crawl
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          WORKER_TOKEN: ${{ secrets.WORKER_TOKEN }}
+          WORKER_NAME: github-actions
           EMBEDDING_BASE_URL: ${{ secrets.EMBEDDING_BASE_URL }}
           EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
-        run: python crawler.py ${{ inputs.source && format('--source {0}', inputs.source) || '' }}
+        run: python crawler.py --minutes 330 ${{ inputs.source && format('--source {0}', inputs.source) || '' }}

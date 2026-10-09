@@ -1,61 +1,105 @@
 # Immi Insight
 
-Australian migration assessments computed from the law itself. Answers are decided by a rules engine, explained by an AI agent that can only read, and every claim cites the Migration Act, the Migration Regulations or the Home Affairs page it came from.
+Australian migration decisions computed from the law itself. A Flutter web app (PWA) with a cited, agentic chat; a deterministic visa rules engine; and a background crawler that keeps a versioned copy of every official source up to date.
 
 ```
-worker/ (daily)                     Supabase (Sydney)                     Next.js PWA (Vercel syd1)
-─────────────────                   ─────────────────                     ─────────────────────────
-Crawl4AI → immi.homeaffairs   ──►   law_documents / versions        ◄──   /api/chat  agent (read-only tools)
-  every tab + accordion             law_sections (FTS + pgvector)            search_law · get_case_file
-FRL API  → Act + Regulations  ──►   law_changes (what changed, when)         list_documents · assess_visas
-  official Word compilations        search_law() hybrid, as-at date     ◄──   src/lib/engine  (deterministic)
-                                    cases · documents · chats  (RLS)   ◄──   /app  Ask · Assess · Documents
-                                    storage: case-documents (private)
+ Official sources                     Supabase (Sydney)                        Flutter web app (PWA)
+ ────────────────                     ─────────────────                        ─────────────────────
+ legislation.gov.au API ─┐            law_sources (15 official sites)         Ask      chat → edge function `chat`
+ immi.homeaffairs.gov.au ┤  worker/   crawl_queue  (shared, resumable)  ◄──    Assess   live decision (Dart engine)
+ homeaffairs.gov.au      ├─ crawler ─► law_documents → versions → sections     Docs     private folders, batch upload
+ 8 state nomination sites┤  (Python,  law_changes (what changed, when)    ◄──  Sources  live crawl progress & storage
+ ART · JSA · ABS · OMARA ┘  browser)  search_law()  keyword + vector, as-at
+                                      cases · chats · documents (RLS) · storage
+                                      pg_cron: re-queue pages every hour
+                                      edge fn `chat`: agent loop, read-only tools, rules engine
 ```
 
-## How it decides
+| Folder | What it is |
+|---|---|
+| `app/` | Flutter web app: shadcn_ui, go_router, flutter_animate, animations. Dart port of the rules engine in `lib/engine/`. |
+| `supabase/migrations/` | Schema, row-level security, worker API, progress functions, hourly re-crawl schedule, source list. |
+| `supabase/functions/chat/` | Agent: streams steps, sources, decisions and text as server-sent events. Works with any OpenAI-compatible API. |
+| `supabase/functions/_shared/engine/` | TypeScript rules engine (the same rules as the Dart one; both test suites pass the same cases). |
+| `worker/` | Crawler: queue-based, resumable, several can run at once. |
 
-- **The rules engine decides.** `src/lib/engine` evaluates visa criteria as data (`visas.ts`) with three-valued logic: each criterion is `met`, `not_met`, `unknown` (with the exact question to ask) or `at_risk` (discretionary: health, character, debts). Missing facts never get guessed. The points test returns a range, so the engine still decides when the unknown facts can't change the outcome.
-- **The points test matches Schedule 6D.** It was checked item by item (6D11–6D131) against the imported Regulations text; see `engine.test.ts`.
-- **The AI explains.** The agent must call `assess_visas` for eligibility and `search_law` for every requirement it states, and cite `[n]`. The chat shows its steps, the sources it used and inline decision cards.
-- **Rules carry a review status.** Visa rules ship as `reviewStatus: "draft"` until a person has checked each criterion against its cited source. That review is what turns "computed" into "correct"; it can't be automated.
+## How a decision is made
 
-## Privacy model
+1. **The rules engine decides.** Each visa (189, 190, 491 so far) is a list of criteria. Each criterion is evaluated to:
+   - `met`;
+   - `not met`;
+   - `unknown`, with the exact question to ask;
+   - `at risk`, for discretionary criteria (health, character, debts), which are flagged and never decided.
 
-- Row-level security on every user table; documents live in a private bucket under `<user_id>/…`.
-- The app and the agent use the signed-in user's session only. The service-role key is used only by the crawler, which touches only the public law tables.
-- The agent's tools are read-only (`src/lib/ai/tools.ts`). Facts and assessments are saved only by the user, in the UI.
-- Pick an LLM plan that doesn't train on or retain API inputs: many free tiers do.
+   The points test matches Schedule 6D item by item (6D11–6D131). Missing facts give a points range, so a decision is still made when the unknowns can't change the outcome.
+2. **The AI explains.** It must call `assess_visas` for eligibility and `search_law` for every requirement it mentions, cite sources as `[n]`, and quote the provision. It can only read, never write.
+3. **Every claim links to its source:** the Act, the Regulations, a migration instrument, or the Home Affairs page section it came from.
+
+Visa rules are marked `draft` until a person checks each criterion against its cited source. That review is what turns "computed" into "correct".
+
+## Data sources (`law_sources` table — add more with an INSERT)
+
+| Source | How | Scope |
+|---|---|---|
+| Federal Register of Legislation | official API (Word compilations) | Migration Act 1958, Migration Regulations 1994, Australian Citizenship Act and every in-force migration/citizenship instrument (~180 titles, discovered automatically) |
+| Home Affairs: immigration and citizenship | browser crawl, all tabs and folded sections expanded | every visa, citizenship and requirement page, processing times, fees, news |
+| Home Affairs: portfolio | browser crawl | media releases, migration program reports |
+| State and territory nomination | browser crawl | VIC, NSW, QLD, WA, SA, TAS, ACT, NT skilled/business nomination |
+| Administrative Review Tribunal | browser crawl | migration review procedures, time limits, fees |
+| Jobs and Skills Australia, ABS | browser crawl | occupation shortage list, ANZSCO/OSCA definitions |
+| OMARA | browser crawl | migration agent register and code of conduct |
+
+Pages are re-checked every 24 hours (some sources weekly or monthly). A changed page becomes a new version with the dates it was in force, and the change is listed on the **Sources** screen.
 
 ## Setup
 
-1. **Supabase**: create a project in the Sydney region (`ap-southeast-2`) and run `supabase/migrations/*.sql` (SQL editor or `supabase db push`).
-2. **Email codes instead of links**: in Authentication → Emails, paste `supabase/templates/confirmation.html` into *Confirm signup* and `recovery.html` into *Reset password*. Both use `{{ .Token }}`. Keep *Confirm email* on, and set your own SMTP for production.
-3. **Environment**: copy `.env.example` to `.env.local` and fill it in. Add the same variables in Vercel.
-4. **Run**: `pnpm install && pnpm dev`, then `pnpm test` (engine), `pnpm lint` and `pnpm build`.
-5. **Crawler**:
-   ```bash
-   cd worker
-   python -m venv .venv && . .venv/bin/activate
-   pip install -r requirements.txt && python -m playwright install chromium
-   export DATABASE_URL="postgresql://…"      # Supabase → Connect → Session pooler
-   python crawler.py --source legislation     # Act + Regulations via the official API (~2 min)
-   python crawler.py --source homeaffairs     # all visa pages, every tab and accordion
-   python crawler.py --dry-run --url https://immi.homeaffairs.gov.au/visas/...   # inspect one page
-   ```
-   `.github/workflows/crawl.yml` runs it daily. Add `DATABASE_URL` (and the optional `EMBEDDING_*`) as repository secrets.
+### 1. Supabase (already created: project `immi-insight`, Sydney)
+All migrations are applied and the `chat` function is deployed. Still to do in the dashboard:
 
-## Crawler notes
+- **Email codes instead of links.** Go to Authentication → Emails:
+  - paste `supabase/templates/confirmation.html` into **Confirm signup**;
+  - paste `supabase/templates/recovery.html` into **Reset password**.
 
-- Home Affairs renders every collapsed accordion and tab into the page but hides it with a print-only class. The crawler unhides them and labels each tab with a heading, so sections get full paths like `Skilled Independent visa › Eligibility › Be this age`.
-- legislation.gov.au blocks headless browsers, so the Act and Regulations come from its public OData API (`api.prod.legislation.gov.au`) as the official Word compilations. Their paragraph styles map to Part › Division › clause, and each version is stored with its real in-force date.
-- Each change creates a new version (`valid_from`/`valid_to`) plus a `law_changes` row listing the changed sections. `search_law(..., as_at)` searches the law as it stood on a given date.
-- `robots.txt` is respected, with 3 concurrent pages and a 1-second pause between batches.
+  Both use `{{ .Token }}`.
+- **SMTP.** Supabase's built-in email only delivers to your project's team members and is heavily rate-limited. Add your own SMTP (e.g. Resend) under Authentication → Emails → SMTP.
+- **AI provider.** Go to Edge Functions → Secrets and add:
+  - `LLM_BASE_URL`, e.g. `https://api.groq.com/openai/v1`, or your XKIRO base URL;
+  - `LLM_API_KEY`;
+  - `LLM_MODEL`.
 
-## Next steps
+  Any OpenAI-compatible API with tool calling works.
 
-- Document extraction: OCR (e.g. Docling or Mistral OCR) → proposed facts → the user confirms → case file.
-- Import occupation lists into `occupations` from the legislative instrument, and look up `occupationLists` from the ANZSCO code.
-- Load `processing_times` from the Home Affairs data feed behind the processing-times page.
-- Add more visa rule sets (482/186, 500, 485, partner) and get them reviewed.
-- Add state nomination sources (190/491) to `worker/sources.yaml`.
+### 2. Run the app locally
+```bash
+cd app
+flutter pub get
+flutter run -d chrome            # or: flutter build web --release --wasm
+flutter test                     # engine tests
+```
+The Supabase URL and publishable key are compiled in as defaults (`lib/config.dart`). To point at another project, use `--dart-define=SUPABASE_URL=… --dart-define=SUPABASE_KEY=…`.
+
+### 3. Background crawler
+The worker authenticates with a **worker token** (only its SHA-256 hash is stored in `private.worker_tokens`), so it needs no database password and can run anywhere:
+
+- **GitHub Actions (free).** `.github/workflows/crawl.yml` runs every 3 hours and works the queue for up to 5.5 hours. Add the repository secrets `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `WORKER_TOKEN`.
+- **Always-on.** `docker build -t immi-worker worker && docker run --env-file worker/.env immi-worker` (Railway, Fly.io, any VPS).
+- **Locally.** `pip install -r worker/requirements.txt && python -m playwright install chromium && python worker/crawler.py`.
+
+Cloudflare Workers can't run the real browser that Home Affairs needs (its pages are built with JavaScript and protected by Akamai), so the crawler runs as a normal process. The hourly `pg_cron` job inside Supabase re-queues stale pages, so any worker that runs picks up where the last one stopped.
+
+To rotate the worker token:
+```sql
+insert into private.worker_tokens (token_hash, name)
+values (encode(extensions.digest('<new long random token>', 'sha256'), 'hex'), 'github');
+```
+
+### 4. Deploy the web app (Vercel, Sydney)
+`.github/workflows/deploy-web.yml` builds the Flutter web app and deploys it to Vercel on every push to `main`. It needs `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`. `app/vercel.json` adds:
+- the single-page-app fallback;
+- cross-origin isolation, so the WebAssembly renderer can use threads;
+- long-lived caching for the engine files.
+
+## Tests
+- `app/`: `flutter analyze && flutter test` (16 engine tests).
+- `supabase/functions/`: `deno test --allow-net`. This runs the engine tests and an agent-loop test against a fake model that streams tool calls.
+- CI runs all of these (`.github/workflows/ci.yml`).

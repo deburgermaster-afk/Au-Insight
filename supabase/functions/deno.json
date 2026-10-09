@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "zod": "npm:zod@4.6.5",
+    "vitest": "./_shared/vitest-shim.ts",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.117.3"
+  }
+}

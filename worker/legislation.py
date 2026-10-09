@@ -84,3 +84,33 @@ async def fetch_title(title_id: str) -> tuple[str, str, datetime, str]:
         volumes = await download_volumes(http, title_id)
     markdown = "\n\n".join(docx_to_markdown(v) for v in volumes)
     return version["name"], markdown, datetime.fromisoformat(version["start"]), version["registerId"]
+
+
+# Names of in-force principal titles that belong in the corpus.
+RELEVANT = ("Migration", "Australian Citizenship", "Citizenship", "Immigration")
+COLLECTIONS = {"Act", "LegislativeInstrument", "NotifiableInstrument"}
+
+
+async def discover_titles() -> list[tuple[str, str]]:
+    """Every in-force principal Act/instrument about migration or citizenship: [(title_id, name)]."""
+    found: dict[str, str] = {}
+    async with httpx.AsyncClient(timeout=120) as http:
+        for term in ("Migration", "Citizenship", "Immigration"):
+            for skip in range(0, 5000, 500):
+                r = await http.get(
+                    f"{API}/Titles",
+                    params={
+                        "$filter": f"contains(name,'{term}')",
+                        "$select": "id,name,collection,isPrincipal,isInForce",
+                        "$top": "500",
+                        "$skip": str(skip),
+                    },
+                )
+                r.raise_for_status()
+                page = r.json().get("value", [])
+                for t in page:
+                    if t.get("isPrincipal") and t.get("isInForce") and t.get("collection") in COLLECTIONS and t["name"].startswith(RELEVANT):
+                        found[t["id"]] = t["name"]
+                if len(page) < 500:
+                    break
+    return sorted(found.items())

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Australian visa decisions from the law itself — cited, instant, private.">
+  <meta name="theme-color" content="#0B0B0C">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Immi Insight">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="manifest" href="manifest.json">
+  <title>Immi Insight</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0B0B0C; }
+    /* Shown until Flutter paints its first frame, then fades out. */
+    #splash { position: fixed; inset: 0; display: grid; place-items: center; transition: opacity .35s cubic-bezier(.22,1,.36,1); }
+    #splash img { width: 56px; height: 56px; animation: breathe 1.6s ease-in-out infinite; }
+    @keyframes breathe { 50% { transform: scale(.92); opacity: .7; } }
+  </style>
+</head>
+<body>
+  <div id="splash"><img src="icon.svg" alt=""></div>
+  <script>
+    window.addEventListener('flutter-first-frame', () => {
+      const s = document.getElementById('splash');
+      s.style.opacity = '0';
+      setTimeout(() => s.remove(), 400);
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

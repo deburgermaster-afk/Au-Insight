@@ -1,6 +1,6 @@
 -- Immi Insight schema.
 -- Two halves:
---   1. Law corpus (public, read-only to users; written only by the crawler with the service role).
+--   1. Law corpus (read-only to users; written only through the worker_* functions, see the crawler migration).
 --   2. Private case data (row-level security: each user sees only their own rows).
 
 create extension if not exists vector with schema extensions;
@@ -102,7 +102,7 @@ create table public.processing_times (
   source_url text not null
 );
 
--- Visa criteria as reviewable data (same JSON shape as src/lib/engine/logic.ts `Condition`).
+-- Visa criteria as reviewable data (same JSON shape as the engine's `Condition` in supabase/functions/_shared/engine).
 create table public.criteria_rules (
   id bigint generated always as identity primary key,
   subclass text not null,
@@ -120,7 +120,7 @@ create table public.criteria_rules (
   unique (subclass, stream, criterion_id, valid_from)
 );
 
--- Law tables: anyone signed in can read, nobody but the service role can write.
+-- Law tables: anyone signed in can read; writes go through the token-checked worker functions.
 do $$
 declare t text;
 begin
@@ -232,7 +232,7 @@ create table public.chats (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   case_id uuid references public.cases(id) on delete set null,
   title text not null default 'New chat',
-  messages jsonb not null default '[]',         -- AI SDK UIMessage[]
+  messages jsonb not null default '[]',         -- [{role, text, steps, sources, decisions}]
   updated_at timestamptz not null default now()
 );
 
@@ -283,8 +283,3 @@ create policy "own files insert" on storage.objects for insert to authenticated
   with check (bucket_id = 'case-documents' and (storage.foldername(name))[1] = (select auth.uid())::text);
 create policy "own files delete" on storage.objects for delete to authenticated
   using (bucket_id = 'case-documents' and (storage.foldername(name))[1] = (select auth.uid())::text);
-
-insert into public.law_sources (id, name, base_url) values
-  ('homeaffairs', 'Department of Home Affairs — Immigration and citizenship', 'https://immi.homeaffairs.gov.au'),
-  ('legislation', 'Federal Register of Legislation', 'https://www.legislation.gov.au')
-on conflict (id) do nothing;
