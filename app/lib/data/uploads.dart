@@ -1,10 +1,14 @@
 import 'dart:math';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'file_input.dart';
+
 const documentsBucket = 'case-documents';
+
+/// The bucket's per-file limit (Supabase free plan maximum).
+const maxUploadBytes = 50 * 1024 * 1024;
 
 /// Picks and uploads documents from any screen.
 ///
@@ -21,10 +25,7 @@ class Uploads extends ChangeNotifier {
   int finished = 0;
 
   Future<void> pickAndUpload({String? folderId}) async {
-    final files = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'webp', 'doc', 'docx', 'txt'],
-    );
+    final files = await pickFiles();
     if (files.isEmpty) return;
     final sb = Supabase.instance.client;
     final uid = sb.auth.currentUser!.id;
@@ -36,9 +37,10 @@ class Uploads extends ChangeNotifier {
     await Future.wait(
       files.map((f) async {
         try {
-          final bytes = await f.xFile.readAsBytes();
-          final mime = f.xFile.mimeType ?? mimeFor(f.name);
-          final path = '$uid/${_uuid()}/${f.name}';
+          if (f.size > maxUploadBytes) throw 'larger than 50 MB';
+          final bytes = await f.bytes();
+          final mime = f.type.isNotEmpty ? f.type : mimeFor(f.name);
+          final path = '$uid/${_uuid()}/${safeName(f.name)}';
           await sb.storage.from(documentsBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
           await sb.from('documents').insert({
             'storage_path': path,
@@ -48,6 +50,8 @@ class Uploads extends ChangeNotifier {
             'folder_id': folderId,
           });
           finished++;
+        } on StorageException catch (e) {
+          errors.add('${f.name}: ${e.message}');
         } catch (e) {
           errors.add('${f.name}: $e');
         }
@@ -61,6 +65,15 @@ class Uploads extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Storage keys only allow a limited character set; the real name is kept in the documents table.
+  static String safeName(String name) {
+    final dot = name.lastIndexOf('.');
+    final base = (dot > 0 ? name.substring(0, dot) : name).replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+    final ext = dot > 0 ? name.substring(dot + 1).replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase() : '';
+    final trimmed = base.isEmpty ? 'file' : (base.length > 80 ? base.substring(0, 80) : base);
+    return ext.isEmpty ? trimmed : '$trimmed.$ext';
+  }
+
   static String mimeFor(String name) => switch (name.split('.').last.toLowerCase()) {
     'pdf' => 'application/pdf',
     'png' => 'image/png',
@@ -70,6 +83,10 @@ class Uploads extends ChangeNotifier {
     'doc' => 'application/msword',
     'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'txt' => 'text/plain',
+    'heif' => 'image/heif',
+    'gif' => 'image/gif',
+    'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'csv' => 'text/csv',
     _ => 'application/octet-stream',
   };
 
