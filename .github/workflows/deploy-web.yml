@@ -1,11 +1,10 @@
 name: Deploy web app
 
-# Builds the Flutter web app and deploys it to Vercel (Sydney).
-# Needs repository secrets VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID.
+# Optional: builds in GitHub Actions and deploys a prebuilt app to Vercel.
+# The Vercel project is also linked to this repo and builds by itself on every push
+# (app/vercel.json + app/scripts/vercel-install.sh), so this is only needed if you
+# prefer GitHub to do the build. Needs secrets VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID.
 on:
-  push:
-    branches: [main]
-    paths: ["app/**", ".github/workflows/deploy-web.yml"]
   workflow_dispatch:
 
 jobs:
