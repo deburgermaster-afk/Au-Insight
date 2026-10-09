@@ -796,13 +796,20 @@ class _Composer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
+                  // Enter sends (the keyboard's send key on phones); Shift+Enter adds a line.
                   child: CallbackShortcuts(
-                    bindings: {const SingleActivator(LogicalKeyboardKey.enter): () => onSend(controller.text)},
+                    bindings: {const SingleActivator(LogicalKeyboardKey.enter, shift: true): () => _newLine(controller)},
                     child: TextField(
                       controller: controller,
                       focusNode: focus,
                       minLines: 1,
                       maxLines: 6,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (text) {
+                        onSend(text);
+                        focus.requestFocus();
+                      },
                       style: AppText.body,
                       cursorColor: AppColors.fg,
                       cursorWidth: 1.5,
@@ -852,4 +859,13 @@ class _Composer extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Inserts a line break at the cursor (Shift+Enter in the composer).
+void _newLine(TextEditingController c) {
+  final sel = c.selection.isValid ? c.selection : TextSelection.collapsed(offset: c.text.length);
+  c.value = TextEditingValue(
+    text: c.text.replaceRange(sel.start, sel.end, '\n'),
+    selection: TextSelection.collapsed(offset: sel.start + 1),
+  );
 }
