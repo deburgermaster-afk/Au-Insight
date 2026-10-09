@@ -22,7 +22,7 @@ export const profileJsonSchema = {
   properties: {
     personal: {
       type: "object",
-      properties: { dateOfBirth: { ...str, description: "YYYY-MM-DD" }, citizenship: str },
+      properties: { name: str, dateOfBirth: { ...str, description: "YYYY-MM-DD" }, citizenship: str },
     },
     residence: {
       type: "object",
@@ -85,6 +85,8 @@ export const profileJsonSchema = {
       type: "object",
       properties: {
         has: bool,
+        name: str,
+        dateOfBirth: { ...str, description: "YYYY-MM-DD" },
         relationship: { type: "string", enum: ["married", "de facto", "engaged", "none"] },
         onYourVisa: { ...bool, description: "Included in the user's visa as a dependent" },
         visa: str,

@@ -2,7 +2,7 @@
 // deno run -A chat/live_check.ts <email> <password-file> <llm-key-file> "<question>"
 import { createClient } from "@supabase/supabase-js";
 import { todayISO } from "../_shared/engine/index.ts";
-import { runAgent } from "./agent.ts";
+import { type Emit, type LLMConfig, prepareDocuments, runAgent } from "./agent.ts";
 import { systemPrompt } from "./prompt.ts";
 
 const [email, pwFile, keyFile, question] = Deno.args;
@@ -15,34 +15,39 @@ if (error) throw error;
 
 let text = "";
 const t0 = Date.now();
+const llm: LLMConfig = {
+  baseUrl: "https://api.xkiro.com/v1",
+  apiKey: (await Deno.readTextFile(keyFile)).trim(),
+  models: (Deno.env.get("LLM_MODEL") ?? "cohere/command-a-plus").split(","),
+  ...(Deno.env.get("GEMINI_KEY_FILE")
+    ? (() => {
+      const key = Deno.readTextFileSync(Deno.env.get("GEMINI_KEY_FILE")!).trim();
+      return {
+        geminiKey: key,
+        providers: { gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", apiKey: key } },
+      };
+    })()
+    : {}),
+};
+const emit: Emit = (e) => {
+  if (e.type === "text") text += e.delta;
+  else if (e.type === "step" && e.status === "done") {
+    console.log(`step  ${e.label}  hits=${JSON.stringify(e.hits ?? []).slice(0, 160)}`);
+  } else if (e.type === "decision") {
+    for (const r of e.results as { subclass: string; outcome: string; points?: { min: number; max: number } }[]) {
+      console.log(`decision ${r.subclass} ${r.outcome} points=${r.points?.min}-${r.points?.max}`);
+    }
+  } else if (e.type === "error") console.log("error", e.message);
+};
+const documents = await prepareDocuments(supabase, llm, emit);
+console.log(`documents in context: ${documents.length} chars`);
 await runAgent(
-  {
-    baseUrl: "https://api.xkiro.com/v1",
-    apiKey: (await Deno.readTextFile(keyFile)).trim(),
-    models: (Deno.env.get("LLM_MODEL") ?? "cohere/command-a-plus").split(","),
-    ...(Deno.env.get("GEMINI_KEY_FILE")
-      ? (() => {
-        const key = Deno.readTextFileSync(Deno.env.get("GEMINI_KEY_FILE")!).trim();
-        return {
-          geminiKey: key,
-          providers: { gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", apiKey: key } },
-        };
-      })()
-      : {}),
-  },
+  llm,
   supabase,
-  [{ role: "system", content: systemPrompt(todayISO()) }, { role: "user", content: question }],
-  (e) => {
-    if (e.type === "text") text += e.delta;
-    else if (e.type === "step" && e.status === "done") {
-      console.log(`step  ${e.label}  hits=${JSON.stringify(e.hits ?? []).slice(0, 160)}`);
-    } else if (e.type === "decision") {
-      for (const r of e.results as { subclass: string; outcome: string; points?: { min: number; max: number } }[]) {
-        console.log(`decision ${r.subclass} ${r.outcome} points=${r.points?.min}-${r.points?.max}`);
-      }
-    } else if (e.type === "error") console.log("error", e.message);
-  },
+  [{ role: "system", content: systemPrompt(todayISO(), undefined, documents) }, { role: "user", content: question }],
+  emit,
   new AbortController().signal,
+  { documents },
 );
 console.log(`\n--- answer (${((Date.now() - t0) / 1000).toFixed(1)}s) ---\n${text}`);
 await supabase.auth.signOut();

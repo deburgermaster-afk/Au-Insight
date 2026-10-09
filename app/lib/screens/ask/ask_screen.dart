@@ -168,8 +168,16 @@ class _AskScreenState extends State<AskScreen> {
 
   void _send(String text) {
     text = text.trim();
-    if (text.isEmpty || _busy) return;
+    if (text.isEmpty) return;
     HapticFeedback.lightImpact();
+    // A message sent mid-reply interrupts it; a reply stopped before any answer is dropped, so
+    // the assistant sees both messages together and answers them in one go.
+    if (_busy) {
+      _sub?.cancel();
+      _sub = null;
+      final last = _messages.lastOrNull;
+      if (last != null && last.role == 'assistant' && last.text.trim().isEmpty) _messages.removeLast();
+    }
     final reply = ChatMessage(role: 'assistant');
     setState(() {
       _messages.add(ChatMessage(role: 'user', text: text));
@@ -178,7 +186,10 @@ class _AskScreenState extends State<AskScreen> {
     });
     _toBottom();
 
-    final history = _messages.sublist(0, _messages.length - 1);
+    final history = [
+      for (final m in _messages.sublist(0, _messages.length - 1))
+        if (m.role == 'user' || m.text.trim().isNotEmpty) m,
+    ];
     _sub = _client
         .send(history, chatId: _chatId)
         .listen(
@@ -843,9 +854,10 @@ class _Composer extends StatelessWidget {
                   listenable: controller,
                   builder: (context, _) {
                     final canSend = controller.text.trim().isNotEmpty;
+                    final stopping = busy && !canSend;
                     return Pressable(
                       scale: 0.88,
-                      onTap: busy ? onStop : (canSend ? () => onSend(controller.text) : null),
+                      onTap: canSend ? () => onSend(controller.text) : (busy ? onStop : null),
                       child: AnimatedContainer(
                         duration: Motion.medium,
                         curve: Motion.ease,
@@ -857,9 +869,9 @@ class _Composer extends StatelessWidget {
                           duration: Motion.fast,
                           transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
                           child: Icon(
-                            busy ? LucideIcons.square : LucideIcons.arrowUp,
-                            key: ValueKey(busy),
-                            size: busy ? 11 : 15,
+                            stopping ? LucideIcons.square : LucideIcons.arrowUp,
+                            key: ValueKey(stopping),
+                            size: stopping ? 11 : 15,
                             color: busy || canSend ? AppColors.bg : AppColors.muted,
                           ),
                         ),

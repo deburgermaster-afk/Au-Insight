@@ -173,11 +173,25 @@ class _PlusButtonState extends State<_PlusButton> {
   bool _open = false;
 
   void _toggle() {
-    setState(() => _open = !_open);
-    if (_open) _overlay.show();
+    if (_open) return _close();
+    setState(() => _open = true);
+    _overlay.show();
   }
 
-  void _close() => setState(() => _open = false);
+  void _close() {
+    if (!_open) return;
+    setState(() => _open = false);
+    // Hide once the menu has animated out, even if that animation never reports its end.
+    Future.delayed(Motion.slow, () {
+      if (mounted && !_open) _overlay.hide();
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_overlay.isShowing) _overlay.hide();
+    super.dispose();
+  }
 
   void _pick(QuickAction a) {
     _close();
@@ -195,72 +209,73 @@ class _PlusButtonState extends State<_PlusButton> {
       link: _link,
       child: OverlayPortal(
         controller: _overlay,
-        overlayChildBuilder: (context) => Stack(
-          children: [
-            // Dim the page; tap anywhere to close.
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: _close,
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: _open ? 1 : 0),
-                  duration: Motion.medium,
-                  curve: Motion.ease,
-                  onEnd: () {
-                    if (!_open) _overlay.hide();
-                  },
-                  builder: (_, t, _) => ColoredBox(color: Colors.black.withValues(alpha: 0.45 * t)),
+        // While closing, the menu lets every tap through to the page and the tab bar.
+        overlayChildBuilder: (context) => IgnorePointer(
+          ignoring: !_open,
+          child: Stack(
+            children: [
+              // Dim the page; tap anywhere to close.
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: _close,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: _open ? 1 : 0),
+                    duration: Motion.medium,
+                    curve: Motion.ease,
+                    builder: (_, t, _) => ColoredBox(color: Colors.black.withValues(alpha: 0.45 * t)),
+                  ),
                 ),
               ),
-            ),
-            CompositedTransformFollower(
-              link: _link,
-              targetAnchor: Alignment.topRight,
-              followerAnchor: Alignment.bottomRight,
-              offset: const Offset(0, -12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  for (final (i, it) in items.indexed)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: AnimatedSlide(
-                        offset: _open ? Offset.zero : const Offset(0, 0.4),
-                        duration: Duration(milliseconds: 260 + (items.length - i) * 40),
-                        curve: Motion.ease,
-                        child: AnimatedOpacity(
-                          opacity: _open ? 1 : 0,
-                          duration: Duration(milliseconds: 160 + (items.length - i) * 40),
-                          child: Pressable(
-                            onTap: () => _pick(it.$1),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: AppColors.raised,
-                                borderRadius: BorderRadius.circular(22),
-                                border: Border.all(color: const Color(0x14FFFFFF)),
-                                boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 16, offset: Offset(0, 6))],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(it.$2, size: 15, color: AppColors.fg),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    it.$3,
-                                    style: AppText.small.copyWith(color: AppColors.fg, fontWeight: FontWeight.w500),
-                                  ),
-                                ],
+              CompositedTransformFollower(
+                link: _link,
+                targetAnchor: Alignment.topRight,
+                followerAnchor: Alignment.bottomRight,
+                offset: const Offset(0, -12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (final (i, it) in items.indexed)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: AnimatedSlide(
+                          offset: _open ? Offset.zero : const Offset(0, 0.4),
+                          duration: Duration(milliseconds: 260 + (items.length - i) * 40),
+                          curve: Motion.ease,
+                          child: AnimatedOpacity(
+                            opacity: _open ? 1 : 0,
+                            duration: Duration(milliseconds: 160 + (items.length - i) * 40),
+                            child: Pressable(
+                              onTap: () => _pick(it.$1),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.raised,
+                                  borderRadius: BorderRadius.circular(22),
+                                  border: Border.all(color: const Color(0x14FFFFFF)),
+                                  boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 16, offset: Offset(0, 6))],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(it.$2, size: 15, color: AppColors.fg),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      it.$3,
+                                      style: AppText.small.copyWith(color: AppColors.fg, fontWeight: FontWeight.w500),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         child: Pressable(
           scale: 0.9,

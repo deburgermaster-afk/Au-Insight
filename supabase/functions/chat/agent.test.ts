@@ -1,6 +1,6 @@
 import { expect } from "jsr:@std/expect@1";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { datesVersusToday, documentText, type Msg, runAgent } from "./agent.ts";
+import { datesVersusToday, documentDigest, documentText, type Msg, runAgent, SHOWN_ALREADY } from "./agent.ts";
 import { mergeProfile, missingSections } from "./profile.ts";
 
 // A fake OpenAI-compatible server: 1st call streams a tool call (arguments split
@@ -331,24 +331,27 @@ Deno.test("saves the plan as a Case with the turn's sources and analyst reports"
   expect(events.find((e) => e.type === "case")).toEqual({ type: "case", id: "case-1", title: "Path to PR via 190" });
 });
 
-Deno.test("an answer written alongside bookkeeping tools isn't repeated", async () => {
-  let calls = 0;
-  const server = Deno.serve({ port: 0, onListen() {} }, () => {
-    calls++;
-    const chunks = [
-      { choices: [{ delta: { content: "Here is your full plan, step by step, with every detail you need." } }] },
-      {
-        choices: [{
-          delta: {
-            tool_calls: [{
-              index: 0,
-              id: "s1",
-              function: { name: "show_button", arguments: '{"action":"upload_documents"}' },
-            }],
-          },
-        }],
-      },
-    ];
+Deno.test("after an answer with only bookkeeping calls, the model goes on without repeating it", async () => {
+  const bodies: { messages: { role: string; content: string | null }[] }[] = [];
+  const server = Deno.serve({ port: 0, onListen() {} }, async (req) => {
+    bodies.push(await req.json());
+    // First the answer plus a button, then nothing more to add.
+    const chunks = bodies.length === 1
+      ? [
+        { choices: [{ delta: { content: "Here is your full plan, step by step, with every detail you need." } }] },
+        {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: "s1",
+                function: { name: "show_button", arguments: '{"action":"upload_documents"}' },
+              }],
+            },
+          }],
+        },
+      ]
+      : [{ choices: [{ delta: { content: "" } }] }];
     return new Response(chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") + "data: [DONE]\n\n");
   });
   const events: Record<string, unknown>[] = [];
@@ -363,8 +366,24 @@ Deno.test("an answer written alongside bookkeeping tools isn't repeated", async 
   } finally {
     await server.shutdown();
   }
-  expect(calls).toBe(1);
+  expect(bodies.length).toBe(2);
+  expect(bodies[1].messages.at(-1)).toEqual({ role: "user", content: SHOWN_ALREADY });
   expect(events.filter((e) => e.type === "action")).toEqual([{ type: "action", action: "upload_documents" }]);
+  expect(events.filter((e) => e.type === "text").map((e) => e.delta).join("")).toBe(
+    "Here is your full plan, step by step, with every detail you need.",
+  );
+});
+
+Deno.test("documentDigest gives every document a share of the context and marks unread ones", () => {
+  const digest = documentDigest([
+    { id: "a", filename: "CoE.pdf", extracted_text: "Course:   Advanced Diploma\n\n\nEnd date: 27 November 2026" },
+    { id: "b", filename: "photo.jpg", status: "failed", extracted_text: null },
+    { id: "c", filename: "long.pdf", extracted_text: "x".repeat(50000) },
+  ]);
+  expect(digest).toContain("### CoE.pdf (id a)\nCourse: Advanced Diploma\nEnd date: 27 November 2026");
+  expect(digest).toContain("### photo.jpg (id b)\n[could not be read]");
+  expect(digest).toContain("[… shortened; read_document has the full text]");
+  expect(digest.length).toBeLessThan(6000);
 });
 
 Deno.test("routes @provider models and sends Gemini thought signatures back", async () => {

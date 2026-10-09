@@ -160,6 +160,32 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     await openWhenReady(_sb.storage.from(_bucket).createSignedUrl(d.path, _linkLife.inSeconds));
   }
 
+  /// Deletes a file after the user confirms. Returns whether it was deleted.
+  Future<bool> delete(_Doc d) async {
+    final ok = await showShadDialog<bool>(
+      context: context,
+      builder: (context) => ShadDialog(
+        title: const Text('Delete file?'),
+        description: Text('${d.filename} will be removed for good, and the assistant will no longer use it.'),
+        actions: [
+          ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
+          ShadButton.destructive(child: const Text('Delete'), onPressed: () => Navigator.of(context).pop(true)),
+        ],
+      ),
+    );
+    if (ok != true) return false;
+    try {
+      await _sb.storage.from(_bucket).remove([d.path]);
+      await _sb.from('documents').delete().eq('id', d.id);
+    } catch (e) {
+      if (mounted) toast(context, 'Could not delete ${d.filename}: $e');
+      return false;
+    }
+    if (mounted) setState(() => _docs.removeWhere((x) => x.id == d.id));
+    _links.remove(d.path);
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final folders = _allFolders;
@@ -271,7 +297,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                           ),
                         ),
                         openBuilder: (context, close) =>
-                            _FolderPage(folder: f, docs: docs, onUpload: () => upload(f.id), onOpen: open, close: close),
+                            _FolderPage(folder: f, docs: docs, onUpload: () => upload(f.id), onOpen: open, onDelete: delete, close: close),
                       ).enter(i);
                     },
                   ),
@@ -303,13 +329,37 @@ class _RoundIcon extends StatelessWidget {
   );
 }
 
-class _FolderPage extends StatelessWidget {
-  const _FolderPage({required this.folder, required this.docs, required this.onUpload, required this.onOpen, required this.close});
+class _FolderPage extends StatefulWidget {
+  const _FolderPage({
+    required this.folder,
+    required this.docs,
+    required this.onUpload,
+    required this.onOpen,
+    required this.onDelete,
+    required this.close,
+  });
   final _Folder folder;
   final List<_Doc> docs;
   final Future<void> Function() onUpload;
   final Future<void> Function(_Doc) onOpen;
+  final Future<bool> Function(_Doc) onDelete;
   final VoidCallback close;
+
+  @override
+  State<_FolderPage> createState() => _FolderPageState();
+}
+
+class _FolderPageState extends State<_FolderPage> {
+  late final List<_Doc> docs = [...widget.docs];
+
+  _Folder get folder => widget.folder;
+  Future<void> Function() get onUpload => widget.onUpload;
+  Future<void> Function(_Doc) get onOpen => widget.onOpen;
+  VoidCallback get close => widget.close;
+
+  Future<void> _delete(_Doc d) async {
+    if (await widget.onDelete(d) && mounted) setState(() => docs.remove(d));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -375,8 +425,21 @@ class _FolderPage extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      d.status,
+                                      d.status == 'extracted' ? 'read' : 'not read yet',
                                       style: AppText.tiny.copyWith(color: d.status == 'extracted' ? AppColors.success : AppColors.muted),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Semantics(
+                                    label: 'Delete ${d.filename}',
+                                    button: true,
+                                    child: Pressable(
+                                      scale: 0.85,
+                                      onTap: () => _delete(d),
+                                      child: const Padding(
+                                        padding: EdgeInsets.fromLTRB(8, 4, 0, 4),
+                                        child: Icon(LucideIcons.trash2, size: 15, color: AppColors.muted),
+                                      ),
                                     ),
                                   ),
                                 ],

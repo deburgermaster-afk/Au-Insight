@@ -2,7 +2,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { todayISO } from "../_shared/engine/index.ts";
-import { type Emit, type LLMConfig, type Msg, runAgent } from "./agent.ts";
+import { type Emit, type LLMConfig, type Msg, prepareDocuments, runAgent } from "./agent.ts";
 import { missingSections } from "./profile.ts";
 import { systemPrompt, type UserContext } from "./prompt.ts";
 
@@ -65,6 +65,7 @@ Deno.serve(async (req) => {
   const { data: auth } = await supabase.auth.getClaims(authHeader.replace(/^Bearer /i, ""));
   if (!auth?.claims) return new Response("Unauthorized", { status: 401, headers: cors });
 
+  const startedAt = Date.now();
   const body = await req.json().catch(() => ({}));
   const user = await userContext(supabase);
   const history = Array.isArray(body.messages) ? body.messages.slice(-24) : [];
@@ -90,8 +91,13 @@ Deno.serve(async (req) => {
             "The AI provider isn't configured yet: store the key in Vault as llm_api_key or set the LLM_API_KEY function secret.",
           );
         }
+        // Every document is read before the agent starts, and all of them go into its context.
+        const documents = await prepareDocuments(supabase, llm, emit);
+        messages[0] = { role: "system", content: systemPrompt(todayISO(), user, documents) };
         await runAgent(llm, supabase, messages, emit, req.signal, {
           chatId: typeof body.chatId === "string" ? body.chatId : undefined,
+          documents,
+          startedAt,
         });
       } catch (e) {
         emit({ type: "error", message: e instanceof Error ? e.message : String(e) });
