@@ -6,16 +6,19 @@
 //   { type: "source", n, title, section, url }
 //   { type: "decision", results }        (VisaAssessment[] from the rules engine)
 //   steps from analysts carry { agent: "<analyst name>" }
+//   { type: "case", id, title }          (a solution saved as a Case)
+//   { type: "profile" }                  (the profile changed)
 //   { type: "action", action }           (a button the app shows: "upload_documents" | "open_case_file")
 //   { type: "reasoning", delta } | { type: "text", delta } | { type: "error", message } | { type: "done" }
 //
 // Works with any OpenAI-compatible provider (LLM_BASE_URL / LLM_API_KEY / LLM_MODEL).
-// Tools run as the signed-in user (RLS applies). Documents and the law are read-only; the one
-// write is save_story, which keeps the user's own background in their case file.
+// Tools run as the signed-in user (RLS applies). Documents and the law are read-only; the agent
+// only writes the user's own profile (save_story, save_profile) and the Cases it creates.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assessAll, type CaseFacts, caseFactsSchema, todayISO } from "../_shared/engine/index.ts";
 import { analystPrompt, ANALYSTS } from "./analysts.ts";
+import { mergeProfile, missingSections, type Profile, profileJsonSchema } from "./profile.ts";
 
 const BUCKET = "case-documents";
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
@@ -128,6 +131,54 @@ const toolDefs = [
   {
     type: "function",
     function: {
+      name: "save_profile",
+      description:
+        "Save what you learned in the guided intake to the user's profile: arrival, every course and provider (including changes), current visa, work, partner and dependents, English, goals. Returns the sections still missing.",
+      parameters: { type: "object", properties: { profile: profileJsonSchema }, required: ["profile"] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_case",
+      description:
+        "Save the solution you just gave as a Case the user can open and track. Call it after answering from the analyst team's reports, when the user asked for a solution or plan.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short, e.g. 'Path to PR via 190 (NSW)'" },
+          question: { type: "string", description: "What the user asked" },
+          summary: { type: "string", description: "Your answer in markdown, with its [n] citations" },
+          pathways: {
+            type: "array",
+            description: "Options from best to least promising",
+            items: {
+              type: "object",
+              properties: { name: { type: "string" }, fit: { type: "string" }, needs: { type: "string" } },
+              required: ["name"],
+            },
+          },
+          steps: {
+            type: "array",
+            description: "The plan, in order",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                detail: { type: "string" },
+                due: { type: "string", description: "YYYY-MM-DD or a short phrase like 'before 14 Dec 2026'" },
+              },
+              required: ["title"],
+            },
+          },
+        },
+        required: ["title", "summary", "steps"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "show_button",
       description:
         "Show the user a button under your reply: upload_documents opens the document upload, open_case_file opens their case file.",
@@ -185,6 +236,10 @@ function stepLabel(name: string, args: Record<string, unknown>): string {
       return "Preparing a shortcut";
     case "consult_analysts":
       return "Consulting the analyst team";
+    case "save_profile":
+      return "Updating your profile";
+    case "create_case":
+      return "Saving your plan as a case";
     default:
       return name;
   }
@@ -236,10 +291,16 @@ function makeTools(supabase: SupabaseClient, emit: Emit) {
     },
 
     async get_case_file() {
-      const { data, error } = await supabase.from("cases").select("title, facts, story, updated_at").order("created_at")
-        .limit(1).maybeSingle();
+      const { data, error } = await supabase.from("cases").select("title, facts, story, profile, updated_at")
+        .order("created_at").limit(1).maybeSingle();
       if (error) return { error: error.message };
-      return data ? { ...data, storyDates: datesVersusToday(data.story ?? "", todayISO()) } : { facts: {}, story: "" };
+      if (!data) return { facts: {}, story: "", profile: {} };
+      const profile = (data.profile ?? {}) as Profile;
+      return {
+        ...data,
+        storyDates: datesVersusToday(`${data.story ?? ""}\n${JSON.stringify(profile)}`, todayISO()),
+        missingSections: missingSections(profile),
+      };
     },
 
     async list_documents() {
@@ -283,6 +344,23 @@ function makeTools(supabase: SupabaseClient, emit: Emit) {
         row.id,
       );
       return error ? { error: error.message } : { saved: true, storyDates: datesVersusToday(story, todayISO()) };
+    },
+
+    async save_profile(args: { profile?: unknown }) {
+      const update = (args.profile ?? {}) as Profile;
+      const { data: row } = await supabase.from("cases").select("id, profile").order("created_at").limit(1)
+        .maybeSingle();
+      if (!row) return { error: "No case file" };
+      const profile = mergeProfile((row.profile ?? {}) as Profile, update);
+      const { error } = await supabase.from("cases").update({ profile, updated_at: new Date().toISOString() })
+        .eq("id", row.id);
+      if (error) return { error: error.message };
+      emit({ type: "profile" });
+      return {
+        saved: true,
+        missingSections: missingSections(profile),
+        dates: datesVersusToday(JSON.stringify(update), todayISO()),
+      };
     },
 
     show_button(args: { action?: string }) {
@@ -468,7 +546,16 @@ export async function runAgent(
   messages: Msg[],
   emit: Emit,
   signal: AbortSignal,
+  options: { chatId?: string } = {},
 ) {
+  // Sources and analyst reports from this turn go into any Case the agent creates.
+  const sources: Record<string, unknown>[] = [];
+  let lastReports: unknown[] = [];
+  const outer = emit;
+  emit = (e) => {
+    if (e.type === "source") sources.push({ n: e.n, title: e.title, section: e.section, url: e.url });
+    outer(e);
+  };
   const base = makeTools(supabase, emit) as unknown as Record<string, ToolFn>;
   const analystDefs = toolDefs.filter((d) => ANALYST_TOOLS.includes(d.function.name));
 
@@ -506,8 +593,31 @@ export async function runAgent(
         }
       }),
     );
+    lastReports = reports;
     return { reports };
   };
 
-  await runLoop(llm, messages, { ...base, consult_analysts }, toolDefs, emit, signal, MAX_STEPS);
+  const create_case: ToolFn = async (args) => {
+    const steps = (Array.isArray(args.steps) ? args.steps : []).map((s: Record<string, unknown>) => ({
+      title: String(s.title ?? ""),
+      detail: String(s.detail ?? ""),
+      due: s.due ? String(s.due) : null,
+      done: false,
+    }));
+    const { data, error } = await supabase.from("solutions").insert({
+      chat_id: options.chatId ?? null,
+      title: String(args.title ?? "Your plan").slice(0, 120),
+      question: String(args.question ?? ""),
+      summary: String(args.summary ?? ""),
+      pathways: Array.isArray(args.pathways) ? args.pathways : [],
+      steps,
+      reports: lastReports,
+      sources,
+    }).select("id, title").single();
+    if (error) return { error: error.message };
+    emit({ type: "case", id: data.id, title: data.title });
+    return { created: true, id: data.id };
+  };
+
+  await runLoop(llm, messages, { ...base, consult_analysts, create_case }, toolDefs, emit, signal, MAX_STEPS);
 }

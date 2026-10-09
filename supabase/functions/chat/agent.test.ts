@@ -1,6 +1,7 @@
 import { expect } from "jsr:@std/expect@1";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { datesVersusToday, documentText, type Msg, runAgent } from "./agent.ts";
+import { mergeProfile, missingSections } from "./profile.ts";
 
 // A fake OpenAI-compatible server: 1st call streams a tool call (arguments split
 // across chunks, as real providers do), 2nd call streams the final answer.
@@ -255,4 +256,77 @@ Deno.test("consults four analysts in parallel and answers from their reports", a
   expect(events.filter((e) => e.type === "step" && e.status === "done").map((e) => e.tool)).toEqual([
     "consult_analysts",
   ]);
+});
+
+Deno.test("merges intake answers into the profile and reports what's missing", () => {
+  const saved = { arrival: { date: "2019-02", visa: "500" }, study: [{ provider: "A", course: "Diploma" }] };
+  const merged = mergeProfile(saved, {
+    arrival: { city: "Melbourne" },
+    study: [{ provider: "A", course: "Diploma", status: "transferred" }, { provider: "B", changedFrom: "A" }],
+    partner: { has: false },
+  });
+  expect(merged.arrival).toEqual({ date: "2019-02", visa: "500", city: "Melbourne" });
+  expect((merged.study as unknown[]).length).toBe(2);
+  expect(missingSections(merged)).toEqual(["currentVisa", "work", "english", "goals"]);
+});
+
+Deno.test("saves the plan as a Case with the turn's sources and analyst reports", async () => {
+  const inserted: Record<string, unknown>[] = [];
+  const db = {
+    ...supabase,
+    from: (table: string) => {
+      if (table !== "solutions") return supabase.from(table);
+      return {
+        insert: (row: Record<string, unknown>) => {
+          inserted.push(row);
+          return {
+            select: () => ({
+              single: () => Promise.resolve({ data: { id: "case-1", title: row.title }, error: null }),
+            }),
+          };
+        },
+      };
+    },
+  } as unknown as SupabaseClient;
+  let call = 0;
+  const sse = (chunks: unknown[]) =>
+    new Response(chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") + "data: [DONE]\n\n");
+  const tool = (name: string, args: unknown) =>
+    sse([{
+      choices: [{
+        delta: { tool_calls: [{ index: 0, id: `c${call}`, function: { name, arguments: JSON.stringify(args) } }] },
+      }],
+    }]);
+  const server = Deno.serve({ port: 0, onListen() {} }, () => {
+    call++;
+    if (call === 1) return tool("search_law", { query: "190" });
+    if (call === 2) {
+      return tool("create_case", {
+        title: "Path to PR via 190",
+        summary: "Apply for NSW nomination [1].",
+        steps: [{ title: "Lodge EOI", due: "2026-11-01" }],
+      });
+    }
+    return sse([{ choices: [{ delta: { content: "Saved under Cases." } }] }]);
+  });
+  const events: Record<string, unknown>[] = [];
+  try {
+    await runAgent(
+      { baseUrl: `http://localhost:${server.addr.port}`, apiKey: "k", models: ["m"] },
+      db,
+      [{ role: "user", content: "Give me a plan" }],
+      (e) => events.push(e),
+      new AbortController().signal,
+      { chatId: "chat-9" },
+    );
+  } finally {
+    await server.shutdown();
+  }
+  expect(inserted[0]).toMatchObject({
+    chat_id: "chat-9",
+    title: "Path to PR via 190",
+    steps: [{ title: "Lodge EOI", detail: "", due: "2026-11-01", done: false }],
+    sources: [{ n: 1, title: "Skilled Independent visa" }],
+  });
+  expect(events.find((e) => e.type === "case")).toEqual({ type: "case", id: "case-1", title: "Path to PR via 190" });
 });

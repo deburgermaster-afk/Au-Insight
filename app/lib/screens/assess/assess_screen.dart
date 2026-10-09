@@ -246,7 +246,8 @@ class _AssessScreenState extends State<AssessScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
                           const PageHeader(
-                            title: 'Your case file',
+                            back: true,
+                            title: 'Eligibility check',
                             subtitle: "Leave anything you don't know blank — the engine tells you exactly what's missing.",
                           ),
                           form,
@@ -272,10 +273,10 @@ class _AssessScreenState extends State<AssessScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                       sliver: SliverList.list(
                         children: [
-                          PageHeader(
-                            title: 'Your case file',
+                          const PageHeader(
+                            back: true,
+                            title: 'Eligibility check',
                             subtitle: "Leave anything you don't know blank — the engine tells you what's missing.",
-                            trailing: MediaQuery.sizeOf(context).width < 860 ? const SignOutButton() : null,
                           ),
                           decision,
                           const SizedBox(height: 10),

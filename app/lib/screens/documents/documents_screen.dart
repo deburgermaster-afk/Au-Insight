@@ -138,7 +138,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   @override
   Widget build(BuildContext context) {
     final folders = _allFolders;
-    final narrow = MediaQuery.sizeOf(context).width < 860;
     return SafeArea(
       bottom: false,
       child: Center(
@@ -159,7 +158,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                           _RoundIcon(LucideIcons.folderPlus, _newFolder, secondary: true),
                           const SizedBox(width: 6),
                           _RoundIcon(LucideIcons.upload, () => upload(null)),
-                          if (narrow) ...[const SizedBox(width: 6), const SignOutButton()],
                         ],
                       ),
                     ),
@@ -174,48 +172,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                       curve: Motion.ease,
                       child: _uploading.isEmpty
                           ? const SizedBox(width: double.infinity)
-                          : Padding(
-                              padding: const EdgeInsets.only(top: 10),
-                              child: Panel(
-                                padding: const EdgeInsets.all(10),
-                                child: Column(
-                                  children: [
-                                    for (final e in _uploading.entries)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 3),
-                                        child: Row(
-                                          children: [
-                                            AnimatedSwitcher(
-                                              duration: Motion.medium,
-                                              child: e.value
-                                                  ? const Icon(
-                                                      LucideIcons.circleCheck,
-                                                      key: ValueKey(1),
-                                                      size: 14,
-                                                      color: AppColors.success,
-                                                    )
-                                                  : const SizedBox(
-                                                      key: ValueKey(0),
-                                                      width: 14,
-                                                      height: 14,
-                                                      child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.fg),
-                                                    ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                e.key,
-                                                style: AppText.small.copyWith(color: AppColors.fg),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                          : Padding(padding: const EdgeInsets.only(top: 10), child: _UploadPanel(_uploading)),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -408,6 +365,70 @@ class _FolderPage extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Live progress for the batch being uploaded: overall bar plus one row per file.
+class _UploadPanel extends StatelessWidget {
+  const _UploadPanel(this.files);
+  final Map<String, bool> files;
+
+  @override
+  Widget build(BuildContext context) {
+    final done = files.values.where((d) => d).length;
+    final all = done == files.length;
+    return Panel(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(all ? LucideIcons.circleCheck : LucideIcons.upload, size: 14, color: all ? AppColors.success : AppColors.fg),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  all ? 'Uploaded ${files.length} ${files.length == 1 ? 'file' : 'files'}' : 'Uploading $done of ${files.length}',
+                  style: AppText.heading,
+                ),
+              ),
+              Text('Private · encrypted', style: AppText.tiny),
+            ],
+          ),
+          const SizedBox(height: 10),
+          AnimatedBar(value: files.isEmpty ? 0 : (done + 0.15) / (files.length + 0.15), color: all ? AppColors.success : AppColors.brand),
+          const SizedBox(height: 6),
+          for (final e in files.entries)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  AnimatedSwitcher(
+                    duration: Motion.medium,
+                    transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                    child: e.value
+                        ? const Icon(LucideIcons.circleCheck, key: ValueKey(1), size: 13, color: AppColors.success)
+                        : const SizedBox(
+                            key: ValueKey(0),
+                            width: 13,
+                            height: 13,
+                            child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.brand),
+                          ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      e.key,
+                      style: AppText.small.copyWith(color: e.value ? AppColors.muted : AppColors.fg),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

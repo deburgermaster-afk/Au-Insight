@@ -3,6 +3,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { todayISO } from "../_shared/engine/index.ts";
 import { type Emit, type Msg, runAgent } from "./agent.ts";
+import { missingSections } from "./profile.ts";
 import { systemPrompt, type UserContext } from "./prompt.ts";
 
 // Defaults: xKiro's OpenAI-compatible gateway with the free models that did best on this
@@ -26,13 +27,14 @@ async function apiKey(): Promise<string> {
 /** Whether the user has told their story yet and what they've uploaded, so the agent knows where to start. */
 async function userContext(supabase: SupabaseClient): Promise<UserContext> {
   const [caseRow, docs] = await Promise.all([
-    supabase.from("cases").select("facts, story").order("created_at").limit(1).maybeSingle(),
+    supabase.from("cases").select("facts, story, profile").order("created_at").limit(1).maybeSingle(),
     supabase.from("documents").select("id", { count: "exact", head: true }),
   ]);
   return {
     hasStory: Boolean(caseRow.data?.story?.trim()),
     documents: docs.count ?? 0,
     savedFacts: Object.keys(caseRow.data?.facts ?? {}).length,
+    missing: missingSections(caseRow.data?.profile ?? {}),
   };
 }
 
@@ -78,7 +80,9 @@ Deno.serve(async (req) => {
             "The AI provider isn't configured yet: store the key in Vault as llm_api_key or set the LLM_API_KEY function secret.",
           );
         }
-        await runAgent(llm, supabase, messages, emit, req.signal);
+        await runAgent(llm, supabase, messages, emit, req.signal, {
+          chatId: typeof body.chatId === "string" ? body.chatId : undefined,
+        });
       } catch (e) {
         emit({ type: "error", message: e instanceof Error ? e.message : String(e) });
       }

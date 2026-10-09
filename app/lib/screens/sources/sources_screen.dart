@@ -103,7 +103,6 @@ class _SourcesScreenState extends State<SourcesScreen> {
   @override
   Widget build(BuildContext context) {
     final ov = _overview;
-    final narrow = MediaQuery.sizeOf(context).width < 860;
     return SafeArea(
       bottom: false,
       child: Center(
@@ -116,11 +115,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
               children: [
-                PageHeader(
-                  title: 'Sources & data',
-                  subtitle: 'Where every answer comes from, and how fresh it is',
-                  trailing: narrow ? const SignOutButton() : null,
-                ),
+                const PageHeader(back: true, title: 'Sources & data', subtitle: 'Where every answer comes from, and how fresh it is'),
                 if (ov == null)
                   const Padding(
                     padding: EdgeInsets.all(40),

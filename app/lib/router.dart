@@ -5,11 +5,15 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'motion.dart';
+import 'theme.dart';
 import 'screens/ask/ask_screen.dart';
+import 'screens/ask/history_screen.dart';
 import 'screens/assess/assess_screen.dart';
 import 'screens/auth/auth_screens.dart';
+import 'screens/cases/cases_screen.dart';
 import 'screens/documents/documents_screen.dart';
 import 'screens/onboarding.dart';
+import 'screens/profile/profile_screen.dart';
 import 'screens/shell.dart';
 import 'screens/sources/sources_screen.dart';
 
@@ -61,22 +65,64 @@ final router = GoRouter(
       pageBuilder: (c, s, shell) => fadeThroughPage(s, AppShell(shell: shell)),
       navigatorContainerBuilder: (context, shell, children) => AnimatedBranches(index: shell.currentIndex, children: children),
       branches: [
+        // Each tab has its own pages, pushed on top of it (the tab bar stays).
         StatefulShellBranch(
-          routes: [GoRoute(path: '/ask', builder: (c, s) => const AskScreen())],
+          routes: [
+            GoRoute(
+              path: '/ask',
+              builder: (c, s) => const AskScreen(),
+              routes: [GoRoute(path: 'history', pageBuilder: (c, s) => sharedAxisPage(s, const ChatHistoryScreen()))],
+            ),
+          ],
         ),
         StatefulShellBranch(
-          routes: [GoRoute(path: '/assess', builder: (c, s) => const AssessScreen())],
+          routes: [
+            GoRoute(
+              path: '/cases',
+              builder: (c, s) => const CasesScreen(),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  pageBuilder: (c, s) => sharedAxisPage(s, CaseDetailScreen(id: s.pathParameters['id']!)),
+                ),
+              ],
+            ),
+          ],
         ),
         StatefulShellBranch(
           routes: [GoRoute(path: '/documents', builder: (c, s) => const DocumentsScreen())],
         ),
         StatefulShellBranch(
-          routes: [GoRoute(path: '/sources', builder: (c, s) => const SourcesScreen())],
+          routes: [
+            GoRoute(
+              path: '/profile',
+              builder: (c, s) => const ProfileScreen(),
+              routes: [
+                GoRoute(
+                  path: 'eligibility',
+                  pageBuilder: (c, s) => sharedAxisPage(s, const SubPage(child: AssessScreen())),
+                ),
+                GoRoute(
+                  path: 'sources',
+                  pageBuilder: (c, s) => sharedAxisPage(s, const SubPage(child: SourcesScreen())),
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     ),
   ],
 );
+
+/// An opaque backdrop for a page pushed over a tab.
+class SubPage extends StatelessWidget {
+  const SubPage({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(color: AppColors.bg, child: child);
+}
 
 /// Keeps every tab alive (state preserved) and cross-fades + lifts between them.
 class AnimatedBranches extends StatelessWidget {

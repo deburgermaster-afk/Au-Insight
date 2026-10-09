@@ -17,7 +17,7 @@ class Uploads extends ChangeNotifier {
   /// Upload failures since the last read, for the Documents screen to show.
   final List<String> errors = [];
 
-  /// Bumped after every batch so lists reload.
+  /// Bumped after every file that lands, so lists show it straight away.
   int finished = 0;
 
   Future<void> pickAndUpload({String? folderId}) async {
@@ -47,6 +47,7 @@ class Uploads extends ChangeNotifier {
             'size_bytes': bytes.length,
             'folder_id': folderId,
           });
+          finished++;
         } catch (e) {
           errors.add('${f.name}: $e');
         }
@@ -54,9 +55,9 @@ class Uploads extends ChangeNotifier {
         notifyListeners();
       }),
     );
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    inProgress.clear();
-    finished++;
+    // Leave the ticks up for a moment; the files are already in the list.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (inProgress.values.every((done) => done)) inProgress.clear();
     notifyListeners();
   }
 

@@ -27,13 +27,11 @@ const _suggestions = [
 /// First message for someone who hasn't told their story yet. It's part of the chat history,
 /// so the agent knows it asked.
 const _welcome =
-    "Hi, I'm Immi Insight. To answer for **your** situation, I'd like to know your story first.\n\n"
-    'Tell me everything that has happened since you first came to Australia (or started planning to): '
-    "when you arrived, every visa you've held or applied for, study, work, family, any refusals, "
-    'your current visa and when it ends, and what you want next. Write it however it comes. '
-    "I'll keep it in your case file.\n\n"
-    "After that I'll ask you to upload your documents so I can read them. "
-    'Or skip all this and just ask me anything.';
+    "Hi, I'm Immi Insight. I'll get to know your situation step by step, then my team of four analysts "
+    'builds you a plan from the law itself, saved under **Cases**.\n\n'
+    "Let's start at the beginning: **when did you first come to Australia, and on which visa?** "
+    "If you came to study, tell me the provider and course too.\n\n"
+    'Or skip this and ask me anything.';
 
 class AskScreen extends StatefulWidget {
   const AskScreen({super.key});
@@ -57,28 +55,41 @@ class _AskScreenState extends State<AskScreen> {
     super.initState();
     _load();
     quickActions.addListener(_onQuickAction);
+    openChat.addListener(_onOpenChat);
   }
 
   void _onQuickAction() {
     if (quickActions.value?.action == QuickAction.newChat) _newChat();
   }
 
+  void _onOpenChat() {
+    final id = openChat.value;
+    if (id == null) return;
+    openChat.value = null;
+    _load(id: id);
+  }
+
   @override
   void dispose() {
     quickActions.removeListener(_onQuickAction);
+    openChat.removeListener(_onOpenChat);
     _sub?.cancel();
     _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    final row = await _sb.from('chats').select('id, messages').order('updated_at', ascending: false).limit(1).maybeSingle();
+  /// Opens chat [id], or the most recent one.
+  Future<void> _load({String? id}) async {
+    if (id != null) _sub?.cancel();
+    final query = _sb.from('chats').select('id, messages');
+    final row = await (id != null ? query.eq('id', id) : query.order('updated_at', ascending: false).limit(1)).maybeSingle();
     if (!mounted) return;
     if (row != null) {
       final saved = row['messages'] as List? ?? const [];
       final firstTime = saved.isEmpty && await _isFirstTime();
       if (!mounted) return;
       setState(() {
+        _sub = null;
         _chatId = row['id'] as String;
         _messages
           ..clear()
@@ -154,7 +165,7 @@ class _AskScreenState extends State<AskScreen> {
 
     final history = _messages.sublist(0, _messages.length - 1);
     _sub = _client
-        .send(history)
+        .send(history, chatId: _chatId)
         .listen(
           (e) {
             setState(() {
@@ -186,6 +197,11 @@ class _AskScreenState extends State<AskScreen> {
                   );
                 case 'decision':
                   reply.decisions = [for (final d in e['results'] as List) (d as Map).cast<String, dynamic>()];
+                case 'case':
+                  reply.cases.add((e['id'] as String, e['title'] as String));
+                  casesChanged.value++;
+                case 'profile':
+                  profileChanged.value++;
                 case 'action':
                   if (!reply.actions.contains(e['action'])) reply.actions.add(e['action'] as String);
                 case 'error':
@@ -233,6 +249,16 @@ class _AskScreenState extends State<AskScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Pressable(
+                              onTap: () => context.push('/ask/history'),
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(15)),
+                                child: const Icon(LucideIcons.history, size: 14, color: AppColors.fg),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Pressable(
                               onTap: _newChat,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -246,7 +272,6 @@ class _AskScreenState extends State<AskScreen> {
                                 ),
                               ),
                             ),
-                            if (MediaQuery.sizeOf(context).width < 860) ...[const SizedBox(width: 6), const SignOutButton()],
                           ],
                         ),
                       ),
@@ -373,6 +398,11 @@ class _AssistantTurn extends StatelessWidget {
             Padding(padding: const EdgeInsets.only(bottom: 8), child: DecisionCard(assessmentFromJson(d)).enter(i)),
         ],
         if (m.sources.isNotEmpty) _Sources(m.sources),
+        for (final (i, c) in m.cases.indexed)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: _CaseCard(id: c.$1, title: c.$2),
+          ).enter(i),
         if (m.actions.isNotEmpty && !streaming)
           Padding(
             padding: const EdgeInsets.only(top: 10),
@@ -394,6 +424,44 @@ class _AssistantTurn extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _CaseCard extends StatelessWidget {
+  const _CaseCard({required this.id, required this.title});
+  final String id;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: () => context.go('/cases/$id'),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.brand.withValues(alpha: 0.08),
+          border: Border.all(color: AppColors.brand.withValues(alpha: 0.25)),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.briefcase, size: 16, color: AppColors.brand),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppText.heading),
+                  const SizedBox(height: 2),
+                  const Text('Saved as a case · open the plan', style: AppText.tiny),
+                ],
+              ),
+            ),
+            const Icon(LucideIcons.arrowRight, size: 15, color: AppColors.brand),
+          ],
+        ),
+      ),
     );
   }
 }

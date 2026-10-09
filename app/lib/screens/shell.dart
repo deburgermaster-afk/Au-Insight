@@ -11,9 +11,9 @@ import '../widgets/common.dart';
 
 const _tabs = [
   (LucideIcons.messageCircle, 'Ask'),
-  (LucideIcons.scale, 'Assess'),
+  (LucideIcons.briefcase, 'Cases'),
   (LucideIcons.folder, 'Docs'),
-  (LucideIcons.database, 'Sources'),
+  (LucideIcons.user, 'Profile'),
 ];
 
 /// Opens the tab an action belongs to, then tells that screen to act.
@@ -22,7 +22,7 @@ void runQuickAction(void Function(int index) goBranch, QuickAction a) {
   if (a == QuickAction.upload) uploads.pickAndUpload();
   goBranch(switch (a) {
     QuickAction.newChat => 0,
-    QuickAction.caseFile => 1,
+    QuickAction.caseFile => 3,
     QuickAction.upload => 2,
   });
   quickActions.value = QuickActionEvent(a);
@@ -189,7 +189,7 @@ class _PlusButtonState extends State<_PlusButton> {
     const items = [
       (QuickAction.newChat, LucideIcons.messageCirclePlus, 'New chat'),
       (QuickAction.upload, LucideIcons.upload, 'Upload documents'),
-      (QuickAction.caseFile, LucideIcons.clipboardPen, 'Update case file'),
+      (QuickAction.caseFile, LucideIcons.userPen, 'My profile'),
     ];
     return CompositedTransformTarget(
       link: _link,
@@ -394,28 +394,55 @@ class _Rail extends StatelessWidget {
 
 /// Standard page header used by the tab screens.
 class PageHeader extends StatelessWidget {
-  const PageHeader({super.key, required this.title, this.subtitle, this.trailing});
+  const PageHeader({super.key, required this.title, this.subtitle, this.trailing, this.back = false});
   final String title;
   final String? subtitle;
   final Widget? trailing;
 
+  /// Shows a back button above the title: for pages pushed on top of a tab.
+  final bool back;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 14, 0, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      padding: EdgeInsets.fromLTRB(0, back ? 8 : 14, 0, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppText.title),
-                if (subtitle != null) ...[const SizedBox(height: 3), Text(subtitle!, style: AppText.small)],
-              ],
+          if (back)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Pressable(
+                onTap: () => context.pop(),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+                  decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(16)),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.chevronLeft, size: 15, color: AppColors.fg),
+                      SizedBox(width: 2),
+                      Text('Back', style: TextStyle(fontSize: 11.5, color: AppColors.fg)),
+                    ],
+                  ),
+                ),
+              ),
             ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppText.title),
+                    if (subtitle != null) ...[const SizedBox(height: 3), Text(subtitle!, style: AppText.small)],
+                  ],
+                ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+            ],
           ),
-          ?trailing,
         ],
       ),
     );

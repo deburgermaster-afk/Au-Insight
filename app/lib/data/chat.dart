@@ -55,9 +55,11 @@ class ChatMessage {
     List<SourceRef>? sources,
     List<Map<String, dynamic>>? decisions,
     List<String>? actions,
+    List<(String, String)>? cases,
     this.error,
   }) : steps = steps ?? [],
        actions = actions ?? [],
+       cases = cases ?? [],
        sources = sources ?? [],
        decisions = decisions ?? [];
   final String role;
@@ -71,6 +73,9 @@ class ChatMessage {
 
   /// Buttons the agent asked to show under this turn: "upload_documents" | "open_case_file".
   final List<String> actions;
+
+  /// Cases (id, title) the agent saved during this turn.
+  final List<(String, String)> cases;
   String? error;
 
   Map<String, dynamic> toJson() => {
@@ -81,6 +86,10 @@ class ChatMessage {
     if (sources.isNotEmpty) 'sources': [for (final s in sources) s.toJson()],
     if (decisions.isNotEmpty) 'decisions': decisions,
     if (actions.isNotEmpty) 'actions': actions,
+    if (cases.isNotEmpty)
+      'cases': [
+        for (final c in cases) {'id': c.$1, 'title': c.$2},
+      ],
     if (error != null) 'error': error,
   };
 
@@ -92,6 +101,7 @@ class ChatMessage {
     sources: [for (final s in (j['sources'] as List? ?? const [])) SourceRef.fromJson((s as Map).cast())],
     decisions: [for (final d in (j['decisions'] as List? ?? const [])) (d as Map).cast<String, dynamic>()],
     actions: [for (final a in (j['actions'] as List? ?? const [])) a as String],
+    cases: [for (final c in (j['cases'] as List? ?? const [])) ((c as Map)['id'] as String, c['title'] as String)],
     error: j['error'] as String?,
   );
 }
@@ -100,12 +110,13 @@ class ChatMessage {
 class ChatClient {
   final http.Client _http = FetchClient(mode: RequestMode.cors);
 
-  Stream<Map<String, dynamic>> send(List<ChatMessage> history) async* {
+  Stream<Map<String, dynamic>> send(List<ChatMessage> history, {String? chatId}) async* {
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) throw StateError('Not signed in');
     final req = http.Request('POST', Uri.parse(Config.chatUrl))
       ..headers.addAll({'Content-Type': 'application/json', 'Authorization': 'Bearer ${session.accessToken}', 'apikey': Config.supabaseKey})
       ..body = jsonEncode({
+        'chatId': ?chatId,
         'messages': [
           for (final m in history)
             if (m.text.trim().isNotEmpty) {'role': m.role, 'content': m.text},

@@ -11,3 +11,12 @@ class QuickActionEvent {
 }
 
 final quickActions = ValueNotifier<QuickActionEvent?>(null);
+
+/// Asks the chat to open a saved conversation (from history or a Case).
+final openChat = ValueNotifier<String?>(null);
+
+/// Bumped when Cases change (a new plan from the chat, a step ticked off).
+final casesChanged = ValueNotifier<int>(0);
+
+/// Bumped when the profile changes in the chat.
+final profileChanged = ValueNotifier<int>(0);
