@@ -21,6 +21,7 @@ import os
 import socket
 import sys
 import time
+from datetime import datetime
 from collections import defaultdict
 from urllib.parse import urldefrag, urlparse
 
@@ -28,7 +29,7 @@ import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 
 from legislation import discover_titles, fetch_title
-from sections import normalize, sha256, split_sections
+from sections import PARSER_VERSION, content_hash, normalize, split_sections, title_for
 from supa import WorkerAPI
 
 # The browser keeps its own user agent: a custom one that disagrees with its other
@@ -55,13 +56,6 @@ def canonical(url: str) -> str:
     url, _ = urldefrag(url)
     p = urlparse(url)
     return f"{p.scheme}://{p.hostname or ''}{p.path.rstrip('/') or '/'}"
-
-
-def first_heading(markdown: str) -> str | None:
-    for line in markdown.splitlines():
-        if line.startswith("#"):
-            return line.lstrip("#").strip() or None
-    return None
 
 
 def allowed(url: str, src: dict) -> bool:
@@ -159,15 +153,15 @@ class Worker:
             md = normalize(r.markdown.raw_markdown if r.success and r.markdown else "")
         if not r.success:
             raise RuntimeError(r.error_message or "fetch failed")
-        title = ((r.metadata or {}).get("title") or first_heading(md) or url).split("|")[0].strip()
+        title = title_for(md, url, (r.metadata or {}).get("title"))
         links = [canonical(link["href"]) for link in (r.links or {}).get("internal", []) if link.get("href")]
         return title, md, links
 
     # ── saving ─────────────────────────────────────────────────────────
-    async def save(self, queue_id: int, src: dict, url: str, title: str, md: str, doc_type: str, valid_from=None) -> bool:
+    async def save(self, queue_id: int | None, src: dict, url: str, title: str, md: str, doc_type: str, valid_from=None) -> bool:
         res = await self.api.call(
             "worker_begin_page", queue_id=queue_id, source=src["id"], url=url, title=title[:500],
-            doc_type=doc_type, hash=sha256(md), markdown=md, valid_from=valid_from.isoformat() if valid_from else None,
+            doc_type=doc_type, hash=content_hash(md), markdown=md, valid_from=valid_from.isoformat() if valid_from else None,
         )
         if res["unchanged"]:
             return False
@@ -221,6 +215,23 @@ class Worker:
             except Exception:  # noqa: BLE001
                 pass
 
+    async def reparse(self) -> int:
+        """Re-split stored pages that an older parser produced. No network fetch, no law-change entries."""
+        total = 0
+        while True:
+            batch = await self.api.call("worker_reparse_batch", parser=PARSER_VERSION, limit=20) or []
+            if not batch:
+                return total
+            for d in batch:
+                src = self.sources.get(d["source_id"]) or {"id": d["source_id"]}
+                self.current = d["url"]
+                title = d["title"] if len(d["title"]) <= 150 and d["doc_type"] == "legislation" else title_for(d["markdown"], d["url"])
+                valid_from = datetime.fromisoformat(d["valid_from"]) if d["doc_type"] == "legislation" else None
+                await self.save(None, src, d["url"], title, d["markdown"], d["doc_type"], valid_from)
+                total += 1
+            await self.heartbeat()
+            print(f"  re-parsed {total}", file=sys.stderr)
+
     async def heartbeat(self) -> None:
         try:
             await self.api.call("worker_heartbeat", worker=self.name, current_url=self.current,
@@ -263,6 +274,7 @@ async def main() -> None:
     ap.add_argument("--minutes", type=float, default=330, help="stop after this long (GitHub Actions jobs max out at 6h)")
     ap.add_argument("--forever", action="store_true")
     ap.add_argument("--no-seed", action="store_true")
+    ap.add_argument("--reparse", action="store_true", help="re-split stored pages with the current parser, then exit")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--url")
     args = ap.parse_args()
@@ -277,6 +289,11 @@ async def main() -> None:
     async with AsyncWebCrawler(config=BrowserConfig(headless=True, verbose=False)) as crawler:
         w = Worker(api, crawler, name)
         await w.load_sources()
+        if args.reparse:
+            n = await w.reparse()
+            print(f"Re-parsed {n} documents", file=sys.stderr)
+            await api.close()
+            return
         if not args.no_seed:
             await w.seed(args.source)
         await w.run(deadline, args.forever)

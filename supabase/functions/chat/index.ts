@@ -5,11 +5,23 @@ import { todayISO } from "../_shared/engine/index.ts";
 import { type Emit, type Msg, runAgent } from "./agent.ts";
 import { systemPrompt } from "./prompt.ts";
 
+// Defaults: xKiro's OpenAI-compatible gateway with the free models that did best on this
+// agent's tool-calling loop (correct arguments, used every tool, no invented numbers).
 const llm = {
-  baseUrl: (Deno.env.get("LLM_BASE_URL") ?? "https://api.groq.com/openai/v1").replace(/\/$/, ""),
+  baseUrl: (Deno.env.get("LLM_BASE_URL") ?? "https://api.xkiro.com/v1").replace(/\/$/, ""),
   apiKey: Deno.env.get("LLM_API_KEY") ?? "",
-  model: Deno.env.get("LLM_MODEL") ?? "openai/gpt-oss-120b",
+  models: (Deno.env.get("LLM_MODEL") ?? "cohere/command-a-plus,mistralai/mistral-large-4-0,qwen/qwen3.8-max:free")
+    .split(",").map((m) => m.trim()).filter(Boolean),
 };
+
+/** Key from the function secret, else from Vault via the service role (cached per instance). */
+async function apiKey(): Promise<string> {
+  if (llm.apiKey) return llm.apiKey;
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data } = await admin.rpc("llm_api_key");
+  llm.apiKey = typeof data === "string" ? data : "";
+  return llm.apiKey;
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -44,9 +56,9 @@ Deno.serve(async (req) => {
       const enc = new TextEncoder();
       const emit: Emit = (e) => controller.enqueue(enc.encode(`data: ${JSON.stringify(e)}\n\n`));
       try {
-        if (!llm.apiKey) {
+        if (!(await apiKey())) {
           throw new Error(
-            "The AI provider isn't configured yet: set LLM_API_KEY (and LLM_BASE_URL / LLM_MODEL) in the function secrets.",
+            "The AI provider isn't configured yet: store the key in Vault as llm_api_key or set the LLM_API_KEY function secret.",
           );
         }
         await runAgent(llm, supabase, messages, emit, req.signal);

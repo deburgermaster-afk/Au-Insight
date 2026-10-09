@@ -91,22 +91,20 @@ class AnimatedBranches extends StatelessWidget {
         for (final (i, child) in children.indexed)
           IgnorePointer(
             ignoring: i != index,
-            child: TickerMode(
-              enabled: i == index,
-              child: AnimatedOpacity(
-                opacity: i == index ? 1 : 0,
-                duration: Motion.medium,
+            // The fade itself must keep ticking, so only the page content is paused.
+            child: AnimatedOpacity(
+              opacity: i == index ? 1 : 0,
+              duration: Motion.medium,
+              curve: Motion.ease,
+              child: AnimatedScale(
+                scale: i == index ? 1 : 0.985,
+                duration: Motion.slow,
                 curve: Motion.ease,
-                child: AnimatedScale(
-                  scale: i == index ? 1 : 0.985,
+                child: AnimatedSlide(
+                  offset: i == index ? Offset.zero : const Offset(0, 0.012),
                   duration: Motion.slow,
                   curve: Motion.ease,
-                  child: AnimatedSlide(
-                    offset: i == index ? Offset.zero : const Offset(0, 0.012),
-                    duration: Motion.slow,
-                    curve: Motion.ease,
-                    child: child,
-                  ),
+                  child: TickerMode(enabled: i == index, child: child),
                 ),
               ),
             ),

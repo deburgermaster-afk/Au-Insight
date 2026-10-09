@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/chat.dart';
+import '../../data/quick_actions.dart';
 import '../../motion.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
@@ -43,10 +44,16 @@ class _AskScreenState extends State<AskScreen> {
   void initState() {
     super.initState();
     _load();
+    quickActions.addListener(_onQuickAction);
+  }
+
+  void _onQuickAction() {
+    if (quickActions.value?.action == QuickAction.newChat) _newChat();
   }
 
   @override
   void dispose() {
+    quickActions.removeListener(_onQuickAction);
     _sub?.cancel();
     _scroll.dispose();
     super.dispose();
@@ -623,7 +630,7 @@ class _Composer extends StatelessWidget {
     final narrow = MediaQuery.sizeOf(context).width < 860;
     return Padding(
       // leave room for the floating tab bar on phones
-      padding: EdgeInsets.fromLTRB(12, 6, 12, narrow ? 70 : 14),
+      padding: EdgeInsets.fromLTRB(12, 6, 12, narrow ? 84 : 14),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),

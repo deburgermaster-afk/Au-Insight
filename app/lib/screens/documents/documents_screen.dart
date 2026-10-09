@@ -7,6 +7,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../data/quick_actions.dart';
 import '../../motion.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
@@ -61,6 +62,17 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   void initState() {
     super.initState();
     _load();
+    quickActions.addListener(_onQuickAction);
+  }
+
+  void _onQuickAction() {
+    if (quickActions.value?.action == QuickAction.upload) upload(null);
+  }
+
+  @override
+  void dispose() {
+    quickActions.removeListener(_onQuickAction);
+    super.dispose();
   }
 
   Future<void> _load() async {

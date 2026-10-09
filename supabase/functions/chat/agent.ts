@@ -15,7 +15,8 @@ import { assessAll, type CaseFacts, caseFactsSchema, todayISO } from "../_shared
 
 const MAX_STEPS = 8;
 
-export type LLMConfig = { baseUrl: string; apiKey: string; model: string };
+/** `models` is tried in order: free tiers rate-limit, so a busy model falls through to the next. */
+export type LLMConfig = { baseUrl: string; apiKey: string; models: string[] };
 
 export type Msg =
   | { role: "system" | "user"; content: string }
@@ -26,7 +27,8 @@ export type Emit = (event: Record<string, unknown>) => void;
 
 const factsJsonSchema = {
   type: "object",
-  description: "Every fact known from the case file and the conversation. Omit unknown facts; never guess.",
+  description:
+    "Only facts the user stated or the case file contains. Omit anything not stated: never set a fact to false or 0 because it was not mentioned.",
   properties: {
     dateOfBirth: { type: "string", description: "YYYY-MM-DD" },
     assessmentDate: { type: "string", description: "YYYY-MM-DD, e.g. invitation date" },
@@ -187,14 +189,28 @@ function makeTools(supabase: SupabaseClient, emit: Emit) {
 }
 
 /** One streamed completion. Emits text/reasoning deltas as they arrive; returns the full assistant turn. */
-async function complete(llm: LLMConfig, messages: Msg[], emit: Emit, signal: AbortSignal) {
-  const res = await fetch(`${llm.baseUrl}/chat/completions`, {
-    method: "POST",
-    signal,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.apiKey}` },
-    body: JSON.stringify({ model: llm.model, messages, tools: toolDefs, tool_choice: "auto", stream: true, temperature: 0.1 }),
-  });
-  if (!res.ok || !res.body) throw new Error(`Model error ${res.status}: ${(await res.text()).slice(0, 400)}`);
+async function complete(llm: LLMConfig, messages: Msg[], emit: Emit, signal: AbortSignal, allowTools = true) {
+  let res: Response | undefined;
+  let lastError = "";
+  for (const model of llm.models) {
+    res = await fetch(`${llm.baseUrl}/chat/completions`, {
+      method: "POST",
+      signal,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.apiKey}` },
+      body: JSON.stringify({
+        model,
+        messages,
+        ...(allowTools ? { tools: toolDefs, tool_choice: "auto" } : {}),
+        stream: true,
+        temperature: 0.1,
+      }),
+    });
+    if (res.ok && res.body) break;
+    lastError = `${model}: ${res.status} ${(await res.text()).slice(0, 300)}`;
+    // Only rate limits and provider errors are worth retrying on another model.
+    if (res.status !== 429 && res.status < 500 && res.status !== 404) break;
+  }
+  if (!res?.ok || !res.body) throw new Error(`Model error: ${lastError}`);
 
   let content = "";
   const calls: ToolCall[] = [];
@@ -239,7 +255,7 @@ export async function runAgent(llm: LLMConfig, supabase: SupabaseClient, message
   const tools = makeTools(supabase, emit);
   for (let step = 0; step < MAX_STEPS; step++) {
     const { content, calls } = await complete(llm, messages, emit, signal);
-    if (!calls.length) break;
+    if (!calls.length) return;
     messages.push({ role: "assistant", content: content || null, tool_calls: calls });
     for (const call of calls) {
       let args: Record<string, unknown> = {};
@@ -262,4 +278,7 @@ export async function runAgent(llm: LLMConfig, supabase: SupabaseClient, message
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 30000) });
     }
   }
+  // Out of tool rounds: the model must now answer from what it has gathered.
+  messages.push({ role: "user", content: "Answer now using only the tool results above. Do not call more tools." });
+  await complete(llm, messages, emit, signal, false);
 }

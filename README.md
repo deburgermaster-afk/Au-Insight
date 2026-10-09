@@ -62,12 +62,9 @@ All migrations are applied and the `chat` function is deployed. Still to do in t
 
   Both use `{{ .Token }}`.
 - **SMTP.** Supabase's built-in email only delivers to your project's team members and is heavily rate-limited. Add your own SMTP (e.g. Resend) under Authentication → Emails → SMTP.
-- **AI provider.** Go to Edge Functions → Secrets and add:
-  - `LLM_BASE_URL`, e.g. `https://api.groq.com/openai/v1`, or your XKIRO base URL;
-  - `LLM_API_KEY`;
-  - `LLM_MODEL`.
-
-  Any OpenAI-compatible API with tool calling works.
+- **AI provider: done.** The chat uses xKiro's OpenAI-compatible gateway (`https://api.xkiro.com/v1`). The API key is stored encrypted in **Supabase Vault** as `llm_api_key`, and only the server-side service role can read it (`public.llm_api_key()`). To rotate it, run `select vault.update_secret((select id from vault.secrets where name = 'llm_api_key'), '<new key>');`.
+  - **Models:** Cohere Command A Plus, then Mistral Large 4, then Qwen 3.8 Max, all free. These were picked by testing the free tool-calling models on this agent's loop. Command A Plus passed correct arguments, used every tool and didn't invent numbers.
+  - **Fallback:** if a model is rate-limited, the next one is used. Override the list with the `LLM_MODEL` function secret (comma-separated), and the provider with `LLM_BASE_URL` / `LLM_API_KEY`.
 
 ### 2. Run the app locally
 ```bash
@@ -87,6 +84,11 @@ The worker authenticates with a **worker token** (only its SHA-256 hash is store
 
 Cloudflare Workers can't run the real browser that Home Affairs needs (its pages are built with JavaScript and protected by Akamai), so the crawler runs as a normal process. The hourly `pg_cron` job inside Supabase re-queues stale pages, so any worker that runs picks up where the last one stopped.
 
+Re-split stored pages after changing the section parser (`PARSER_VERSION` in `worker/sections.py`). This fetches nothing and isn't logged as a law change:
+```bash
+python worker/crawler.py --reparse
+```
+
 To rotate the worker token:
 ```sql
 insert into private.worker_tokens (token_hash, name)
@@ -101,5 +103,6 @@ values (encode(extensions.digest('<new long random token>', 'sha256'), 'hex'), '
 
 ## Tests
 - `app/`: `flutter analyze && flutter test` (16 engine tests).
-- `supabase/functions/`: `deno test --allow-net`. This runs the engine tests and an agent-loop test against a fake model that streams tool calls.
+- `supabase/functions/`: `deno test --allow-net`. This runs the engine tests, plus agent-loop tests against a fake model (streamed tool calls, model fallback).
+- `supabase/functions/chat/live_check.ts`: manual end-to-end run against the real model and database.
 - CI runs all of these (`.github/workflows/ci.yml`).

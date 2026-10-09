@@ -11,6 +11,12 @@ INVISIBLE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 # Links like [VETASSESS](javascript:app.clickbot.addDynamicQuery\("<random id>"\);) change on every load.
 JS_LINK = re.compile(r"\[([^\]]*)\]\(javascript:(?:\\.|[^)\\])*\)")
 MAX_SECTION_CHARS = 6000
+# A "heading" longer than this is a whole block the HTML converter wrapped in a
+# heading tag (seen on some Home Affairs layouts); treat it as body text.
+MAX_HEADING_CHARS = 150
+
+# Bump when splitting changes; stored versions from an older parser get re-split.
+PARSER_VERSION = "p2"
 
 
 @dataclass
@@ -66,27 +72,52 @@ def split_sections(markdown: str, title: str) -> list[Section]:
 
     for line in markdown.splitlines():
         m = HEADING.match(line)
-        if m and m.group(2).strip():
+        if m and m.group(2).strip() and len(m.group(2).strip()) <= MAX_HEADING_CHARS:
             flush()
             level, text = len(m.group(1)), m.group(2).strip()
             while stack and stack[-1][0] >= level:
                 stack.pop()
             stack.append((level, text))
         else:
-            buf.append(line)
+            buf.append(m.group(2) if m else line)
     flush()
     return out
 
 
 def _chunk(body: str) -> list[str]:
+    """Split at paragraph breaks, then at line breaks, then hard, so no part exceeds the limit."""
     if len(body) <= MAX_SECTION_CHARS:
         return [body]
-    parts, cur = [], ""
+    pieces: list[str] = []
     for para in body.split("\n\n"):
-        if cur and len(cur) + len(para) > MAX_SECTION_CHARS:
+        if len(para) <= MAX_SECTION_CHARS:
+            pieces.append(para)
+            continue
+        for line in para.split("\n"):  # long tables and lists have no blank lines
+            pieces += [line[i : i + MAX_SECTION_CHARS] for i in range(0, max(len(line), 1), MAX_SECTION_CHARS)]
+    parts, cur = [], ""
+    for piece in pieces:
+        if cur and len(cur) + len(piece) > MAX_SECTION_CHARS:
             parts.append(cur.strip())
             cur = ""
-        cur += para + "\n\n"
+        cur += piece + "\n\n"
     if cur.strip():
         parts.append(cur.strip())
     return parts
+
+
+def content_hash(markdown: str) -> str:
+    """Version hash: includes the parser version so a new parser re-splits stored pages."""
+    return f"{PARSER_VERSION}:{sha256(markdown)}"
+
+
+def title_for(markdown: str, url: str, meta_title: str | None = None) -> str:
+    """Page title from metadata, else a short first heading, else the URL slug."""
+    if meta_title and len(meta_title.split("|")[0].strip()) <= MAX_HEADING_CHARS:
+        return meta_title.split("|")[0].strip()
+    for line in markdown.splitlines():
+        m = HEADING.match(line)
+        if m and 0 < len(m.group(2).strip()) <= MAX_HEADING_CHARS:
+            return m.group(2).strip()
+    slug_part = url.rstrip("/").rsplit("/", 1)[-1] or url
+    return re.sub(r"[-_]+", " ", slug_part).strip().capitalize()
