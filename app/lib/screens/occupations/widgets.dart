@@ -395,3 +395,148 @@ class MonthBars extends StatelessWidget {
     );
   }
 }
+
+/// The PR pathway at a glance: the routes the occupation opens (with processing times), the timeline from
+/// published data, and the states, strongest first.
+class PathwayCard extends StatelessWidget {
+  const PathwayCard({super.key, required this.p});
+  final PrPathway p;
+
+  @override
+  Widget build(BuildContext context) {
+    final open = p.routes.where((r) => r.open).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Routes to PR it opens', style: AppText.heading.copyWith(fontSize: 13)),
+              const SizedBox(height: 8),
+              if (open.isEmpty) Text('None of the skilled routes: it is not on a skilled list for these visas.', style: AppText.small),
+              for (final r in open)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 44, child: Tag(r.visa, color: AppColors.brand)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(r.name, style: AppText.body.copyWith(fontSize: 12.5)),
+                            if (r.p50 != null)
+                              Text(
+                                'Decided: half within ${r.p50!.toLowerCase()}, 90% within ${(r.p90 ?? '?').toLowerCase()}',
+                                style: AppText.tiny,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text('Timeline (189)', style: AppText.heading.copyWith(fontSize: 13))),
+                  if (p.totalMin != null) Text(dayRange(p.totalMin, p.totalMax), style: AppText.small.copyWith(color: AppColors.brand)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              for (final (i, s) in p.steps.indexed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 20,
+                        height: 20,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(10)),
+                        child: Text(
+                          '${i + 1}',
+                          style: AppText.tiny.copyWith(color: AppColors.fg, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(s.step, style: AppText.body.copyWith(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                                ),
+                                if (s.minDays != null || s.maxDays != null)
+                                  Text(dayRange(s.minDays, s.maxDays), style: AppText.tiny.copyWith(color: AppColors.fg)),
+                              ],
+                            ),
+                            if (s.text != null) Text(s.text!, style: AppText.tiny),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Text(
+                p.totalNote ?? 'Durations come from published processing times and past rounds; steps without a published time show none.',
+                style: AppText.tiny.copyWith(color: AppColors.faint),
+              ),
+            ],
+          ),
+        ),
+        if (p.states.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('States for 190 and 491', style: AppText.heading.copyWith(fontSize: 13)),
+                const SizedBox(height: 4),
+                Text('Shortage rating (Jobs and Skills Australia) and nominations issued', style: AppText.tiny),
+                const SizedBox(height: 8),
+                for (final s in p.states)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 40,
+                          child: Text(s.state, style: AppText.body.copyWith(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                        ),
+                        Expanded(
+                          child: Text(shortageLabel(s.shortage), style: AppText.small.copyWith(color: shortageColor(s.shortage))),
+                        ),
+                        Text(
+                          [for (final e in s.nominations.entries) '${e.key}: ${e.value}'].join(' · '),
+                          style: AppText.tiny.copyWith(color: AppColors.fg),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (p.states.first.period != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('Nominations: ${p.states.first.period}', style: AppText.tiny.copyWith(color: AppColors.faint)),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}

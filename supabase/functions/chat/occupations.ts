@@ -26,6 +26,42 @@ export const SOURCES = {
     title: "Occupation profiles data (Jobs and Skills Australia)",
     url: "https://www.jobsandskills.gov.au/data/occupation-and-industry-profiles",
   },
+  processing: {
+    title: "Global visa processing times (Department of Home Affairs)",
+    url: "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-processing-times/global-visa-processing-times",
+  },
+};
+
+const PATHWAY_DEF: ToolDef = {
+  type: "function",
+  function: {
+    name: "pr_pathway",
+    description:
+      "Everything the official data says about getting permanent residence through one occupation, in one call: the visas it opens (189, 190, 491, 482, 186, 494) with Home Affairs processing times, the assessing authority (processing time, fee, validity), invitations (latest 189 minimum points, how often invited, by program year, the next round), every state's shortage rating and nominations (and its own occupation lists when available), the outlook (shortage history, jobs, projections) and a timeline (assessment, invitation, visa decision) with day ranges. Pass the user's points (from assess_visas) and state when known. Use it for every PR pathway or 'how long will it take' question, for each candidate occupation.",
+    parameters: {
+      type: "object",
+      properties: {
+        anzsco: { type: "string", description: "Six-digit ANZSCO code, or the occupation title" },
+        points: { type: "number", description: "The user's points score, if known" },
+        state: { type: "string", description: "The state or territory they live in or would move to" },
+      },
+      required: ["anzsco"],
+    },
+  },
+};
+
+const PROCESSING_DEF: ToolDef = {
+  type: "function",
+  function: {
+    name: "processing_times",
+    description:
+      "Home Affairs' current processing times for any visa (and citizenship): the time within which 25%, 50%, 75% and 90% of applications were decided, by subclass and stream, with the date updated. Accepts a subclass ('189'), several ('820/801'), 'citizenship', or words ('partner', 'student').",
+    parameters: {
+      type: "object",
+      properties: { visa: { type: "string", description: "Subclass, subclasses or words" } },
+      required: ["visa"],
+    },
+  },
 };
 
 const STATES = ["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"];
@@ -61,6 +97,8 @@ export function anzscoCode(v: unknown): string | undefined {
 }
 
 export const occupationDefs: ToolDef[] = [
+  PATHWAY_DEF,
+  PROCESSING_DEF,
   {
     type: "function",
     function: {
@@ -246,7 +284,51 @@ export function occupationTools(ctx: ToolCtx) {
     };
   }
 
+  async function pathway(args: Row) {
+    const input = s(args.anzsco ?? args.occupation ?? args.code ?? args.title);
+    if (!input) return { error: "anzsco required" };
+    const r = await resolve(input);
+    if (!r.anzsco) return { error: r.error };
+    const pts = Number(args.points);
+    const { data, error } = await supabase.rpc("pr_pathway", {
+      p_anzsco: r.anzsco,
+      p_points: Number.isFinite(pts) && pts > 0 ? Math.round(pts) : null,
+      p_state: stateCode(args.state) ?? null,
+    });
+    if (error) return { error: error.message };
+    if (!data) return { error: `ANZSCO ${r.anzsco} is not on the skilled occupation lists` };
+    const d = data as Row;
+    const sources = [cite(SOURCES.list), cite(SOURCES.previous), cite(SOURCES.processing), cite(SOURCES.shortage)];
+    return {
+      ...d,
+      otherMatches: r.candidates?.length ? r.candidates : undefined,
+      sources,
+      note:
+        "Durations are ranges from published data (processing times are the 50% and 90% marks). Steps without a published figure have no days: say so rather than guessing.",
+    };
+  }
+
+  async function processing(args: Row) {
+    const visa = s(args.visa ?? args.subclass, 60);
+    const { data, error } = await supabase.rpc("processing_times", { p_subclass: visa ?? null });
+    if (error) return { error: error.message };
+    const rows = ((data ?? []) as Row[]).slice(0, 20).map((r) => ({
+      subclass: r.subclass,
+      stream: r.stream || undefined,
+      visa: r.visa_name,
+      p25: r.p25,
+      p50: r.p50,
+      p75: r.p75,
+      p90: r.p90,
+      updated: r.updated,
+      note: r.note || undefined,
+    }));
+    return { times: rows, sources: [cite(SOURCES.processing)] };
+  }
+
   return {
+    pr_pathway: (a: Row) => pathway(a),
+    processing_times: (a: Row) => processing(a),
     search_occupations: (a: Row) => search(a),
     get_occupation: (a: Row) => detail(a),
     latest_rounds: (a: Row) => rounds(a),

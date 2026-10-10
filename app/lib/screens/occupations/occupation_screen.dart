@@ -26,11 +26,15 @@ class _OccupationScreenState extends State<OccupationScreen> {
   Object? _error;
   bool _allRounds = false;
   RoundsOverview? _published; // every round, for "invited in N of M"
+  PrPathway? _pathway;
 
   @override
   void initState() {
     super.initState();
     _load();
+    prPathway(widget.anzsco).then((p) {
+      if (mounted) setState(() => _pathway = p);
+    }, onError: (_) {});
     allRounds().then((r) {
       if (mounted) setState(() => _published = r);
     }, onError: (_) {});
@@ -141,6 +145,7 @@ class _OccupationScreenState extends State<OccupationScreen> {
         const SizedBox(height: 8),
         Tag('Next 189 round ${formatDay(o.nextRound!)}', icon: LucideIcons.clock, color: AppColors.brand),
       ],
+      if (_pathway != null) ...[const SectionLabel('PR pathway at a glance'), PathwayCard(p: _pathway!)],
       const SectionLabel('Lists and visas'),
       Panel(
         child: Column(

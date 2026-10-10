@@ -645,3 +645,107 @@ int? roundTotal(List<InvitationRound> published, DateTime date, String subclass)
   }
   return null;
 }
+
+/// One visa route an occupation opens, with Home Affairs' processing times.
+class PathwayRoute {
+  const PathwayRoute({required this.visa, required this.name, required this.open, this.how, this.p50, this.p90});
+  final String visa;
+  final String name;
+  final bool open;
+  final String? how;
+  final String? p50; // half of applications decided within
+  final String? p90;
+}
+
+/// One step of the timeline, with a day range when the data supports one.
+class PathwayStep {
+  const PathwayStep({required this.step, this.text, this.minDays, this.maxDays});
+  final String step;
+  final String? text;
+  final int? minDays;
+  final int? maxDays;
+}
+
+class PathwayState {
+  const PathwayState({required this.state, this.shortage, this.nominations = const {}, this.period, this.chosen = false});
+  final String state;
+  final String? shortage;
+  final Map<String, String> nominations; // subclass -> count as published ("<5" kept)
+  final String? period;
+  final bool chosen;
+}
+
+/// The PR pathway for one occupation: `pr_pathway`.
+class PrPathway {
+  const PrPathway({
+    this.routes = const [],
+    this.steps = const [],
+    this.totalMin,
+    this.totalMax,
+    this.totalNote,
+    this.states = const [],
+    this.yourPoints,
+  });
+  final List<PathwayRoute> routes;
+  final List<PathwayStep> steps;
+  final int? totalMin;
+  final int? totalMax;
+  final String? totalNote;
+  final List<PathwayState> states;
+  final String? yourPoints;
+
+  factory PrPathway.fromJson(Map<String, dynamic> j) {
+    final timeline = _map(j['timeline']);
+    final total = _map(timeline['total']);
+    return PrPathway(
+      routes: [
+        for (final r in _maps(j['routes']))
+          PathwayRoute(
+            visa: _str(r['visa']) ?? '',
+            name: _str(r['name']) ?? '',
+            open: r['open'] == true,
+            how: _str(r['how']),
+            p50: _str(_map(r['processing'])['p50']),
+            p90: _str(_map(r['processing'])['p90']),
+          ),
+      ],
+      steps: [
+        for (final s in _maps(timeline['steps']))
+          PathwayStep(step: _str(s['step']) ?? '', text: _str(s['text']), minDays: _int(s['min_days']), maxDays: _int(s['max_days'])),
+      ],
+      totalMin: _int(total['min_days']),
+      totalMax: _int(total['max_days']),
+      totalNote: _str(total['note']),
+      states: [
+        for (final s in _maps(j['states']))
+          PathwayState(
+            state: _str(s['state']) ?? '',
+            shortage: _str(s['shortage']),
+            nominations: {for (final e in _map(s['nominations']).entries) e.key: '${e.value}'},
+            period: _str(s['nominations_period']),
+            chosen: s['chosen'] == true,
+          ),
+      ],
+      yourPoints: _str(_map(j['invitations'])['your_points']),
+    );
+  }
+}
+
+Future<PrPathway?> prPathway(String anzsco, {int? points, String? state}) async {
+  final r = await _sb.rpc('pr_pathway', params: {'p_anzsco': anzsco, 'p_points': points, 'p_state': state});
+  return r is Map ? PrPathway.fromJson(r.cast<String, dynamic>()) : null;
+}
+
+/// 45 -> "about 6 weeks", 245 -> "about 8 months".
+String aboutDays(int days) {
+  if (days < 14) return '$days days';
+  if (days < 75) return 'about ${(days / 7).round()} weeks';
+  final months = (days / 30.4).round();
+  return months < 24 ? 'about $months months' : 'about ${(months / 12).toStringAsFixed(1)} years';
+}
+
+String dayRange(int? min, int? max) {
+  if (min == null && max == null) return '';
+  if (min == null || max == null || min == max) return aboutDays((min ?? max)!);
+  return '${aboutDays(min).replaceFirst('about ', '')} to ${aboutDays(max).replaceFirst('about ', '')}';
+}

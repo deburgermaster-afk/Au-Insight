@@ -55,6 +55,8 @@ const ANALYST_TOOLS = [
   "get_occupation",
   "latest_rounds",
   "rank_occupations",
+  "pr_pathway",
+  "processing_times",
 ];
 /** Tools that only record or display something: they need no reply from the model. */
 const BOOKKEEPING_TOOLS = new Set(["save_story", "save_profile", "create_case", "show_button"]);
@@ -359,6 +361,10 @@ function stepLabel(name: string, args: Record<string, unknown>): string {
       return "Working out your study plan";
     case "academic_record":
       return "Reading your academic record";
+    case "pr_pathway":
+      return `Mapping the PR pathway${args.anzsco ? ` for ${args.anzsco}` : ""}`;
+    case "processing_times":
+      return `Checking Home Affairs processing times${args.visa ? ` (${args.visa})` : ""}`;
     case "search_occupations":
       return `Searching occupations: “${[args.query, args.list, args.visa].filter(Boolean).join(", ")}”`;
     case "get_occupation":
