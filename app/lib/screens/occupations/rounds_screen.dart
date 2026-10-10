@@ -6,6 +6,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../shell.dart' show PageHeader;
 import '../study/widgets.dart';
+import 'widgets.dart';
 
 /// SkillSelect invitation rounds (newest first), the next round, and state and territory nominations.
 class RoundsScreen extends StatefulWidget {
@@ -58,6 +59,21 @@ class _RoundsScreenState extends State<RoundsScreen> {
                   ],
                 ),
               ),
+            for (final sub in ['189', '491'])
+              if (roundYears(o.rounds, sub).isNotEmpty) ...[
+                SectionLabel(sub == '189' ? 'By program year · subclass 189' : 'By program year · subclass 491 (family sponsored)'),
+                Panel(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  child: RoundYearTable(rows: roundYears(o.rounds, sub)),
+                ),
+              ],
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Arrows compare each year\'s invitations with the year before. Program years run July to June.',
+                style: AppText.tiny,
+              ),
+            ),
             const SectionLabel('Rounds'),
             if (o.rounds.isEmpty)
               Text('No rounds imported yet.', style: AppText.small)

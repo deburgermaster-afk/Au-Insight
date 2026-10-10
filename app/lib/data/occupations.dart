@@ -447,3 +447,174 @@ String pathwayPrompt(OccupationDetail o) {
       'my points now and the points I would need${latest?.minPoints != null ? ' (the latest 189 round invited it at ${latest!.minPoints} points)' : ''}, '
       'how likely an invitation is from the recent rounds and state nominations, and a dated step-by-step plan that fits my visa expiry.';
 }
+
+/// One type-ahead suggestion: `suggest_occupations`.
+class OccupationSuggestion {
+  const OccupationSuggestion({
+    required this.anzsco,
+    required this.code,
+    required this.title,
+    this.hint,
+    this.lists = const [],
+    this.lastMinPoints,
+    this.lastInvited,
+    this.shortage,
+  });
+  final String anzsco;
+  final String code;
+  final String title;
+  final String? hint; // "Also called Software Developer", "ANZSCO 261313"
+  final List<String> lists;
+  final int? lastMinPoints;
+  final DateTime? lastInvited;
+  final String? shortage;
+}
+
+Future<List<OccupationSuggestion>> suggestOccupations(String query, {int limit = 8}) async {
+  if (query.trim().isEmpty) return const [];
+  final rows = await _sb.rpc('suggest_occupations', params: {'p_query': query.trim(), 'p_limit': limit});
+  return [
+    for (final r in _maps(rows))
+      OccupationSuggestion(
+        anzsco: _str(r['anzsco']) ?? '',
+        code: _str(r['code']) ?? '',
+        title: _str(r['title']) ?? '',
+        hint: _str(r['hint']),
+        lists: _strings(r['lists']),
+        lastMinPoints: _int(r['last_min_points_189']),
+        lastInvited: _date(r['last_invited_round']),
+        shortage: _str(r['shortage_national']),
+      ),
+  ];
+}
+
+Future<RoundsOverview>? _allRounds;
+
+/// Every published round (cached for the session): the denominator for "invited in N of M rounds".
+Future<RoundsOverview> allRounds() => _allRounds ??= latestRounds(limit: 60).catchError((Object e) {
+  _allRounds = null;
+  throw e;
+});
+
+/// Australian migration program years run July to June: 4 June 2026 is in 2025-26.
+String programYear(DateTime d) {
+  final start = d.month >= 7 ? d.year : d.year - 1;
+  return '$start-${((start + 1) % 100).toString().padLeft(2, '0')}';
+}
+
+enum Trend { up, down, steady, none }
+
+/// One program year of an occupation's invitations for a subclass.
+class YearTrend {
+  const YearTrend({
+    required this.year,
+    required this.invitedIn,
+    required this.roundsHeld,
+    this.lowest,
+    this.highest,
+    this.trend = Trend.none,
+    this.change,
+  });
+  final String year;
+  final int invitedIn; // rounds that invited this occupation
+  final int roundsHeld; // rounds held for the subclass that year (with invitations)
+  final int? lowest; // lowest minimum points that year
+  final int? highest;
+  final Trend trend; // lowest points against the previous year it was invited: up = harder
+  final int? change;
+}
+
+/// Year-by-year invitations for one occupation and subclass, newest year first, from its rounds and every
+/// published round.
+List<YearTrend> yearTrends(List<RoundEntry> rounds, List<InvitationRound> published, String subclass) {
+  final held = <String, int>{};
+  for (final r in published) {
+    if (r.subclass == subclass && (r.invited ?? 0) > 0) held[programYear(r.date)] = (held[programYear(r.date)] ?? 0) + 1;
+  }
+  final mine = <String, List<RoundEntry>>{};
+  for (final r in rounds) {
+    if (r.subclass == subclass) mine.putIfAbsent(programYear(r.date), () => []).add(r);
+  }
+  final years = {...held.keys, ...mine.keys}.toList()..sort();
+  final out = <YearTrend>[];
+  int? previous;
+  for (final y in years) {
+    final pts = [for (final r in mine[y] ?? const <RoundEntry>[]) ?r.minPoints];
+    final lo = pts.isEmpty ? null : pts.reduce((a, b) => a < b ? a : b);
+    final hi = pts.isEmpty ? null : pts.reduce((a, b) => a > b ? a : b);
+    var trend = Trend.none;
+    int? change;
+    if (lo != null && previous != null) {
+      change = lo - previous;
+      trend = change > 0 ? Trend.up : (change < 0 ? Trend.down : Trend.steady);
+    }
+    if (lo != null) previous = lo;
+    out.add(
+      YearTrend(
+        year: y,
+        invitedIn: (mine[y] ?? const []).length,
+        roundsHeld: held[y] ?? 0,
+        lowest: lo,
+        highest: hi,
+        trend: trend,
+        change: change,
+      ),
+    );
+  }
+  return out.reversed.toList();
+}
+
+/// One program year of a subclass's rounds overall, newest first: total invited and lowest points, with the
+/// change in invitations from the year before.
+class RoundYear {
+  const RoundYear({
+    required this.year,
+    required this.subclass,
+    required this.rounds,
+    required this.invited,
+    this.lowestPoints,
+    this.trend = Trend.none,
+    this.changePct,
+  });
+  final String year;
+  final String subclass;
+  final int rounds;
+  final int invited;
+  final int? lowestPoints;
+  final Trend trend; // invitations against the year before: up = more invitations
+  final int? changePct;
+}
+
+List<RoundYear> roundYears(List<InvitationRound> published, String subclass) {
+  final byYear = <String, List<InvitationRound>>{};
+  for (final r in published) {
+    if (r.subclass == subclass) byYear.putIfAbsent(programYear(r.date), () => []).add(r);
+  }
+  final years = byYear.keys.toList()..sort();
+  final out = <RoundYear>[];
+  int? previous;
+  for (final y in years) {
+    final rs = byYear[y]!;
+    final invited = rs.fold<int>(0, (a, r) => a + (r.invited ?? 0));
+    final pts = [for (final r in rs) ?r.lowestPoints];
+    var trend = Trend.none;
+    int? pct;
+    if (previous != null && previous > 0) {
+      pct = ((invited - previous) * 100 / previous).round();
+      trend = pct > 2 ? Trend.up : (pct < -2 ? Trend.down : Trend.steady);
+    }
+    previous = invited;
+    out.add(
+      RoundYear(
+        year: y,
+        subclass: subclass,
+        rounds: rs.where((r) => (r.invited ?? 0) > 0).length,
+        invited: invited,
+        lowestPoints: pts.isEmpty ? null : pts.reduce((a, b) => a < b ? a : b),
+        trend: trend,
+        changePct: pct,
+      ),
+    );
+  }
+  return out.reversed.toList();
+}

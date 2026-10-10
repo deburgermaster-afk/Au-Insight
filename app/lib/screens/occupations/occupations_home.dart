@@ -38,6 +38,10 @@ class _OccupationsHomeScreenState extends State<OccupationsHomeScreen> {
   int? _maxPoints = 75;
   bool _easyLoading = true;
 
+  List<OccupationSuggestion> _suggest = const [];
+  Timer? _suggestDebounce;
+  int _suggestSeq = 0;
+
   bool get _searching => _f.query.trim().isNotEmpty || _f.count > 0;
 
   @override
@@ -59,6 +63,7 @@ class _OccupationsHomeScreenState extends State<OccupationsHomeScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _suggestDebounce?.cancel();
     _q.dispose();
     _scroll.dispose();
     super.dispose();
@@ -128,6 +133,22 @@ class _OccupationsHomeScreenState extends State<OccupationsHomeScreen> {
   void _onQuery(String v) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 280), () => _setFilters(_f.copyWith(query: v)));
+    _suggestDebounce?.cancel();
+    if (v.trim().isEmpty) {
+      _hideSuggestions();
+      return;
+    }
+    _suggestDebounce = Timer(const Duration(milliseconds: 120), () async {
+      final seq = ++_suggestSeq;
+      final found = await suggestOccupations(v).catchError((_) => const <OccupationSuggestion>[]);
+      if (mounted && seq == _suggestSeq && _q.text.trim().isNotEmpty) setState(() => _suggest = found);
+    });
+  }
+
+  void _hideSuggestions() {
+    _suggestSeq++;
+    _suggestDebounce?.cancel();
+    if (_suggest.isNotEmpty) setState(() => _suggest = const []);
   }
 
   @override
@@ -155,9 +176,26 @@ class _OccupationsHomeScreenState extends State<OccupationsHomeScreen> {
                     controller: _q,
                     placeholder: 'Search occupations or ANZSCO codes',
                     onChanged: _onQuery,
-                    onSubmitted: (v) => _setFilters(_f.copyWith(query: v)),
-                    onClear: () => _setFilters(_f.copyWith(query: '')),
+                    onSubmitted: (v) {
+                      _hideSuggestions();
+                      _setFilters(_f.copyWith(query: v));
+                    },
+                    onClear: () {
+                      _hideSuggestions();
+                      _setFilters(_f.copyWith(query: ''));
+                    },
                   ),
+                  if (_suggest.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SuggestionList(
+                      items: _suggest,
+                      onPick: (s) {
+                        _hideSuggestions();
+                        FocusScope.of(context).unfocus();
+                        openOccupation(context, s.anzsco);
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   _filterRow(),
                   if (!_searching) ...[

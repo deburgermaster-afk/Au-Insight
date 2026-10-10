@@ -25,11 +25,15 @@ class _OccupationScreenState extends State<OccupationScreen> {
   bool _loading = true;
   Object? _error;
   bool _allRounds = false;
+  RoundsOverview? _published; // every round, for "invited in N of M"
 
   @override
   void initState() {
     super.initState();
     _load();
+    allRounds().then((r) {
+      if (mounted) setState(() => _published = r);
+    }, onError: (_) {});
   }
 
   Future<void> _load() async {
@@ -209,6 +213,13 @@ class _OccupationScreenState extends State<OccupationScreen> {
                 const SizedBox(height: 8),
                 PointsTrend(rounds: r491),
                 const SizedBox(height: 10),
+              ],
+              if (_published != null) ...[
+                for (final sub in ['189', '491'])
+                  if (o.roundsFor(sub).isNotEmpty) ...[
+                    YearTrendTable(rows: yearTrends(o.rounds, _published!.rounds, sub), subclass: sub),
+                    const Divider(color: AppColors.border, height: 22),
+                  ],
               ],
               for (final r in (_allRounds ? o.rounds : o.rounds.take(8)))
                 KeyValue(formatDay(r.date), r.minPoints == null ? 'Invited' : '${r.minPoints} points', hint: 'Subclass ${r.subclass}'),
