@@ -91,15 +91,6 @@ async function direct(supabase: SupabaseClient, body: { tool?: unknown; args?: u
         }));
         return json(200, { result: { processed: documents.filter((d) => d.type).length, documents } });
       }
-      case "build_info": {
-        // The deployed source's hash, to check a deploy arrived intact.
-        const source = await Deno.readFile(new URL(import.meta.url)).catch(() => null);
-        const sha256 = source
-          ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", source)))
-            .map((b) => b.toString(16).padStart(2, "0")).join("")
-          : null;
-        return json(200, { result: { sha256, bytes: source?.length ?? null } });
-      }
       default:
         return json(400, { error: `Unknown tool: ${String(body.tool)}` });
     }
