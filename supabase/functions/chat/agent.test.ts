@@ -202,7 +202,7 @@ Deno.test("tells past dates from upcoming ones", () => {
   expect(d.upcoming).toEqual(["2027-01-05"]);
 });
 
-Deno.test("consults four analysts in parallel and answers from their reports", async () => {
+Deno.test("consults five analysts in parallel and answers from their reports", async () => {
   const analystSystems: string[] = [];
   let leadCalls = 0;
   const sse = (chunks: unknown[]) =>
@@ -247,12 +247,12 @@ Deno.test("consults four analysts in parallel and answers from their reports", a
   } finally {
     await server.shutdown();
   }
-  expect(analystSystems.length).toBe(4);
+  expect(analystSystems.length).toBe(5);
   const text = events.filter((e) => e.type === "text").map((e) => e.delta).join("");
-  expect(text).toContain("4 reports");
+  expect(text).toContain("5 reports");
   expect(text).toContain("report from Pathways analyst");
   // Analysts' own drafts never stream to the user.
-  expect(text.match(/report from/g)?.length).toBe(4);
+  expect(text.match(/report from/g)?.length).toBe(5);
   expect(events.filter((e) => e.type === "step" && e.status === "done").map((e) => e.tool)).toEqual([
     "consult_analysts",
   ]);

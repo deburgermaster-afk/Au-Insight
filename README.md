@@ -47,15 +47,31 @@ Visa rules are marked `draft` until a person checks each criterion against its c
 
 | Source | How | Scope |
 |---|---|---|
-| Federal Register of Legislation | official API (Word compilations) | Migration Act 1958, Migration Regulations 1994, Australian Citizenship Act and every in-force migration/citizenship instrument (~180 titles, discovered automatically) |
+| Federal Register of Legislation | official API (Word compilations) | Migration Act 1958, Migration Regulations 1994, Australian Citizenship Act and every in-force migration/citizenship instrument (~180 titles, discovered automatically); ESOS Act 2000, ESOS Regulations 2019, National Code 2018 (plus its 2026 overseas student transfers amendment) and Higher Education Standards Framework (Threshold Standards) 2021 |
 | Home Affairs: immigration and citizenship | browser crawl, all tabs and folded sections expanded | every visa, citizenship and requirement page, processing times, fees, news |
 | Home Affairs: portfolio | browser crawl | media releases, migration program reports |
 | State and territory nomination | browser crawl | VIC, NSW, QLD, WA, SA, TAS, ACT, NT skilled/business nomination |
 | Administrative Review Tribunal | browser crawl | migration review procedures, time limits, fees |
 | Jobs and Skills Australia, ABS | browser crawl | occupation shortage list, ANZSCO/OSCA definitions |
 | OMARA | browser crawl | migration agent register and code of conduct |
+| Department of Education | browser crawl | ESOS framework, National Code factsheets, CRICOS registration, tuition protection, support for international students |
+| Study Australia | browser crawl | education system, course credits and exemptions, changing your course or provider, scholarships, visas, work rights |
+| AQF, TEQSA | browser crawl | AQF levels and policies; TEQSA guidance notes (credit and RPL, admissions, research training) and student information |
+| Overseas Students Ombudsman | browser crawl | complaints about private providers, including transfers and refunds |
+| Universities (41) | sitemap pages picked by path (`kind = sitemap`) | each university's own pages on credit/RPL, study load and overload, cross-institutional study, research degrees, fees and scholarships, transfers; up to 50 pages per university, tagged with its CRICOS code and searched with `search_university_policies` (never mixed into `search_law`) |
 
-Pages are re-checked every 24 hours (some sources weekly or monthly). A changed page becomes a new version with the dates it was in force, and the change is listed on the **Sources** screen.
+Structured data, imported into tables (each run of the crawler imports whatever is more than 7 days old):
+
+| Data | Source | What the app gets |
+|---|---|---|
+| CRICOS register | data.gov.au dataset `cricos` (Department of Education), `worker/cricos.py` | every provider, course, campus and declared fee for international students (about 1,500 providers and 26,000 courses), behind the Study tab and the chat's course tools |
+| Skilled occupation list | Home Affairs occupation list service, `worker/occupations.py` | 714 occupations with their lists (MLTSSL, STSOL, ROL, CSOL), eligible visas, caveats and assessing authority |
+| SkillSelect invitation rounds | Home Affairs current and previous rounds pages (from the crawled copies), `worker/occupations.py` | every published round: invitations, tie-break dates, minimum points per occupation, the next round date, monthly totals and state nominations |
+| Occupation shortages and jobs data | Jobs and Skills Australia spreadsheets (2025 Occupation Shortage List, ANZSCO occupation data, OSCA), `supabase/functions/data-import` | shortage ratings by state, employment, pay, growth, tasks and other titles per occupation |
+
+JSA's CDN refuses requests from data centres. When the `data-import` function can't download the spreadsheets, save them (`osl.xlsx`, `profiles.xlsx`, `osca.xlsx`) from a browser and run `deno run -A supabase/functions/data-import/local.ts <folder>`.
+
+Pages are re-checked every 24 hours (some sources weekly or monthly; university pages monthly). A changed page becomes a new version with the dates it was in force, and the change is listed on the **Sources** screen.
 
 ## Setup
 

@@ -29,10 +29,21 @@
     #splash { position: fixed; inset: 0; display: grid; place-items: center; transition: opacity .35s cubic-bezier(.22,1,.36,1); }
     #splash img { width: 56px; height: 56px; animation: breathe 1.6s ease-in-out infinite; }
     @keyframes breathe { 50% { transform: scale(.92); opacity: .7; } }
+    /* "New version ready" pill. Hidden, it ignores every touch so the app underneath gets them. */
+    #immi-pill {
+      position: fixed; z-index: 2147483000; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 10px);
+      transform: translate(-50%, -12px); opacity: 0; pointer-events: none;
+      transition: opacity .25s ease, transform .3s cubic-bezier(.22,1,.36,1);
+      font: 600 12.5px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #0B0B0C; background: #F4F4F5; border: 0; border-radius: 999px; padding: 10px 16px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.45); cursor: pointer; white-space: nowrap;
+    }
+    #immi-pill.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
   </style>
 </head>
 <body>
   <div id="splash"><img src="icon.svg" alt=""></div>
+  <button id="immi-pill" type="button" aria-hidden="true" tabindex="-1"></button>
   <script>
     // iOS Safari ignores user-scalable=no in a browser tab, so block its pinch gestures directly.
     for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
@@ -57,6 +68,141 @@
       s.style.opacity = '0';
       setTimeout(() => s.remove(), 400);
     });
+  </script>
+  <script>
+    // Resume guard, update notice and diagnostics hand-off.
+    (() => {
+      // Events for the app's diagnostics (lib/data/diagnostics.dart drains this array). Events
+      // noted just before a reload survive it in sessionStorage.
+      const events = (window.__immiEvents = []);
+      const store = {
+        get: (k) => { try { return sessionStorage.getItem(k); } catch (_) { return null; } },
+        set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (_) {} },
+        del: (k) => { try { sessionStorage.removeItem(k); } catch (_) {} },
+      };
+      try { events.push(...JSON.parse(store.get('immi-events') || '[]')); } catch (_) {}
+      store.del('immi-events');
+      const note = (kind, message, detail) => {
+        events.push({ kind, message, detail: detail || {}, at: new Date().toISOString() });
+        if (events.length > 40) events.shift();
+      };
+
+      const pill = document.getElementById('immi-pill');
+      let pillAction = null;
+      const showPill = (text, action) => {
+        pill.textContent = text;
+        pillAction = action;
+        pill.removeAttribute('aria-hidden');
+        pill.classList.add('show');
+      };
+      pill.addEventListener('click', () => {
+        pill.classList.remove('show');
+        pill.setAttribute('aria-hidden', 'true');
+        if (pillAction) pillAction();
+      });
+
+      // At most one automatic reload every 2 minutes, so a device that keeps failing can't loop.
+      const reload = (why) => {
+        note('page_reload', why);
+        store.set('immi-events', JSON.stringify(events.slice(-20)));
+        const last = Number(store.get('immi-auto-reload') || 0);
+        if (Date.now() - last < 120000) {
+          showPill('Display problem. Tap to reload', () => location.reload());
+          return;
+        }
+        store.set('immi-auto-reload', String(Date.now()));
+        location.reload();
+      };
+
+      // Track the WebGL contexts Flutter creates (on page canvases or offscreen ones) without ever
+      // creating one: asking a canvas for a context it doesn't have would make a new one.
+      const contexts = [];
+      const byCanvas = new WeakMap();
+      const track = (proto) => {
+        if (!proto || !proto.getContext) return;
+        const original = proto.getContext;
+        proto.getContext = function (type, ...rest) {
+          const ctx = original.call(this, type, ...rest);
+          if (ctx && /webgl/.test(String(type)) && !contexts.includes(ctx)) {
+            contexts.push(ctx);
+            if (contexts.length > 6) contexts.shift();
+            byCanvas.set(this, ctx);
+          }
+          return ctx;
+        };
+      };
+      track(window.HTMLCanvasElement && HTMLCanvasElement.prototype);
+      track(window.OffscreenCanvas && OffscreenCanvas.prototype);
+
+      // The context that draws the app now: the newest one, plus any on Flutter's page canvases.
+      const liveContexts = () => {
+        const found = new Set(contexts.slice(-1));
+        for (const c of document.querySelectorAll('flt-canvas-container canvas, flutter-view canvas, flt-glass-pane canvas')) {
+          const ctx = byCanvas.get(c);
+          if (ctx) found.add(ctx);
+        }
+        return [...found];
+      };
+      const lost = () => liveContexts().some((ctx) => { try { return ctx.isContextLost(); } catch (_) { return false; } });
+
+      let firstFrame = false;
+      window.addEventListener('flutter-first-frame', () => { firstFrame = true; });
+
+      // Back from the background: if the drawing context was lost and doesn't come back (or get
+      // replaced) within about 1.5 s, the app would stay frozen, so reload it.
+      let checking = false;
+      const checkCanvas = (how) => {
+        if (!firstFrame || checking || document.hidden) return;
+        if (!lost()) return;
+        checking = true;
+        note('page_webgl_lost', `Drawing context lost (${how})`, { contexts: contexts.length });
+        const started = Date.now();
+        const poll = () => {
+          if (document.hidden) { checking = false; return; }
+          if (!lost()) {
+            checking = false;
+            note('page_webgl_restored', `Drawing context back after ${Date.now() - started} ms`);
+            return;
+          }
+          if (Date.now() - started >= 1500) { checking = false; reload('Drawing context did not recover'); return; }
+          setTimeout(poll, 250);
+        };
+        setTimeout(poll, 250);
+      };
+
+      // New deployment check: compare main.dart.js's ETag with the one this page loaded.
+      let loadedTag = null;
+      let lastCheck = 0;
+      const tagNow = () =>
+        fetch('main.dart.js', { method: 'HEAD', cache: 'no-store' })
+          .then((r) => (r.ok ? r.headers.get('etag') || r.headers.get('last-modified') : null))
+          .catch(() => null);
+      window.addEventListener('load', () => {
+        tagNow().then((t) => { loadedTag = t; if (t) window.__immiBuild = t.replace(/^W\//, '').replace(/"/g, '').slice(0, 24); });
+      });
+      const checkUpdate = () => {
+        if (!loadedTag || pill.classList.contains('show')) return;
+        if (Date.now() - lastCheck < 5 * 60000) return;
+        lastCheck = Date.now();
+        tagNow().then((t) => {
+          if (t && t !== loadedTag) {
+            note('page_update', 'New version available');
+            showPill('New version ready. Tap to update', () => location.reload());
+          }
+        });
+      };
+      setInterval(() => { if (!document.hidden) checkUpdate(); }, 15 * 60000);
+
+      const onResume = (how) => {
+        if (window.scrollX || window.scrollY) note('page_scroll_reset', `Page was scrolled on return (${how})`, { x: window.scrollX, y: window.scrollY });
+        setTimeout(() => checkCanvas(how), 300);
+        checkUpdate();
+      };
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) onResume('visible'); });
+      window.addEventListener('pageshow', (e) => { if (e.persisted) onResume('restored'); });
+      // A context lost while the app is on screen gets the same treatment.
+      document.addEventListener('webglcontextlost', () => setTimeout(() => checkCanvas('in use'), 300), true);
+    })();
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

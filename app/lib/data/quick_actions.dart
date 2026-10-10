@@ -20,3 +20,7 @@ final casesChanged = ValueNotifier<int>(0);
 
 /// Bumped when the profile changes in the chat.
 final profileChanged = ValueNotifier<int>(0);
+
+/// Asks the chat to send this message (e.g. "Ask about this course" from the Study tab).
+/// The Ask screen sends it and clears the notifier; the caller switches to the Ask tab.
+final chatPrompt = ValueNotifier<String?>(null);

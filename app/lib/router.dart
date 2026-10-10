@@ -12,10 +12,12 @@ import 'screens/assess/assess_screen.dart';
 import 'screens/auth/auth_screens.dart';
 import 'screens/cases/cases_screen.dart';
 import 'screens/documents/documents_screen.dart';
+import 'screens/occupations/occupation_routes.dart';
 import 'screens/onboarding.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/shell.dart';
 import 'screens/sources/sources_screen.dart';
+import 'screens/study/study_routes.dart';
 
 /// Re-runs the router's redirect whenever the auth session changes.
 class _AuthRefresh extends ChangeNotifier {
@@ -75,6 +77,8 @@ final router = GoRouter(
             ),
           ],
         ),
+        StatefulShellBranch(routes: studyRoutes),
+        StatefulShellBranch(routes: occupationRoutes),
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -124,38 +128,41 @@ class SubPage extends StatelessWidget {
   Widget build(BuildContext context) => ColoredBox(color: AppColors.bg, child: child);
 }
 
-/// Keeps every tab alive (state preserved) and cross-fades + lifts between them.
-class AnimatedBranches extends StatelessWidget {
+/// Keeps every tab alive (state preserved) but lays out, paints and hit-tests only the open one,
+/// and fades it in briefly when it changes.
+class AnimatedBranches extends StatefulWidget {
   const AnimatedBranches({super.key, required this.index, required this.children});
   final int index;
   final List<Widget> children;
 
   @override
+  State<AnimatedBranches> createState() => _AnimatedBranchesState();
+}
+
+class _AnimatedBranchesState extends State<AnimatedBranches> with SingleTickerProviderStateMixin {
+  late final _fade = AnimationController(vsync: this, duration: const Duration(milliseconds: 140), value: 1);
+
+  @override
+  void didUpdateWidget(AnimatedBranches old) {
+    super.didUpdateWidget(old);
+    if (old.index != widget.index) _fade.forward(from: 0.35);
+  }
+
+  @override
+  void dispose() {
+    _fade.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        for (final (i, child) in children.indexed)
-          IgnorePointer(
-            ignoring: i != index,
-            // The fade itself must keep ticking, so only the page content is paused.
-            child: AnimatedOpacity(
-              opacity: i == index ? 1 : 0,
-              duration: Motion.medium,
-              curve: Motion.ease,
-              child: AnimatedScale(
-                scale: i == index ? 1 : 0.985,
-                duration: Motion.slow,
-                curve: Motion.ease,
-                child: AnimatedSlide(
-                  offset: i == index ? Offset.zero : const Offset(0, 0.012),
-                  duration: Motion.slow,
-                  curve: Motion.ease,
-                  child: TickerMode(enabled: i == index, child: child),
-                ),
-              ),
-            ),
-          ),
-      ],
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: _fade, curve: Motion.ease),
+      child: IndexedStack(
+        index: widget.index,
+        sizing: StackFit.expand,
+        children: [for (final (i, child) in widget.children.indexed) TickerMode(enabled: i == widget.index, child: child)],
+      ),
     );
   }
 }

@@ -8,6 +8,8 @@ import '../../motion.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../shell.dart';
+import '../study/progress_card.dart' show StudyProgressCard;
+import 'profile_cards.dart';
 
 /// Intake sections, in the order the chat asks about them (see supabase/functions/chat/profile.ts).
 const _sections = [
@@ -116,6 +118,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ).enter(0),
+                if (p != null) ...[
+                  const SizedBox(height: 8),
+                  KeyDatesCard(profile: p),
+                  const CoeHistoryCard(),
+                  if (_filled(p['study'])) const Padding(padding: EdgeInsets.only(bottom: 8), child: StudyProgressCard()),
+                ],
                 const SizedBox(height: 16),
                 const Text('DETAILS', style: AppText.label),
                 const SizedBox(height: 8),

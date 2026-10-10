@@ -18,7 +18,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assessAll, type CaseFacts, caseFactsSchema, todayISO } from "../_shared/engine/index.ts";
 import { analystPrompt, ANALYSTS } from "./analysts.ts";
+import { classifyAndSave, describeExtracted, isExtracted } from "./docintel.ts";
+import { educationDefs, educationTools } from "./education.ts";
 import { mergeProfile, missingSections, type Profile, profileJsonSchema } from "./profile.ts";
+import { occupationDefs, occupationTools } from "./occupations.ts";
+import { siteDefs, siteTools } from "./site.ts";
+import { coeHistory, describeHistory, studyDefs, studyTools } from "./study.ts";
 
 const BUCKET = "case-documents";
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
@@ -28,7 +33,29 @@ const MAX_STEPS = 8;
 /** Tool rounds each analyst gets before it must report. */
 const ANALYST_STEPS = 3;
 /** Tools analysts may use: reading only. */
-const ANALYST_TOOLS = ["search_law", "get_case_file", "list_documents", "read_document", "assess_visas"];
+const ANALYST_TOOLS = [
+  "search_law",
+  "recent_changes",
+  "get_case_file",
+  "list_documents",
+  "read_document",
+  "assess_visas",
+  "search_courses",
+  "get_course",
+  "get_provider",
+  "compare_courses",
+  "search_university_policies",
+  "credit_guide",
+  "read_official_page",
+  "search_official_site",
+  "study_plan",
+  "academic_record",
+  "study_history",
+  "search_occupations",
+  "get_occupation",
+  "latest_rounds",
+  "rank_occupations",
+];
 /** Tools that only record or display something: they need no reply from the model. */
 const BOOKKEEPING_TOOLS = new Set(["save_story", "save_profile", "create_case", "show_button"]);
 /** Sent after a reply that came with only bookkeeping calls, so the model continues instead of repeating it. */
@@ -118,7 +145,20 @@ const factsJsonSchema = {
   },
 };
 
-const toolDefs = [
+const coreDefs = [
+  {
+    type: "function",
+    function: {
+      name: "recent_changes",
+      description:
+        "Official pages that announce or explain recent changes to the rules (new legislation, policy changes, Home Affairs news), most relevant first. Call it before answering any question about eligibility, applying, extending or changing a visa, with the visa and situation as the topic; a newer change overrides older pages.",
+      parameters: {
+        type: "object",
+        properties: { topic: { type: "string", description: "e.g. 'student visa 500 apply in Australia'" } },
+        required: ["topic"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -235,7 +275,7 @@ const toolDefs = [
     function: {
       name: "consult_analysts",
       description:
-        "Ask four specialist analysts to work on the user's situation in parallel: visa pathways, points and eligibility, documents and evidence, timeline and status. Use for open questions about their options, plans or best way forward. Returns each analyst's report; you then write one answer from them.",
+        "Ask five specialist analysts to work on the user's situation in parallel: visa pathways, points and eligibility, documents and evidence, timeline and status, study and university. Use for open questions about their options, plans or best way forward. Returns each analyst's report; you then write one answer from them.",
       parameters: {
         type: "object",
         properties: {
@@ -257,6 +297,20 @@ const toolDefs = [
       parameters: { type: "object", properties: { facts: factsJsonSchema }, required: ["facts"] },
     },
   },
+];
+
+type ToolDef = {
+  type: "function";
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+};
+
+/** Every tool the lead agent has: the core ones above, CRICOS and university policies, official websites, study. */
+const toolDefs: ToolDef[] = [
+  ...(coreDefs as ToolDef[]),
+  ...educationDefs,
+  ...siteDefs,
+  ...studyDefs,
+  ...occupationDefs,
 ];
 
 function stepLabel(name: string, args: Record<string, unknown>): string {
@@ -281,17 +335,68 @@ function stepLabel(name: string, args: Record<string, unknown>): string {
       return "Updating your profile";
     case "create_case":
       return "Saving your plan as a case";
+    case "recent_changes":
+      return `Checking recent rule changes: “${args.topic ?? ""}”`;
+    case "search_courses":
+      return `Searching courses: “${
+        [args.query, args.researchOnly ? "research degrees" : "", args.state].filter(Boolean).join(", ")
+      }”`;
+    case "get_course":
+      return "Reading a course on the CRICOS register";
+    case "get_provider":
+      return "Looking up a provider";
+    case "compare_courses":
+      return "Comparing courses";
+    case "search_university_policies":
+      return `Checking university policies: “${args.query ?? ""}”`;
+    case "credit_guide":
+      return "Checking credit transfer guidelines";
+    case "read_official_page":
+      return "Reading an official page";
+    case "search_official_site":
+      return `Searching ${args.provider ?? args.domain ?? "an official site"}: “${args.query ?? ""}”`;
+    case "study_plan":
+      return "Working out your study plan";
+    case "academic_record":
+      return "Reading your academic record";
+    case "search_occupations":
+      return `Searching occupations: “${[args.query, args.list, args.visa].filter(Boolean).join(", ")}”`;
+    case "get_occupation":
+      return "Reading the occupation's lists, rounds and shortage data";
+    case "latest_rounds":
+      return "Checking the latest invitation rounds";
+    case "rank_occupations":
+      return `Ranking occupations by recent invitations${args.maxPoints ? ` (up to ${args.maxPoints} points)` : ""}`;
+    case "study_history":
+      return "Checking your CoE history";
     default:
       return name;
   }
 }
 
 function makeTools(supabase: SupabaseClient, emit: Emit, llm?: LLMConfig) {
-  const seen = new Map<number, number>();
+  const seen = new Map<string, number>();
   const searches = new Map<string, { results: unknown[] }>();
   let count = 0;
+  /** One [n] per source (url + section) across every tool in the turn; announced once. */
+  const cite = ({ title, section = "", url }: { title: string; section?: string; url: string }) => {
+    const key = `${url}|${section}`;
+    let n = seen.get(key);
+    if (n === undefined) {
+      n = ++count;
+      seen.set(key, n);
+      emit({ type: "source", n, title, section, url });
+    }
+    return n;
+  };
+  const ctx = { supabase, emit, cite, llm, fetch: (...a: Parameters<typeof fetch>) => fetch(...a) };
 
   return {
+    ...educationTools(ctx),
+    ...siteTools(ctx),
+    ...studyTools(supabase, todayISO),
+    ...occupationTools(ctx),
+
     async search_law(args: { query?: string; asAt?: string }) {
       const query = String(args.query ?? "").slice(0, 300);
       const key = `${query.toLowerCase().trim()}|${args.asAt ?? ""}`;
@@ -315,13 +420,8 @@ function makeTools(supabase: SupabaseClient, emit: Emit, llm?: LLMConfig) {
             version_fetched_at: string;
           },
         ) => {
-          let n = seen.get(r.section_id);
           const section = r.heading_path.slice(1).join(" › ");
-          if (n === undefined) {
-            n = ++count;
-            seen.set(r.section_id, n);
-            emit({ type: "source", n, title: r.title, section, url: r.url });
-          }
+          const n = cite({ title: r.title, section, url: r.url });
           return {
             n,
             title: r.title,
@@ -334,6 +434,30 @@ function makeTools(supabase: SupabaseClient, emit: Emit, llm?: LLMConfig) {
       );
       searches.set(key, { results });
       return { results };
+    },
+
+    async recent_changes(args: { topic?: string }) {
+      const { data, error } = await supabase.rpc("recent_law_changes", {
+        p_query: String(args.topic ?? "").slice(0, 200),
+        p_limit: 6,
+      });
+      if (error) return { error: error.message, changes: [] };
+      const changes = (data ?? []).map((r: {
+        title: string;
+        url: string;
+        section: string;
+        snippet: string;
+        mentions_date: string | null;
+        fetched_at: string;
+      }) => ({
+        n: cite({ title: r.title, section: r.section, url: r.url }),
+        title: r.title,
+        section: r.section,
+        mentionsDate: r.mentions_date,
+        checked: r.fetched_at?.slice(0, 10),
+        text: r.snippet,
+      }));
+      return { changes, note: "Newer rules override older pages: apply these where they cover the user's situation." };
     },
 
     async get_case_file() {
@@ -482,14 +606,32 @@ export function datesVersusToday(text: string, today: string) {
 /** Characters of each document, and of all documents together, the agent sees up front. */
 const DIGEST_DOC_CHARS = 4000;
 const DIGEST_TOTAL_CHARS = 32000;
+/** Raw text kept per document once its key facts have been extracted (the facts come first). */
+const DIGEST_EXTRACTED_CHARS = 1500;
 /** How long a turn waits for new documents to be read before it goes on without them. */
 const PREREAD_MS = 35_000;
+/** How long a turn waits for new documents to be understood (type and key facts). */
+const UNDERSTAND_MS = 25_000;
+
+type DigestDoc = {
+  id: string;
+  filename: string;
+  status?: string;
+  extracted_text: string | null;
+  extracted?: unknown;
+  created_at?: string;
+};
 
 /**
- * Reads every document that hasn't been read yet (in parallel), then returns all of them as one
- * text block for the agent's context, so it never has to remember to open them.
+ * Reads every unread document and works out the type and key facts of every document not yet
+ * understood (in parallel, each within the time budgets). Returns what it did per document.
  */
-export async function prepareDocuments(supabase: SupabaseClient, llm: LLMConfig, emit: Emit): Promise<string> {
+export async function processDocuments(
+  supabase: SupabaseClient,
+  llm: LLMConfig,
+  emit: Emit = () => {},
+  budgets = { readMs: PREREAD_MS, understandMs: UNDERSTAND_MS },
+) {
   const { data: unread } = await supabase.from("documents").select("id").is("extracted_text", null)
     .neq("status", "failed").limit(25);
   if (unread?.length) {
@@ -499,31 +641,66 @@ export async function prepareDocuments(supabase: SupabaseClient, llm: LLMConfig,
     const { read_document } = makeTools(supabase, () => {}, llm);
     await Promise.race([
       Promise.allSettled(unread.map((d) => read_document({ id: d.id }))),
-      new Promise((r) => setTimeout(r, PREREAD_MS)),
+      new Promise((r) => setTimeout(r, budgets.readMs)),
     ]);
     emit({ type: "step", id, tool: "read_document", label, status: "done" });
   }
-  const { data: docs } = await supabase.from("documents").select("id, filename, status, extracted_text, created_at")
-    .order("created_at").limit(60);
-  return documentDigest(docs ?? []);
+  const { data: docs } = await supabase.from("documents")
+    .select("id, filename, status, extracted_text, extracted, created_at").order("created_at").limit(60);
+  const rows = (docs ?? []) as DigestDoc[];
+  const todo = rows.filter((d) =>
+    d.extracted_text && (!isExtracted(d.extracted) || (d.extracted as { incomplete?: boolean }).incomplete)
+  );
+  if (todo.length) {
+    const id = "understand";
+    const label = todo.length === 1 ? "Understanding your document" : `Understanding your ${todo.length} documents`;
+    emit({ type: "step", id, tool: "read_document", label, status: "running" });
+    const signal = AbortSignal.timeout(budgets.understandMs);
+    const done = await Promise.race([
+      Promise.allSettled(
+        todo.slice(0, 12).map((d) =>
+          classifyAndSave(supabase, llm, { id: d.id, filename: d.filename, extracted_text: d.extracted_text! }, signal)
+            .then((e) => (d.extracted = e))
+        ),
+      ),
+      new Promise((r) => setTimeout(r, budgets.understandMs + 1000)),
+    ]);
+    void done;
+    emit({ type: "step", id, tool: "read_document", label, status: "done" });
+  }
+  return rows;
 }
 
-/** All documents as text, each trimmed so together they fit the context. */
-export function documentDigest(
-  docs: { id: string; filename: string; status?: string; extracted_text: string | null; created_at?: string }[],
-): string {
+/**
+ * Reads and understands documents (see processDocuments), then returns all of them as one text
+ * block for the agent's context, so it never has to remember to open them.
+ */
+export async function prepareDocuments(supabase: SupabaseClient, llm: LLMConfig, emit: Emit): Promise<string> {
+  const rows = await processDocuments(supabase, llm, emit);
+  return documentDigest(rows);
+}
+
+/**
+ * All documents for the agent's context: the CoE history first (provider and course changes across
+ * every CoE, including files holding several), then each document's type and key facts, then its text,
+ * each trimmed so together they fit.
+ */
+export function documentDigest(docs: DigestDoc[]): string {
   if (!docs.length) return "";
   const per = Math.max(800, Math.min(DIGEST_DOC_CHARS, Math.floor(DIGEST_TOTAL_CHARS / docs.length)));
-  return docs.map((d) => {
+  const history = describeHistory(coeHistory(docs.map((d) => ({ ...d, extracted: d.extracted ?? null }))));
+  const body = docs.map((d) => {
     const head = `### ${d.filename} (id ${d.id}${d.created_at ? `, uploaded ${d.created_at.slice(0, 10)}` : ""})`;
     if (!d.extracted_text) {
       return `${head}\n[${d.status === "failed" ? "could not be read" : "not read yet"}]`;
     }
+    const facts = isExtracted(d.extracted) ? describeExtracted(d.extracted) : "";
+    const cap = facts ? Math.min(per, DIGEST_EXTRACTED_CHARS) : per;
     const text = d.extracted_text.replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
-    return `${head}\n${
-      text.length > per ? `${text.slice(0, per)}\n[… shortened; read_document has the full text]` : text
-    }`;
+    const shown = text.length > cap ? `${text.slice(0, cap)}\n[… shortened; read_document has the full text]` : text;
+    return [head, facts, facts ? `Text:\n${shown}` : shown].filter(Boolean).join("\n");
   }).join("\n\n");
+  return history ? `${history}\n\n${body}` : body;
 }
 
 /** Plain text of a PDF or text file; null for files without a text layer (images, scans, Word). */
@@ -593,7 +770,6 @@ export async function readWithGemini(key: string, mime: string, bytes: Uint8Arra
 }
 
 /** One streamed completion. Emits text/reasoning deltas as they arrive; returns the full assistant turn. */
-type ToolDef = (typeof toolDefs)[number];
 
 /**
  * Gemini rejects earlier tool calls without a thought signature. Calls made by another model in the

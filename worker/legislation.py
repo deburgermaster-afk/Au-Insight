@@ -9,6 +9,7 @@ ActHead 1 = Chapter/Schedule, 2 = Part, 3 = Division, 4 = Subdivision,
 from __future__ import annotations
 
 import io
+import re
 from datetime import datetime
 
 import docx
@@ -27,21 +28,51 @@ async def latest_version(http: httpx.AsyncClient, title_id: str) -> dict:
 
 
 async def download_volumes(http: httpx.AsyncClient, title_id: str) -> list[bytes]:
-    vols: list[bytes] = []
-    for n in range(1, 20):
+    """A single-volume compilation is volume 0; multi-volume ones (the Act, the Regulations) are 1..n."""
+
+    async def volume(n: int) -> bytes | None:
         r = await http.get(
             f"{API}/Documents/Find(titleid='{title_id}',asatspecification='Latest',type='Primary',"
             f"format='Word',uniqueTypeNumber=0,volumeNumber={n},rectificationVersionNumber=0)"
         )
         if r.status_code == 404:
-            break
+            return None
         r.raise_for_status()
-        vols.append(r.content)
+        return r.content
+
+    single = await volume(0)
+    if single is not None:
+        return [single]
+    vols: list[bytes] = []
+    for n in range(1, 20):
+        data = await volume(n)
+        if data is None:
+            break
+        vols.append(data)
+    if not vols:
+        raise RuntimeError(f"no Word compilation for {title_id}")
     return vols
 
 
 def _cell_text(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
+
+
+# Instruments drafted outside the OPC template (the National Code, the Threshold Standards)
+# use Word's own heading styles. Some style whole numbered standards as "Heading 3/4", so a
+# paragraph that reads like a sentence stays body text.
+WORD_HEADING = re.compile(r"^(?:ENotes)?Heading (\d)(?: title)?$")
+LIST_ITEM = re.compile(r"^(?:[a-z]|[ivx]+|\d+)[.)]\s")
+
+
+def _word_heading_level(style: str, text: str) -> int | None:
+    m = WORD_HEADING.match(style)
+    if not m or len(text) > 120:
+        return None
+    level, tail = int(m.group(1)), text.rstrip()
+    if tail.endswith((".", ";", ":", ",", " and", " or")) or (level >= 3 and LIST_ITEM.match(text)):
+        return None
+    return level
 
 
 def docx_to_markdown(data: bytes) -> str:
@@ -56,6 +87,8 @@ def docx_to_markdown(data: bytes) -> str:
             if style.startswith("ActHead "):
                 level = int(style.split()[1]) if style.split()[1].isdigit() else 5
                 out.append(f"\n{'#' * min(level, 6)} {' '.join(text.split())}\n")
+            elif (word_level := _word_heading_level(style, text)) is not None:
+                out.append(f"\n{'#' * min(word_level, 6)} {' '.join(text.split())}\n")
             elif style in ("SubsectionHead", "TofSectsHeading"):
                 out.append(f"**{text}**")
             elif style.startswith("note"):

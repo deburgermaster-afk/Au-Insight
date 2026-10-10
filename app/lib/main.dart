@@ -4,6 +4,8 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+import 'data/diagnostics.dart';
+import 'data/safe_area.dart';
 import 'router.dart';
 import 'theme.dart';
 
@@ -11,6 +13,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
   await Supabase.initialize(url: Config.supabaseUrl, publishableKey: Config.supabaseKey);
+  initSafeArea();
+  Diagnostics.init(route: () => router.routerDelegate.currentConfiguration.uri.toString());
   runApp(const ImmiInsightApp());
 }
 

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'backend.dart';
 import 'file_input.dart';
 
 const documentsBucket = 'case-documents';
@@ -24,11 +26,61 @@ class Uploads extends ChangeNotifier {
   /// Bumped after every file that lands, so lists show it straight away.
   int finished = 0;
 
+  /// True while the chat's document reader works through unread files (after a batch, or on request).
+  bool reading = false;
+
+  /// Documents from the batches being read, shown as "Reading…".
+  final Set<String> readingIds = {};
+
+  /// Bumped after every reading run, so lists reload with what was found.
+  int readRuns = 0;
+
+  /// Results of reading runs since the last read, for the Documents screen to announce.
+  final List<(DateTime, List<Map<String, dynamic>>)> readResults = [];
+
+  bool _readAgain = false;
+
+  /// Asks the chat to read and classify every unread document (`process_documents`). Runs in the
+  /// background; a call while a run is going queues one more run, so each batch is read once.
+  Future<void> readDocuments([Iterable<String> ids = const []]) async {
+    readingIds.addAll(ids);
+    if (reading) {
+      _readAgain = true;
+      notifyListeners();
+      return;
+    }
+    reading = true;
+    notifyListeners();
+    try {
+      do {
+        _readAgain = false;
+        final r = await callTool('process_documents');
+        final docs = [
+          for (final d in (r['documents'] as List? ?? const []))
+            if (d is Map) d.cast<String, dynamic>(),
+        ];
+        readResults.add((DateTime.now(), docs));
+        if (_readAgain) {
+          readRuns++;
+          notifyListeners();
+        }
+      } while (_readAgain);
+    } catch (e) {
+      errors.add('Could not read your documents: ${'$e'.replaceFirst('Exception: ', '')}');
+    }
+    reading = false;
+    _readAgain = false;
+    readingIds.clear();
+    readRuns++;
+    notifyListeners();
+  }
+
   Future<void> pickAndUpload({String? folderId}) async {
     final files = await pickFiles();
     if (files.isEmpty) return;
     final sb = Supabase.instance.client;
     final uid = sb.auth.currentUser!.id;
+    final added = <String>[];
     for (final f in files) {
       inProgress[f.name] = false;
     }
@@ -42,13 +94,12 @@ class Uploads extends ChangeNotifier {
           final mime = f.type.isNotEmpty ? f.type : mimeFor(f.name);
           final path = '$uid/${_uuid()}/${safeName(f.name)}';
           await sb.storage.from(documentsBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
-          await sb.from('documents').insert({
-            'storage_path': path,
-            'filename': f.name,
-            'mime_type': mime,
-            'size_bytes': bytes.length,
-            'folder_id': folderId,
-          });
+          final row = await sb
+              .from('documents')
+              .insert({'storage_path': path, 'filename': f.name, 'mime_type': mime, 'size_bytes': bytes.length, 'folder_id': folderId})
+              .select('id')
+              .single();
+          added.add(row['id'] as String);
           finished++;
         } on StorageException catch (e) {
           errors.add('${f.name}: ${e.message}');
@@ -59,6 +110,8 @@ class Uploads extends ChangeNotifier {
         notifyListeners();
       }),
     );
+    // Read the new files in the background: the list shows "Reading…" until the reader is done.
+    if (added.isNotEmpty) unawaited(readDocuments(added));
     // Leave the ticks up for a moment; the files are already in the list.
     await Future<void>.delayed(const Duration(milliseconds: 1200));
     if (inProgress.values.every((done) => done)) inProgress.clear();

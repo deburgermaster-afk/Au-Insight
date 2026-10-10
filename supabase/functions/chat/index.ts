@@ -2,9 +2,10 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { todayISO } from "../_shared/engine/index.ts";
-import { type Emit, type LLMConfig, type Msg, prepareDocuments, runAgent } from "./agent.ts";
+import { type Emit, type LLMConfig, type Msg, prepareDocuments, processDocuments, runAgent } from "./agent.ts";
+import { academicRecord, coeHistory, loadStudyContext, studyPlanFor } from "./study.ts";
 import { missingSections } from "./profile.ts";
-import { systemPrompt, type UserContext } from "./prompt.ts";
+import { changesQuery, systemPrompt, type UserContext } from "./prompt.ts";
 
 // Defaults: xKiro's OpenAI-compatible gateway with the free models that did best on a full
 // plan request (accurate facts, the user's own state, citations) within the 150 s limit.
@@ -35,7 +36,7 @@ async function apiKey(): Promise<string> {
 }
 
 /** Whether the user has told their story yet and what they've uploaded, so the agent knows where to start. */
-async function userContext(supabase: SupabaseClient): Promise<UserContext> {
+async function userContext(supabase: SupabaseClient): Promise<UserContext & { profile: Record<string, unknown> }> {
   const [caseRow, docs] = await Promise.all([
     supabase.from("cases").select("facts, story, profile").order("created_at").limit(1).maybeSingle(),
     supabase.from("documents").select("id", { count: "exact", head: true }),
@@ -45,7 +46,66 @@ async function userContext(supabase: SupabaseClient): Promise<UserContext> {
     documents: docs.count ?? 0,
     savedFacts: Object.keys(caseRow.data?.facts ?? {}).length,
     missing: missingSections(caseRow.data?.profile ?? {}),
+    profile: caseRow.data?.profile ?? {},
   };
+}
+
+/** The recent official changes most relevant to the user, one line each, for the system prompt. */
+async function changesDigest(supabase: SupabaseClient, query: string): Promise<string> {
+  if (!query) return "";
+  const { data, error } = await supabase.rpc("recent_law_changes", { p_query: query, p_limit: 5 });
+  if (error || !Array.isArray(data)) return "";
+  return data
+    .filter((r: { rank?: number }) => (r.rank ?? 0) > 0)
+    .map((r: { title: string; url: string; section?: string; mentions_date?: string }) =>
+      `  - ${r.title}${r.section ? ` › ${r.section}` : ""}${
+        r.mentions_date ? ` (mentions ${r.mentions_date})` : ""
+      }: ${r.url}`
+    )
+    .join("\n");
+}
+
+/** The app's direct tools: one JSON answer, no chat. Same user, same row-level security. */
+async function direct(supabase: SupabaseClient, body: { tool?: unknown; args?: unknown }): Promise<Response> {
+  const json = (status: number, data: unknown) =>
+    new Response(JSON.stringify(data), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  const args = body.args && typeof body.args === "object" ? body.args as Record<string, unknown> : {};
+  try {
+    switch (body.tool) {
+      case "study_plan":
+        return json(200, { result: await studyPlanFor(supabase, todayISO(), args) });
+      case "academic_record":
+        return json(200, { result: await academicRecord(supabase) });
+      case "study_history": {
+        const { docs } = await loadStudyContext(supabase);
+        return json(200, { result: { coes: coeHistory(docs) } });
+      }
+      case "process_documents": {
+        await apiKey();
+        const rows = await processDocuments(supabase, llm, () => {}, { readMs: 50_000, understandMs: 60_000 });
+        const documents = rows.map((d) => ({
+          id: d.id,
+          filename: d.filename,
+          status: d.status,
+          type: (d.extracted as { type?: string } | null)?.type ?? null,
+        }));
+        return json(200, { result: { processed: documents.filter((d) => d.type).length, documents } });
+      }
+      case "build_info": {
+        // The deployed source's hash, to check a deploy arrived intact.
+        const source = await Deno.readFile(new URL(import.meta.url)).catch(() => null);
+        const sha256 = source
+          ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", source)))
+            .map((b) => b.toString(16).padStart(2, "0")).join("")
+          : null;
+        return json(200, { result: { sha256, bytes: source?.length ?? null } });
+      }
+      default:
+        return json(400, { error: `Unknown tool: ${String(body.tool)}` });
+    }
+  } catch (e) {
+    return json(500, { error: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 const cors = {
@@ -67,6 +127,7 @@ Deno.serve(async (req) => {
 
   const startedAt = Date.now();
   const body = await req.json().catch(() => ({}));
+  if (body?.action === "tool") return direct(supabase, body);
   const user = await userContext(supabase);
   const history = Array.isArray(body.messages) ? body.messages.slice(-24) : [];
   const messages: Msg[] = [
@@ -92,8 +153,13 @@ Deno.serve(async (req) => {
           );
         }
         // Every document is read before the agent starts, and all of them go into its context.
-        const documents = await prepareDocuments(supabase, llm, emit);
-        messages[0] = { role: "system", content: systemPrompt(todayISO(), user, documents) };
+        const last = [...history].reverse().find((m: { role?: string }) => m.role === "user");
+        const [documents, changes] = await Promise.all([
+          prepareDocuments(supabase, llm, emit),
+          changesDigest(supabase, changesQuery(user.profile, typeof last?.content === "string" ? last.content : ""))
+            .catch(() => ""),
+        ]);
+        messages[0] = { role: "system", content: systemPrompt(todayISO(), user, documents, changes) };
         await runAgent(llm, supabase, messages, emit, req.signal, {
           chatId: typeof body.chatId === "string" ? body.chatId : undefined,
           documents,

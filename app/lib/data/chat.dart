@@ -56,8 +56,10 @@ class ChatMessage {
     List<Map<String, dynamic>>? decisions,
     List<String>? actions,
     List<(String, String)>? cases,
+    List<Map<String, dynamic>>? courses,
     this.error,
   }) : steps = steps ?? [],
+       courses = courses ?? [],
        actions = actions ?? [],
        cases = cases ?? [],
        sources = sources ?? [],
@@ -76,6 +78,9 @@ class ChatMessage {
 
   /// Cases (id, title) the agent saved during this turn.
   final List<(String, String)> cases;
+
+  /// Courses the agent found (raw `search_courses` rows, see study_models.dart), shown as cards.
+  List<Map<String, dynamic>> courses;
   String? error;
 
   Map<String, dynamic> toJson() => {
@@ -90,6 +95,7 @@ class ChatMessage {
       'cases': [
         for (final c in cases) {'id': c.$1, 'title': c.$2},
       ],
+    if (courses.isNotEmpty) 'courses': courses,
     if (error != null) 'error': error,
   };
 
@@ -102,6 +108,10 @@ class ChatMessage {
     decisions: [for (final d in (j['decisions'] as List? ?? const [])) (d as Map).cast<String, dynamic>()],
     actions: [for (final a in (j['actions'] as List? ?? const [])) a as String],
     cases: [for (final c in (j['cases'] as List? ?? const [])) ((c as Map)['id'] as String, c['title'] as String)],
+    courses: [
+      for (final c in (j['courses'] as List? ?? const []))
+        if (c is Map) c.cast<String, dynamic>(),
+    ],
     error: j['error'] as String?,
   );
 }

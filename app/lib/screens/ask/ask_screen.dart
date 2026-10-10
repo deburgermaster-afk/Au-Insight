@@ -11,9 +11,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/chat.dart';
 import '../../data/quick_actions.dart';
+import '../../data/study_models.dart';
 import '../../motion.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/course_card.dart';
 import '../../widgets/decision_card.dart';
 import '../shell.dart';
 
@@ -50,12 +52,73 @@ class _AskScreenState extends State<AskScreen> {
   StreamSubscription<Map<String, dynamic>>? _sub;
   bool get _busy => _sub != null;
 
+  /// Bumped when the streaming reply changed; only that reply listens, so the rest of the chat
+  /// doesn't rebuild while it streams. Events are applied at most every [_flushEvery].
+  final _live = ValueNotifier<int>(0);
+  static const _flushEvery = Duration(milliseconds: 90);
+  Timer? _flushTimer;
+
+  /// Messages from this index on fade in; earlier ones (loaded from history) just appear.
+  int _animateFrom = 1 << 30;
+
+  /// Whether the user is at (or near) the newest message; the chat only follows new text then.
+  bool _atBottom = true;
+  final _showJump = ValueNotifier<bool>(false);
+
+  /// A message another screen asked to send before this chat finished loading.
+  String? _pendingPrompt;
+  String? _lastSent;
+  DateTime _lastSentAt = DateTime(2000);
+
   @override
   void initState() {
     super.initState();
     _load();
     quickActions.addListener(_onQuickAction);
     openChat.addListener(_onOpenChat);
+    chatPrompt.addListener(_onChatPrompt);
+    _scroll.addListener(_onScroll);
+    // A prompt may have been set before this screen existed.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onChatPrompt());
+  }
+
+  void _onChatPrompt() {
+    final prompt = chatPrompt.value;
+    if (prompt == null || !mounted) return;
+    chatPrompt.value = null;
+    if (_chatId == null) {
+      _pendingPrompt = prompt;
+    } else {
+      _send(prompt);
+    }
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final p = _scroll.position;
+    _atBottom = p.maxScrollExtent - p.pixels < 120;
+    final show = !_atBottom && _messages.isNotEmpty;
+    if (_showJump.value != show) _showJump.value = show;
+  }
+
+  /// Keeps the newest message in view, without animating, if the user hasn't scrolled away.
+  void _follow({bool force = false}) {
+    if (!force && !_atBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      _atBottom = true;
+    });
+  }
+
+  void _scheduleFlush() {
+    if (_flushTimer != null) return;
+    _flushTimer = Timer(_flushEvery, () {
+      _flushTimer = null;
+      if (!mounted) return;
+      _live.value++;
+      _follow();
+    });
   }
 
   void _onQuickAction() {
@@ -73,7 +136,11 @@ class _AskScreenState extends State<AskScreen> {
   void dispose() {
     quickActions.removeListener(_onQuickAction);
     openChat.removeListener(_onOpenChat);
+    chatPrompt.removeListener(_onChatPrompt);
     _sub?.cancel();
+    _flushTimer?.cancel();
+    _live.dispose();
+    _showJump.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -95,11 +162,20 @@ class _AskScreenState extends State<AskScreen> {
           ..clear()
           ..addAll([for (final m in saved) ChatMessage.fromJson((m as Map).cast())]);
         if (firstTime) _messages.add(ChatMessage(role: 'assistant', text: _welcome));
+        _animateFrom = _messages.length;
       });
       _settleAtBottom();
+      _sendPending();
     } else {
       await _newChat();
     }
+  }
+
+  void _sendPending() {
+    final p = _pendingPrompt;
+    if (p == null) return;
+    _pendingPrompt = null;
+    _send(p);
   }
 
   Future<void> _newChat() async {
@@ -112,7 +188,9 @@ class _AskScreenState extends State<AskScreen> {
       _chatId = row['id'] as String;
       _messages.clear();
       if (firstTime) _messages.add(ChatMessage(role: 'assistant', text: _welcome));
+      _animateFrom = _messages.length;
     });
+    _sendPending();
   }
 
   /// No story in the case file yet.
@@ -158,17 +236,14 @@ class _AskScreenState extends State<AskScreen> {
     }
   }
 
-  void _toBottom({bool jump = false}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
-      final end = _scroll.position.maxScrollExtent;
-      jump ? _scroll.jumpTo(end) : _scroll.animateTo(end, duration: Motion.medium, curve: Motion.ease);
-    });
-  }
-
   void _send(String text) {
     text = text.trim();
     if (text.isEmpty) return;
+    // The keyboard can report one press twice (a submit and a typed line break).
+    final now = DateTime.now();
+    if (text == _lastSent && now.difference(_lastSentAt) < const Duration(seconds: 1)) return;
+    _lastSent = text;
+    _lastSentAt = now;
     HapticFeedback.lightImpact();
     // A message sent mid-reply interrupts it; a reply stopped before any answer is dropped, so
     // the assistant sees both messages together and answers them in one go.
@@ -179,12 +254,15 @@ class _AskScreenState extends State<AskScreen> {
       if (last != null && last.role == 'assistant' && last.text.trim().isEmpty) _messages.removeLast();
     }
     final reply = ChatMessage(role: 'assistant');
+    _flushTimer?.cancel();
+    _flushTimer = null;
     setState(() {
+      _animateFrom = _messages.length < _animateFrom ? _messages.length : _animateFrom;
       _messages.add(ChatMessage(role: 'user', text: text));
       _messages.add(reply);
       _input.clear();
     });
-    _toBottom();
+    _follow(force: true);
 
     final history = [
       for (final m in _messages.sublist(0, _messages.length - 1))
@@ -194,7 +272,8 @@ class _AskScreenState extends State<AskScreen> {
         .send(history, chatId: _chatId)
         .listen(
           (e) {
-            setState(() {
+            // Apply the event to the reply now; redraw it at most every _flushEvery.
+            {
               switch (e['type']) {
                 case 'text':
                   reply.text += e['delta'] as String;
@@ -230,18 +309,28 @@ class _AskScreenState extends State<AskScreen> {
                   profileChanged.value++;
                 case 'action':
                   if (!reply.actions.contains(e['action'])) reply.actions.add(e['action'] as String);
+                case 'courses':
+                  reply.courses = [for (final c in (e['items'] as List? ?? const [])) (c as Map).cast<String, dynamic>()];
                 case 'error':
                   reply.error = e['message'] as String;
               }
-            });
-            _toBottom();
+            }
+            _scheduleFlush();
           },
-          onError: (Object err) => setState(() {
-            reply.error = err.toString();
-            _sub = null;
-          }),
+          onError: (Object err) {
+            if (!mounted) return;
+            setState(() {
+              reply.error = err.toString();
+              _sub = null;
+            });
+            _follow();
+          },
           onDone: () {
+            _flushTimer?.cancel();
+            _flushTimer = null;
+            if (!mounted) return;
             setState(() => _sub = null);
+            _follow();
             _save();
           },
           cancelOnError: true,
@@ -262,69 +351,118 @@ class _AskScreenState extends State<AskScreen> {
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 720),
-              child: CustomScrollView(
-                controller: _scroll,
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    sliver: SliverToBoxAdapter(
-                      child: PageHeader(
-                        title: 'Ask',
-                        subtitle: 'Answers from the law itself, with sources',
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Pressable(
-                              onTap: () => context.push('/ask/history'),
-                              child: Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(15)),
-                                child: const Icon(LucideIcons.history, size: 14, color: AppColors.fg),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomScrollView(
+                      controller: _scroll,
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          sliver: SliverToBoxAdapter(
+                            child: PageHeader(
+                              title: 'Ask',
+                              subtitle: 'Answers from the law itself, with sources',
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Pressable(
+                                    onTap: () => context.push('/ask/history'),
+                                    child: Container(
+                                      width: 30,
+                                      height: 30,
+                                      decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(15)),
+                                      child: const Icon(LucideIcons.history, size: 14, color: AppColors.fg),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Pressable(
+                                    onTap: _newChat,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(16)),
+                                      child: const Row(
+                                        children: [
+                                          Icon(LucideIcons.plus, size: 12, color: AppColors.fg),
+                                          SizedBox(width: 4),
+                                          Text('New', style: TextStyle(fontSize: 11.5, color: AppColors.fg)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            Pressable(
-                              onTap: _newChat,
+                          ),
+                        ),
+                        if (_messages.isEmpty)
+                          SliverPadding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            sliver: SliverToBoxAdapter(child: _empty()),
+                          )
+                        else
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                            sliver: SliverList.separated(
+                              itemCount: _messages.length,
+                              separatorBuilder: (_, _) => const SizedBox(height: 14),
+                              itemBuilder: (context, i) {
+                                final m = _messages[i];
+                                final streaming = _busy && i == _messages.length - 1;
+                                Widget child = m.role == 'user'
+                                    ? _UserBubble(m.text)
+                                    : streaming
+                                    // Only the streaming reply listens to updates.
+                                    ? ValueListenableBuilder<int>(
+                                        valueListenable: _live,
+                                        builder: (context, _, _) => _AssistantTurn(m, streaming: true),
+                                      )
+                                    : _AssistantTurn(m, streaming: false);
+                                child = RepaintBoundary(child: child);
+                                if (i < _animateFrom) return child;
+                                return child.animate(key: ValueKey('msg-$i')).fadeIn(duration: Motion.medium, curve: Motion.ease);
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 8,
+                    left: 0,
+                    right: 0,
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _showJump,
+                      builder: (context, show, _) => IgnorePointer(
+                        ignoring: !show,
+                        child: AnimatedOpacity(
+                          opacity: show ? 1 : 0,
+                          duration: Motion.fast,
+                          child: Center(
+                            child: Pressable(
+                              onTap: () => _follow(force: true),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(16)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: AppColors.raised,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppColors.border),
+                                ),
                                 child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(LucideIcons.plus, size: 12, color: AppColors.fg),
-                                    SizedBox(width: 4),
-                                    Text('New', style: TextStyle(fontSize: 11.5, color: AppColors.fg)),
+                                    Icon(LucideIcons.arrowDown, size: 13, color: AppColors.fg),
+                                    SizedBox(width: 5),
+                                    Text('Jump to latest', style: TextStyle(fontSize: 11.5, color: AppColors.fg)),
                                   ],
                                 ),
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  if (_messages.isEmpty)
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      sliver: SliverToBoxAdapter(child: _empty()),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      sliver: SliverList.separated(
-                        itemCount: _messages.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 14),
-                        itemBuilder: (context, i) {
-                          final m = _messages[i];
-                          final streaming = _busy && i == _messages.length - 1;
-                          final child = m.role == 'user' ? _UserBubble(m.text) : _AssistantTurn(m, streaming: streaming);
-                          return child
-                              .animate(key: ValueKey('msg-$i'))
-                              .fadeIn(duration: Motion.medium, curve: Motion.ease)
-                              .slideY(begin: 0.08, end: 0, duration: Motion.slow, curve: Motion.ease);
-                        },
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -405,12 +543,24 @@ class _AssistantTurn extends StatelessWidget {
         if (m.reasoning.isNotEmpty) _Reasoning(m.reasoning, streaming: waiting),
         if (m.steps.isNotEmpty) _Steps(m.steps, working: waiting),
         if (waiting && m.steps.isEmpty) const Padding(padding: EdgeInsets.only(bottom: 6), child: ShimmerText('Reading the law…')),
-        if (m.text.isNotEmpty)
-          AnimatedSize(
-            duration: Motion.fast,
-            alignment: Alignment.topLeft,
-            child: GptMarkdown(m.text, style: AppText.body, onLinkTap: (url, _) => launchUrl(Uri.parse(url))),
-          ),
+        if (m.text.isNotEmpty) GptMarkdown(_readable(m.text), style: AppText.body, onLinkTap: (url, _) => launchUrl(Uri.parse(url))),
+        if (m.courses.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          for (final c in m.courses.take(6))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Builder(
+                builder: (context) {
+                  final course = CourseSummary.fromJson(c);
+                  return CourseCard(
+                    course: course,
+                    compact: true,
+                    onTap: course.courseCode.isEmpty ? null : () => context.push('/study/course/${course.courseCode}'),
+                  );
+                },
+              ),
+            ),
+        ],
         if (m.error != null)
           Container(
             margin: const EdgeInsets.only(top: 6),
@@ -793,7 +943,7 @@ class _SourcesState extends State<_Sources> {
   }
 }
 
-class _Composer extends StatelessWidget {
+class _Composer extends StatefulWidget {
   const _Composer({required this.controller, required this.focus, required this.busy, required this.onSend, required this.onStop});
   final TextEditingController controller;
   final FocusNode focus;
@@ -802,11 +952,44 @@ class _Composer extends StatelessWidget {
   final VoidCallback onStop;
 
   @override
+  State<_Composer> createState() => _ComposerState();
+}
+
+class _ComposerState extends State<_Composer> {
+  String _previous = '';
+  bool _shiftNewline = false;
+
+  /// Phone keyboards' Return key types a line break into the field instead of submitting it. One
+  /// typed line break (not a paste, not Shift+Enter) sends the message instead.
+  void _changed(String text) {
+    final before = _previous;
+    _previous = text;
+    if (_shiftNewline) {
+      _shiftNewline = false;
+      return;
+    }
+    if (text.length != before.length + 1) return;
+    final at = widget.controller.selection.isValid ? widget.controller.selection.baseOffset - 1 : text.length - 1;
+    if (at < 0 || at >= text.length || text[at] != '\n') return;
+    final message = text.replaceRange(at, at + 1, '');
+    if (message.trim().isEmpty) {
+      widget.controller.value = TextEditingValue(
+        text: message,
+        selection: TextSelection.collapsed(offset: at),
+      );
+      _previous = message;
+      return;
+    }
+    _previous = '';
+    widget.onSend(message);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final narrow = MediaQuery.sizeOf(context).width < 860;
+    final controller = widget.controller;
     return Padding(
-      // leave room for the floating tab bar on phones
-      padding: EdgeInsets.fromLTRB(12, 6, 12, narrow ? 84 : 14),
+      padding: EdgeInsets.fromLTRB(12, 6, 12, narrow ? 8 : 14),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
@@ -816,25 +999,31 @@ class _Composer extends StatelessWidget {
               color: AppColors.card,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
-              boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 8))],
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  // Enter sends (the keyboard's send key on phones); Shift+Enter adds a line.
+                  // Enter (the keyboard's send/return key on phones) sends; Shift+Enter adds a line.
                   child: CallbackShortcuts(
-                    bindings: {const SingleActivator(LogicalKeyboardKey.enter, shift: true): () => _newLine(controller)},
+                    bindings: {
+                      const SingleActivator(LogicalKeyboardKey.enter, shift: true): () {
+                        _shiftNewline = true;
+                        _newLine(controller);
+                        _previous = controller.text;
+                      },
+                    },
                     child: TextField(
                       controller: controller,
-                      focusNode: focus,
+                      focusNode: widget.focus,
                       minLines: 1,
                       maxLines: 6,
                       keyboardType: TextInputType.multiline,
                       textInputAction: TextInputAction.send,
+                      onChanged: _changed,
                       onSubmitted: (text) {
-                        onSend(text);
-                        focus.requestFocus();
+                        widget.onSend(text);
+                        widget.focus.requestFocus();
                       },
                       style: AppText.body,
                       cursorColor: AppColors.fg,
@@ -853,27 +1042,21 @@ class _Composer extends StatelessWidget {
                 ListenableBuilder(
                   listenable: controller,
                   builder: (context, _) {
+                    final busy = widget.busy;
                     final canSend = controller.text.trim().isNotEmpty;
                     final stopping = busy && !canSend;
                     return Pressable(
                       scale: 0.88,
-                      onTap: canSend ? () => onSend(controller.text) : (busy ? onStop : null),
-                      child: AnimatedContainer(
-                        duration: Motion.medium,
-                        curve: Motion.ease,
+                      onTap: canSend ? () => widget.onSend(controller.text) : (busy ? widget.onStop : null),
+                      child: Container(
                         width: 32,
                         height: 32,
                         margin: const EdgeInsets.only(bottom: 2),
                         decoration: BoxDecoration(color: busy || canSend ? AppColors.fg : AppColors.raised, shape: BoxShape.circle),
-                        child: AnimatedSwitcher(
-                          duration: Motion.fast,
-                          transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
-                          child: Icon(
-                            stopping ? LucideIcons.square : LucideIcons.arrowUp,
-                            key: ValueKey(stopping),
-                            size: stopping ? 11 : 15,
-                            color: busy || canSend ? AppColors.bg : AppColors.muted,
-                          ),
+                        child: Icon(
+                          stopping ? LucideIcons.square : LucideIcons.arrowUp,
+                          size: stopping ? 11 : 15,
+                          color: busy || canSend ? AppColors.bg : AppColors.muted,
                         ),
                       ),
                     );
@@ -896,3 +1079,9 @@ void _newLine(TextEditingController c) {
     selection: TextSelection.collapsed(offset: sel.start + 1),
   );
 }
+
+/// Internal document ids the model sometimes cites in brackets ("[c14d0778-…]") mean nothing to the
+/// user: drop them. Source numbers like [3] stay.
+final _docIdCitation = RegExp(r'\s?\[(?:doc(?:ument)?[: ]\s*)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\]', caseSensitive: false);
+
+String _readable(String text) => text.contains('-') ? text.replaceAll(_docIdCitation, '') : text;

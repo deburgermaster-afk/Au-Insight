@@ -4,26 +4,34 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/quick_actions.dart';
+import '../data/safe_area.dart';
 import '../data/uploads.dart';
-import '../motion.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
+/// The tabs, in branch order (router.dart builds the branches in the same order).
 const _tabs = [
-  (LucideIcons.messageCircle, 'Ask'),
-  (LucideIcons.briefcase, 'Cases'),
-  (LucideIcons.folder, 'Docs'),
-  (LucideIcons.user, 'Profile'),
+  (LucideIcons.messageCircle, 'Ask', 'Ask'),
+  (LucideIcons.graduationCap, 'Study', 'Study'),
+  (LucideIcons.briefcaseBusiness, 'Jobs', 'Occupations'),
+  (LucideIcons.clipboardList, 'Cases', 'Cases'),
+  (LucideIcons.folder, 'Docs', 'Documents'),
+  (LucideIcons.user, 'Profile', 'Profile'),
 ];
+
+/// Branch index of each tab, for screens that switch tabs.
+abstract final class Tabs {
+  static const ask = 0, study = 1, jobs = 2, cases = 3, documents = 4, profile = 5;
+}
 
 /// Opens the tab an action belongs to, then tells that screen to act.
 void runQuickAction(void Function(int index) goBranch, QuickAction a) {
   // Open the file picker first, while still inside the tap; then show Documents for the progress.
   if (a == QuickAction.upload) uploads.pickAndUpload();
   goBranch(switch (a) {
-    QuickAction.newChat => 0,
-    QuickAction.caseFile => 3,
-    QuickAction.upload => 2,
+    QuickAction.newChat => Tabs.ask,
+    QuickAction.caseFile => Tabs.profile,
+    QuickAction.upload => Tabs.documents,
   });
   quickActions.value = QuickActionEvent(a);
 }
@@ -32,274 +40,98 @@ class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.shell});
   final StatefulNavigationShell shell;
 
+  // Tapping the open tab again takes it back to its first page.
   void _go(int i) => shell.goBranch(i, initialLocation: i == shell.currentIndex);
-
-  void _action(QuickAction a) => runQuickAction(shell.goBranch, a);
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 860;
     return Scaffold(
-      extendBody: true,
-      body: Row(
-        children: [
-          if (wide) _Rail(index: shell.currentIndex, onTap: _go),
-          Expanded(child: shell),
-        ],
-      ),
-      bottomNavigationBar: wide ? null : _PillBar(index: shell.currentIndex, onTap: _go, onAction: _action),
+      body: wide
+          ? Row(
+              children: [
+                _Rail(index: shell.currentIndex, onTap: _go),
+                Expanded(child: shell),
+              ],
+            )
+          : shell,
+      bottomNavigationBar: wide ? null : _TabBar(index: shell.currentIndex, onTap: _go),
     );
   }
 }
 
-/// Phone navigation: icon-only pill with a raised "pressed-in" active tab that
-/// slides between items, plus a separate round "+" button for quick actions.
-class _PillBar extends StatelessWidget {
-  const _PillBar({required this.index, required this.onTap, required this.onAction});
+/// Phone navigation: a plain docked bar, full width, every tab a large opaque target.
+/// No overlays, no floating layers, nothing animated per frame.
+class _TabBar extends StatelessWidget {
+  const _TabBar({required this.index, required this.onTap});
   final int index;
   final ValueChanged<int> onTap;
-  final ValueChanged<QuickAction> onAction;
-
-  static const _height = 54.0;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                height: _height,
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(_height / 2),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xF21D1D21), Color(0xF2151518)],
-                  ),
-                  border: Border.all(color: const Color(0x12FFFFFF)),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x80000000), blurRadius: 24, offset: Offset(0, 10)),
-                    BoxShadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
-                  ],
-                ),
-                child: LayoutBuilder(
-                  builder: (context, c) {
-                    final w = c.maxWidth / _tabs.length;
-                    return Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        // The raised active tab, sliding on a spring-like curve.
-                        AnimatedPositioned(
-                          duration: Motion.slow,
-                          curve: Motion.ease,
-                          left: w * index,
-                          width: w,
-                          top: 0,
-                          bottom: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(_height),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Color(0xFF34343A), Color(0xFF2A2A2F)],
-                              ),
-                              border: Border.all(color: const Color(0x1AFFFFFF)),
-                              boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 10, offset: Offset(0, 3))],
-                            ),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            for (final (i, t) in _tabs.indexed)
-                              Expanded(
-                                child: Semantics(
-                                  label: t.$2,
-                                  selected: i == index,
-                                  button: true,
-                                  child: Pressable(
-                                    scale: 0.88,
-                                    onTap: () => onTap(i),
-                                    child: Center(
-                                      child: AnimatedScale(
-                                        scale: i == index ? 1.08 : 1,
-                                        duration: Motion.medium,
-                                        curve: Motion.ease,
-                                        child: TweenAnimationBuilder<Color?>(
-                                          tween: ColorTween(end: i == index ? AppColors.fg : const Color(0xFF7A7A82)),
-                                          duration: Motion.medium,
-                                          builder: (_, col, _) => Icon(t.$1, size: 19, color: col),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
-                ),
+    return ValueListenableBuilder<EdgeInsets>(
+      valueListenable: safeAreaInsets,
+      builder: (context, insets, _) {
+        final bottom = [MediaQuery.viewPaddingOf(context).bottom, insets.bottom, 6.0].reduce((a, b) => a > b ? a : b);
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(top: BorderSide(color: AppColors.border)),
+          ),
+          child: Padding(
+            padding: EdgeInsets.only(bottom: bottom),
+            child: SizedBox(
+              height: 58,
+              child: Row(
+                children: [
+                  for (final (i, t) in _tabs.indexed)
+                    Expanded(
+                      child: _TabItem(icon: t.$1, label: t.$2, semantics: t.$3, active: i == index, onTap: () => onTap(i)),
+                    ),
+                ],
               ),
             ),
-            const SizedBox(width: 10),
-            _PlusButton(size: _height, onAction: onAction),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
-class _PlusButton extends StatefulWidget {
-  const _PlusButton({required this.size, required this.onAction});
-  final double size;
-  final ValueChanged<QuickAction> onAction;
-
-  @override
-  State<_PlusButton> createState() => _PlusButtonState();
-}
-
-class _PlusButtonState extends State<_PlusButton> {
-  final _overlay = OverlayPortalController();
-  final _link = LayerLink();
-  bool _open = false;
-
-  void _toggle() {
-    if (_open) return _close();
-    setState(() => _open = true);
-    _overlay.show();
-  }
-
-  void _close() {
-    if (!_open) return;
-    setState(() => _open = false);
-    // Hide once the menu has animated out, even if that animation never reports its end.
-    Future.delayed(Motion.slow, () {
-      if (mounted && !_open) _overlay.hide();
-    });
-  }
-
-  @override
-  void dispose() {
-    if (_overlay.isShowing) _overlay.hide();
-    super.dispose();
-  }
-
-  void _pick(QuickAction a) {
-    _close();
-    widget.onAction(a);
-  }
+class _TabItem extends StatelessWidget {
+  const _TabItem({required this.icon, required this.label, required this.semantics, required this.active, required this.onTap});
+  final IconData icon;
+  final String label;
+  final String semantics;
+  final bool active;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    const items = [
-      (QuickAction.newChat, LucideIcons.messageCirclePlus, 'New chat'),
-      (QuickAction.upload, LucideIcons.upload, 'Upload documents'),
-      (QuickAction.caseFile, LucideIcons.userPen, 'My profile'),
-    ];
-    return CompositedTransformTarget(
-      link: _link,
-      child: OverlayPortal(
-        controller: _overlay,
-        // While closing, the menu lets every tap through to the page and the tab bar.
-        overlayChildBuilder: (context) => IgnorePointer(
-          ignoring: !_open,
-          child: Stack(
-            children: [
-              // Dim the page; tap anywhere to close.
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: _close,
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: _open ? 1 : 0),
-                    duration: Motion.medium,
-                    curve: Motion.ease,
-                    builder: (_, t, _) => ColoredBox(color: Colors.black.withValues(alpha: 0.45 * t)),
-                  ),
-                ),
-              ),
-              CompositedTransformFollower(
-                link: _link,
-                targetAnchor: Alignment.topRight,
-                followerAnchor: Alignment.bottomRight,
-                offset: const Offset(0, -12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    for (final (i, it) in items.indexed)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: AnimatedSlide(
-                          offset: _open ? Offset.zero : const Offset(0, 0.4),
-                          duration: Duration(milliseconds: 260 + (items.length - i) * 40),
-                          curve: Motion.ease,
-                          child: AnimatedOpacity(
-                            opacity: _open ? 1 : 0,
-                            duration: Duration(milliseconds: 160 + (items.length - i) * 40),
-                            child: Pressable(
-                              onTap: () => _pick(it.$1),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: AppColors.raised,
-                                  borderRadius: BorderRadius.circular(22),
-                                  border: Border.all(color: const Color(0x14FFFFFF)),
-                                  boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 16, offset: Offset(0, 6))],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(it.$2, size: 15, color: AppColors.fg),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      it.$3,
-                                      style: AppText.small.copyWith(color: AppColors.fg, fontWeight: FontWeight.w500),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        child: Pressable(
-          scale: 0.9,
-          onTap: _toggle,
-          child: Container(
-            width: widget.size,
-            height: widget.size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFF4F4F5), Color(0xFFD4D4D8)],
-              ),
-              border: Border.all(color: const Color(0x33FFFFFF)),
-              boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 20, offset: Offset(0, 8))],
+    final color = active ? AppColors.fg : AppColors.muted;
+    return Semantics(
+      label: semantics,
+      selected: active,
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 44,
+              height: 26,
+              decoration: BoxDecoration(color: active ? AppColors.raised : Colors.transparent, borderRadius: BorderRadius.circular(13)),
+              child: Icon(icon, size: 17, color: color),
             ),
-            child: AnimatedRotation(
-              turns: _open ? 0.125 : 0,
-              duration: Motion.medium,
-              curve: Motion.ease,
-              child: const Icon(LucideIcons.plus, size: 22, color: AppColors.bg),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(fontSize: 10, height: 1.1, color: color, fontWeight: active ? FontWeight.w600 : FontWeight.w400),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -339,49 +171,29 @@ class _Rail extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
-          SizedBox(
-            height: 34.0 * _tabs.length,
-            child: Stack(
-              children: [
-                AnimatedPositioned(
-                  duration: Motion.slow,
-                  curve: Motion.ease,
-                  top: 34.0 * index,
-                  left: 0,
-                  right: 0,
-                  height: 32,
-                  child: Container(
-                    decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(9)),
+          for (final (i, t) in _tabs.indexed)
+            SizedBox(
+              height: 34,
+              child: Pressable(
+                scale: 0.97,
+                onTap: () => onTap(i),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  margin: const EdgeInsets.only(bottom: 2),
+                  decoration: BoxDecoration(
+                    color: i == index ? AppColors.raised : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(t.$1, size: 14, color: i == index ? AppColors.fg : AppColors.muted),
+                      const SizedBox(width: 9),
+                      Text(t.$3, style: AppText.body.copyWith(fontSize: 12.5, color: i == index ? AppColors.fg : AppColors.muted)),
+                    ],
                   ),
                 ),
-                Column(
-                  children: [
-                    for (final (i, t) in _tabs.indexed)
-                      SizedBox(
-                        height: 34,
-                        child: Pressable(
-                          scale: 0.97,
-                          onTap: () => onTap(i),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            child: Row(
-                              children: [
-                                Icon(t.$1, size: 14, color: i == index ? AppColors.fg : AppColors.muted),
-                                const SizedBox(width: 9),
-                                Text(
-                                  t.$2 == 'Docs' ? 'Documents' : t.$2,
-                                  style: AppText.body.copyWith(fontSize: 12.5, color: i == index ? AppColors.fg : AppColors.muted),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
