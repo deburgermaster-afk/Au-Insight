@@ -74,6 +74,21 @@ class _RoundsScreenState extends State<RoundsScreen> {
                 style: AppText.tiny,
               ),
             ),
+            for (final sub in ['189', '491'])
+              for (final (year, months) in monthlyInvited(o.rounds, sub).take(sub == '189' ? 3 : 2))
+                if (months.values.any((v) => v > 0)) ...[
+                  SectionLabel(
+                    'Invitations by month · $year · ${sub == '189' ? 'subclass 189' : '491 family sponsored'}',
+                    trailing: Text(
+                      formatCount(months.values.fold<int>(0, (a, b) => a + b)),
+                      style: AppText.tiny.copyWith(color: AppColors.fg),
+                    ),
+                  ),
+                  Panel(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+                    child: MonthBars(months: months),
+                  ),
+                ],
             const SectionLabel('Rounds'),
             if (o.rounds.isEmpty)
               Text('No rounds imported yet.', style: AppText.small)

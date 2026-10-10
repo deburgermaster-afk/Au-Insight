@@ -50,7 +50,7 @@ class _OccupationsHomeScreenState extends State<OccupationsHomeScreen> {
     _scroll.addListener(_onScroll);
     _search();
     _loadEasy();
-    latestRounds(limit: 6).then(
+    allRounds().then(
       (r) {
         if (mounted) setState(() => _rounds = r);
       },
@@ -382,6 +382,15 @@ class _RoundsCard extends StatelessWidget {
                       Expanded(child: Stat(r.invited == null ? '–' : formatCount(r.invited!), 'Invited · ${r.subclass}')),
                   ],
                 ),
+              if (o != null && roundYears(o.rounds, '189').isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '${roundYears(o.rounds, '189').first.year} program year: '
+                  '${formatCount(roundYears(o.rounds, '189').first.invited)} invited for 189'
+                  '${roundYears(o.rounds, '491').isNotEmpty && roundYears(o.rounds, '491').first.year == roundYears(o.rounds, '189').first.year ? ' · ${formatCount(roundYears(o.rounds, '491').first.invited)} for 491 family sponsored' : ''}',
+                  style: AppText.small,
+                ),
+              ],
               if (o?.nextRound != null) ...[
                 const SizedBox(height: 10),
                 Tag('Next round ${formatDay(o!.nextRound!)}', icon: LucideIcons.clock, color: AppColors.brand),

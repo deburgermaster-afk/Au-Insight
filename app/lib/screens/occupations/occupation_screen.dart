@@ -222,7 +222,15 @@ class _OccupationScreenState extends State<OccupationScreen> {
                   ],
               ],
               for (final r in (_allRounds ? o.rounds : o.rounds.take(8)))
-                KeyValue(formatDay(r.date), r.minPoints == null ? 'Invited' : '${r.minPoints} points', hint: 'Subclass ${r.subclass}'),
+                KeyValue(
+                  formatDay(r.date),
+                  r.minPoints == null ? 'Invited' : '${r.minPoints} points',
+                  hint: [
+                    'Subclass ${r.subclass}',
+                    if (_published != null && roundTotal(_published!.rounds, r.date, r.subclass) != null)
+                      '${formatCount(roundTotal(_published!.rounds, r.date, r.subclass)!)} invited in the round',
+                  ].join(' · '),
+                ),
               if (o.rounds.length > 8)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),

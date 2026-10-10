@@ -203,11 +203,21 @@ class YearTrendTable extends StatelessWidget {
               children: [
                 SizedBox(width: 62, child: Text(r.year, style: AppText.body.copyWith(fontSize: 12.5))),
                 Expanded(
-                  child: Text(
-                    r.invitedIn == 0
-                        ? (r.roundsHeld == 0 ? 'No rounds' : 'Not invited (${plural(r.roundsHeld, 'round')})')
-                        : 'Invited in ${r.invitedIn} of ${r.roundsHeld < r.invitedIn ? r.invitedIn : r.roundsHeld}',
-                    style: AppText.small.copyWith(color: r.invitedIn == 0 ? AppColors.faint : null),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        r.invitedIn == 0
+                            ? (r.roundsHeld == 0 ? 'No rounds' : 'Not invited (${plural(r.roundsHeld, 'round')})')
+                            : 'Invited in ${r.invitedIn} of ${r.roundsHeld < r.invitedIn ? r.invitedIn : r.roundsHeld}',
+                        style: AppText.small.copyWith(color: r.invitedIn == 0 ? AppColors.faint : null),
+                      ),
+                      if (r.totalInvited > 0)
+                        Text(
+                          '${formatCount(r.totalInvited)} invited that year, all occupations',
+                          style: AppText.tiny.copyWith(fontSize: 9.5),
+                        ),
+                    ],
                   ),
                 ),
                 Text(
@@ -337,4 +347,51 @@ class SuggestionList extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Official invitations by month across one program year (July to June), as bars with the count above.
+class MonthBars extends StatelessWidget {
+  const MonthBars({super.key, required this.months, this.height = 54});
+  final Map<int, int> months; // 1 = January
+  final double height;
+
+  static const _order = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
+  static const _labels = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+
+  String _short(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}k' : '$n';
+
+  @override
+  Widget build(BuildContext context) {
+    final top = months.values.fold<int>(0, (a, b) => b > a ? b : a);
+    return SizedBox(
+      height: height + 30,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          for (final m in _order)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text((months[m] ?? 0) == 0 ? '' : _short(months[m]!), style: AppText.tiny.copyWith(fontSize: 8.5, color: AppColors.fg)),
+                    const SizedBox(height: 2),
+                    Container(
+                      height: top == 0 || (months[m] ?? 0) == 0 ? 2 : 4 + (height - 4) * months[m]! / top,
+                      decoration: BoxDecoration(
+                        color: (months[m] ?? 0) == 0 ? AppColors.raised : AppColors.brand,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(_labels[m - 1], style: AppText.tiny.copyWith(fontSize: 8.5)),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

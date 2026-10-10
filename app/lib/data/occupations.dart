@@ -514,6 +514,7 @@ class YearTrend {
     this.highest,
     this.trend = Trend.none,
     this.change,
+    this.totalInvited = 0,
   });
   final String year;
   final int invitedIn; // rounds that invited this occupation
@@ -522,14 +523,19 @@ class YearTrend {
   final int? highest;
   final Trend trend; // lowest points against the previous year it was invited: up = harder
   final int? change;
+  final int totalInvited; // invitations for the subclass that year, all occupations (official round totals)
 }
 
 /// Year-by-year invitations for one occupation and subclass, newest year first, from its rounds and every
 /// published round.
 List<YearTrend> yearTrends(List<RoundEntry> rounds, List<InvitationRound> published, String subclass) {
   final held = <String, int>{};
+  final total = <String, int>{};
   for (final r in published) {
-    if (r.subclass == subclass && (r.invited ?? 0) > 0) held[programYear(r.date)] = (held[programYear(r.date)] ?? 0) + 1;
+    if (r.subclass != subclass || (r.invited ?? 0) <= 0) continue;
+    final y = programYear(r.date);
+    held[y] = (held[y] ?? 0) + 1;
+    total[y] = (total[y] ?? 0) + r.invited!;
   }
   final mine = <String, List<RoundEntry>>{};
   for (final r in rounds) {
@@ -558,6 +564,7 @@ List<YearTrend> yearTrends(List<RoundEntry> rounds, List<InvitationRound> publis
         highest: hi,
         trend: trend,
         change: change,
+        totalInvited: total[y] ?? 0,
       ),
     );
   }
@@ -617,4 +624,24 @@ List<RoundYear> roundYears(List<InvitationRound> published, String subclass) {
     );
   }
   return out.reversed.toList();
+}
+
+/// Official invitations by month (1 = January) for each program year, newest year first, from the round totals.
+List<(String, Map<int, int>)> monthlyInvited(List<InvitationRound> published, String subclass) {
+  final out = <String, Map<int, int>>{};
+  for (final r in published) {
+    if (r.subclass != subclass) continue;
+    final m = out.putIfAbsent(programYear(r.date), () => {});
+    m[r.date.month] = (m[r.date.month] ?? 0) + (r.invited ?? 0);
+  }
+  final years = out.keys.toList()..sort((a, b) => b.compareTo(a));
+  return [for (final y in years) (y, out[y]!)];
+}
+
+/// The total invited in a round (all occupations), or null when the round isn't known.
+int? roundTotal(List<InvitationRound> published, DateTime date, String subclass) {
+  for (final r in published) {
+    if (r.subclass == subclass && r.date == date) return r.invited;
+  }
+  return null;
 }
