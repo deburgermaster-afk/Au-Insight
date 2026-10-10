@@ -52,6 +52,10 @@ try:  # skilled occupation list and SkillSelect rounds (worker/occupations.py); 
     import occupations
 except ImportError:  # pragma: no cover
     occupations = None
+try:  # Home Affairs visa and citizenship processing times (worker/processing_times.py)
+    import processing_times
+except ImportError:  # pragma: no cover
+    processing_times = None
 
 # The browser keeps its own user agent: a custom one that disagrees with its other
 # headers gets flagged by bot protection (Akamai on Home Affairs).
@@ -531,9 +535,9 @@ class Worker:
             pass
 
     async def refresh_data(self) -> None:
-        """Imports the CRICOS register, and the occupation list and SkillSelect rounds, when their last
-        import is stale (each module decides). Cheap when nothing is due."""
-        for name, module in (("cricos", cricos), ("occupations", occupations)):
+        """Imports the CRICOS register, the occupation list and SkillSelect rounds, and the visa processing
+        times when their last import is stale (each module decides). Cheap when nothing is due."""
+        for name, module in (("cricos", cricos), ("occupations", occupations), ("processing_times", processing_times)):
             if module is None:
                 continue
             try:
