@@ -277,7 +277,7 @@ const coreDefs = [
     function: {
       name: "consult_analysts",
       description:
-        "Ask five specialist analysts to work on the user's situation in parallel: visa pathways, points and eligibility, documents and evidence, timeline and status, study and university. Use for open questions about their options, plans or best way forward. Returns each analyst's report; you then write one answer from them.",
+        "Ask five specialist analysts to work on the user's question in parallel: pathways and alternatives (the creative strategist), points and eligibility, documents and evidence, timeline, study and university. Use for open questions about their options, alternatives, plans or best way forward; put the user's framing in the question (e.g. \"as a second course\", \"ignoring the current course\"). Returns each analyst's report; you then write one answer from them.",
       parameters: {
         type: "object",
         properties: {
@@ -944,7 +944,7 @@ export async function runAgent(
   messages: Msg[],
   emit: Emit,
   signal: AbortSignal,
-  options: { chatId?: string; documents?: string; startedAt?: number } = {},
+  options: { chatId?: string; documents?: string; startedAt?: number; guidance?: string } = {},
 ) {
   const started = options.startedAt ?? Date.now();
   const turnEnds = started + TURN_BUDGET_MS;
@@ -986,7 +986,7 @@ export async function runAgent(
           } else emit(e);
         };
         const thread: Msg[] = [
-          { role: "system", content: analystPrompt(a, todayISO()) },
+          { role: "system", content: analystPrompt(a, todayISO(), options.guidance) },
           {
             role: "user",
             content: `Question: ${question}\n\nThis user's case file (profile, story, dates):\n${caseFile}\n\n` +

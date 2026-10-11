@@ -58,6 +58,19 @@ function personOf(row: { title?: string; relation?: string } | null): UserContex
   return { name, relation: row?.relation?.trim() ?? "" };
 }
 
+/** Extra instructions kept in the database (assistant_guidance), so the assistant can be tuned without a
+ * deploy. "lead" goes to the main agent, "analysts" to the analyst team, "all" to both. */
+async function guidanceFor(supabase: SupabaseClient): Promise<{ lead: string; analysts: string }> {
+  const { data, error } = await supabase.from("assistant_guidance").select("applies_to, body").eq("enabled", true)
+    .order("key");
+  if (error || !Array.isArray(data)) return { lead: "", analysts: "" };
+  const pick = (who: string) =>
+    data.filter((g) => g.applies_to === who || g.applies_to === "all").map((g) => String(g.body).trim()).filter(
+      Boolean,
+    ).join("\n");
+  return { lead: pick("lead"), analysts: pick("analysts") };
+}
+
 /** The recent official changes most relevant to the user, one line each, for the system prompt. */
 async function changesDigest(supabase: SupabaseClient, query: string): Promise<string> {
   if (!query) return "";
@@ -158,16 +171,18 @@ Deno.serve(async (req) => {
         }
         // Every document is read before the agent starts, and all of them go into its context.
         const last = [...history].reverse().find((m: { role?: string }) => m.role === "user");
-        const [documents, changes] = await Promise.all([
+        const [documents, changes, guidance] = await Promise.all([
           prepareDocuments(supabase, llm, emit),
           changesDigest(supabase, changesQuery(user.profile, typeof last?.content === "string" ? last.content : ""))
             .catch(() => ""),
+          guidanceFor(supabase).catch(() => ({ lead: "", analysts: "" })),
         ]);
-        messages[0] = { role: "system", content: systemPrompt(todayISO(), user, documents, changes) };
+        messages[0] = { role: "system", content: systemPrompt(todayISO(), user, documents, changes, guidance.lead) };
         await runAgent(llm, supabase, messages, emit, req.signal, {
           chatId: typeof body.chatId === "string" ? body.chatId : undefined,
           documents,
           startedAt,
+          guidance: guidance.analysts,
         });
       } catch (e) {
         emit({ type: "error", message: e instanceof Error ? e.message : String(e) });
