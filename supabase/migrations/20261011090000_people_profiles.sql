@@ -2,7 +2,8 @@
 -- friend you help). Each person is a row in `cases` (facts, story, structured profile); their
 -- chats, documents, folders, plans (solutions), shortlisted courses and assessments carry its id.
 --
--- The app and the chat function say which person is open with the `x-case-id` request header.
+-- The app says which person is open with the `x-case-id` request header, and remembers it with
+-- open_person() so requests without the header (the chat function's) use the same person.
 -- Row-level security then shows only that person's rows, and new rows default to that person,
 -- so every existing query (and the chat agent's tools) works on the selected person unchanged.
 -- Without the header (older app builds, older chat function) everything is the first person,
@@ -16,11 +17,17 @@ returns uuid language sql stable set search_path = '' as $$
   from (select nullif(current_setting('request.headers', true), '')::json ->> 'x-case-id' as h) x
 $$;
 
--- The person the request is about: the one named in the header if it's the caller's, else their first.
+-- The person last opened in the app (set by open_person), for requests that don't send the header.
+alter table public.profiles add column if not exists active_case_id uuid references public.cases(id) on delete set null;
+
+-- The person the request is about: the one named in the header if it's the caller's, else the one
+-- they last opened, else their first.
 create or replace function public.active_case_id()
 returns uuid language sql stable security definer set search_path = '' as $$
   select coalesce(
     (select c.id from public.cases c where c.user_id = auth.uid() and c.id = private.request_case_id()),
+    (select c.id from public.profiles p join public.cases c on c.id = p.active_case_id and c.user_id = p.id
+      where p.id = auth.uid()),
     (select c.id from public.cases c where c.user_id = auth.uid() order by c.created_at, c.id limit 1)
   )
 $$;
@@ -114,6 +121,16 @@ language sql stable security definer set search_path = '' as $$
   order by c.created_at, c.id
 $$;
 
+-- Remembers who is open, so every request (the chat agent's included) works on them.
+create or replace function public.open_person(p_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not exists (select 1 from public.cases where id = p_id and user_id = auth.uid()) then
+    raise exception 'Person not found';
+  end if;
+  update public.profiles set active_case_id = p_id where id = auth.uid();
+end $$;
+
 create or replace function public.add_person(p_name text, p_relation text default '')
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare v uuid;
@@ -158,6 +175,7 @@ end $$;
 
 revoke execute on function private.request_case_id(), public.active_case_id(), public.owns_case(uuid),
   public.list_people(), public.add_person(text, text), public.update_person(uuid, text, text),
-  public.delete_person(uuid) from public, anon;
+  public.delete_person(uuid), public.open_person(uuid) from public, anon;
 grant execute on function public.active_case_id(), public.owns_case(uuid), public.list_people(),
-  public.add_person(text, text), public.update_person(uuid, text, text), public.delete_person(uuid) to authenticated;
+  public.add_person(text, text), public.update_person(uuid, text, text), public.delete_person(uuid),
+  public.open_person(uuid) to authenticated;

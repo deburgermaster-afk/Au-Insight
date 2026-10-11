@@ -12,6 +12,7 @@ import 'people.dart';
 Future<Map<String, dynamic>> callTool(String tool, [Map<String, dynamic> args = const {}]) async {
   final session = Supabase.instance.client.auth.currentSession;
   if (session == null) throw StateError('Not signed in');
+  await people.settled();
   final res = await http.post(
     Uri.parse(Config.chatUrl),
     headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ${session.accessToken}', 'apikey': Config.supabaseKey},

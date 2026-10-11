@@ -144,11 +144,19 @@ class People extends ChangeNotifier {
     await load();
   }
 
+  /// Completes when the server knows who is open (see [settled]).
+  Future<void> _opening = Future.value();
+
+  /// Waits until the server has recorded the open person. Requests that don't carry the header
+  /// (the chat function's own queries) go by that record, so the chat awaits this before sending.
+  Future<void> settled() => _opening;
+
   void _apply(String id, {required bool announce}) {
     activeId = id;
     _write(_storageKey, id);
     final client = Supabase.instance.client;
     client.headers = {...client.headers, 'x-case-id': id};
+    _opening = client.rpc('open_person', params: {'p_id': id}).then((_) {}, onError: (_) {});
     if (announce) {
       personChanged.value++;
       casesChanged.value++;

@@ -31,8 +31,8 @@ Australian migration decisions computed from the law itself. A Flutter web app (
 One account can keep several people's files apart: the account holder, a partner, a child, a friend or client they help. Each person is a row in `cases` (their facts, story and structured profile), and their chats, documents, folders, plans, shortlisted courses and assessments carry its `case_id`.
 
 - The header on every tab shows who is open; tap it to switch, add, rename or delete a person. Documents and Profile also show everyone as chips, with **Add person**.
-- The app sends the open person's id in the `x-case-id` request header (and as `caseId` to the chat function). Row-level security (`20261011090000_people_profiles.sql`) then shows only that person's rows and files new rows under them, so every screen and every agent tool works on the selected person unchanged. Without the header (older builds) everything is the first person, which is what the account held before.
-- The app switches the feature on by itself once `list_people()` exists. Deploy the `chat` function first, then apply the migration.
+- The app sends the open person's id in the `x-case-id` request header and records it with `open_person()`. Row-level security (`20261011090000_people_profiles.sql`) then shows only that person's rows and files new rows under them, so every screen and every agent tool works on the selected person unchanged. Requests without the header (the chat function's own queries) use the recorded person; with nothing recorded, the first person, which is what the account held before.
+- The app switches the feature on by itself once `list_people()` exists.
 
 ## How a decision is made
 

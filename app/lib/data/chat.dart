@@ -137,6 +137,7 @@ class ChatClient {
   Stream<Map<String, dynamic>> send(List<ChatMessage> history, {String? chatId}) async* {
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) throw StateError('Not signed in');
+    await people.settled();
     final req = http.Request('POST', Uri.parse(Config.chatUrl))
       ..headers.addAll({'Content-Type': 'application/json', 'Authorization': 'Bearer ${session.accessToken}', 'apikey': Config.supabaseKey})
       ..body = jsonEncode({
