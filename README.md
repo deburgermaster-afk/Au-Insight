@@ -133,6 +133,14 @@ The Vercel project `au-insight` (team Xerox) is linked to this repo with root di
 - `vercel.json` also adds the single-page-app fallback, cross-origin isolation (lets the WebAssembly renderer use threads) and long-lived asset caching.
 - `.github/workflows/deploy-web.yml` is an optional alternative that builds in GitHub Actions.
 
+### Deploying the chat function from a commit
+
+The repository is public, so the `chat` function can be deployed straight from a pushed commit: deploy an
+`index.ts` that only imports `https://raw.githubusercontent.com/deburgermaster-afk/Au-Insight/<full sha>/supabase/functions/chat/index.ts`,
+next to a `deno.json` with the same `imports` as `supabase/functions/deno.json` (without `vitest`). Supabase fetches and
+bundles that commit's source at deploy time, so what runs is exactly what's in git. Behaviour tweaks that don't need code
+go in the `assistant_guidance` table (`lead`, `analysts` or `all`), read on every chat.
+
 ## Tests
 - `app/`: `flutter analyze && flutter test` (16 engine tests).
 - `supabase/functions/`: `deno test --allow-net`. This runs the engine tests, plus agent-loop tests against a fake model (streamed tool calls, model fallback).
