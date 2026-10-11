@@ -1,0 +1,20 @@
+{
+  "name": "immi-insight-mobile",
+  "private": true,
+  "description": "iOS and Android shells for Immi Insight: the live app, full screen, without browser bars or the keyboard's form toolbar.",
+  "scripts": {
+    "sync": "cap sync",
+    "ios": "cap open ios",
+    "android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/keyboard": "8.0.6",
+    "@capacitor/status-bar": "8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

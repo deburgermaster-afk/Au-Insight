@@ -1,0 +1,29 @@
+{
+  "appId": "app.immiinsight",
+  "appName": "Immi Insight",
+  "webDir": "www",
+  "server": {
+    "url": "https://au-insight.vercel.app",
+    "allowNavigation": ["au-insight.vercel.app", "*.supabase.co"]
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0B0B0C",
+    "scrollEnabled": false
+  },
+  "android": {
+    "backgroundColor": "#0B0B0C"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "native",
+      "style": "DARK",
+      "resizeOnFullScreen": true
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK",
+      "backgroundColor": "#00000000"
+    }
+  }
+}
