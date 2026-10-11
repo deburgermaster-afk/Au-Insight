@@ -68,6 +68,27 @@ export const features: { group: string; items: Feature[] }[] = [
     ],
   },
   {
+    group: "Occupations & SkillSelect",
+    items: [
+      ...live(
+        "Search all 714 listed ANZSCO occupations by code or title",
+        "Filter occupations by MLTSSL, STSOL, ROL and CSOL",
+        "Visa options matrix per occupation, with caveats",
+        "Shortage rating by state (Occupation Shortage List)",
+        "State and territory nomination counts for the program year",
+        "SkillSelect EOI backlog by points for 189, 190 and 491",
+        "Submitted, invited, lodged, on-hold and closed EOI views",
+        "Monthly EOI trend for each subclass",
+        "Client's points: how many submitted EOIs sit at or above them",
+        "Invitation cut-off history and chart",
+        "Assessing authority fees, processing time and validity",
+        "ANZSCO 2013 and 2022 codes with ABS links",
+        "Labour market profile and employment projection",
+      ),
+      ...next("Link an occupation to a client and track their rank monthly", "Alerts when a cut-off drops below a client's points"),
+    ],
+  },
+  {
     group: "Mailbox",
     items: [
       ...live("Agency inbox", "Sent, archive and starred folders", "Compose and send email", "Messages filed to clients", "Read / unread state", "Sending through Resend from your agency domain"),

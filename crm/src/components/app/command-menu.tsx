@@ -4,7 +4,7 @@ import { CalendarPlus, FilePlus2, Moon, Search, Sun, UserPlus } from "lucide-rea
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from "@/components/ui/command";
+import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
 import { visas } from "@/lib/visas";
 import { nav } from "./nav";
@@ -43,6 +43,7 @@ export function CommandMenu() {
         <Kbd className="bg-transparent text-[11px] group-data-[collapsible=icon]:hidden">⌘K</Kbd>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen} title="Search Lodgely">
+        <Command className="rounded-xl">
         <CommandInput placeholder="Type a page, an action or a visa subclass…" />
         <CommandList>
           <CommandEmpty>Nothing found.</CommandEmpty>
@@ -82,6 +83,7 @@ export function CommandMenu() {
             </CommandItem>
           </CommandGroup>
         </CommandList>
+        </Command>
       </CommandDialog>
     </>
   );

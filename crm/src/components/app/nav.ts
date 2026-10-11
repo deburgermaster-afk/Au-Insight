@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   ScrollText,
+  SearchCheck,
   Settings,
   Sparkles,
   UsersRound,
@@ -41,6 +42,7 @@ export const nav: { label: string; items: NavItem[] }[] = [
   {
     label: "Knowledge",
     items: [
+      { title: "Occupations", href: "/app/occupations", icon: SearchCheck, keywords: "anzsco eoi skillselect invitations backlog points" },
       { title: "Visa library", href: "/app/visas", icon: BookOpenCheck, keywords: "subclass checklist requirements" },
       { title: "Features", href: "/app/features", icon: Sparkles, keywords: "roadmap" },
     ],
