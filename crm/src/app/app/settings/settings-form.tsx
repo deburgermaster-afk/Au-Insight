@@ -9,6 +9,8 @@ import { Row, SelectField, TextField } from "@/components/forms/fields";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CompareTable, PlanCards } from "@/components/app/plans";
 import { saveAgencyProfile } from "@/lib/actions";
 
 type P = {
@@ -29,7 +31,22 @@ export function SettingsForm({ profile, slug, mailDomain }: { profile: P; slug: 
   const [pending, start] = useTransition();
   const { theme, setTheme } = useTheme();
   return (
-    <div className="grid gap-6">
+    <Tabs defaultValue="agency" className="gap-5">
+      <TabsList>
+        <TabsTrigger value="agency">Agency</TabsTrigger>
+        <TabsTrigger value="plans">Plans</TabsTrigger>
+        <TabsTrigger value="email">Email</TabsTrigger>
+        <TabsTrigger value="appearance">Appearance</TabsTrigger>
+      </TabsList>
+      <TabsContent value="plans" className="grid gap-8">
+        <PlanCards />
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Compare features by plan</h2>
+          <p className="mb-3 text-[13px] text-muted-foreground">Everything is unlocked during the beta.</p>
+          <CompareTable />
+        </div>
+      </TabsContent>
+      <TabsContent value="agency" className="max-w-3xl">
       <form
         className="grid gap-6"
         onSubmit={(e) => {
@@ -77,6 +94,8 @@ export function SettingsForm({ profile, slug, mailDomain }: { profile: P; slug: 
           </Button>
         </div>
       </form>
+      </TabsContent>
+      <TabsContent value="email" className="max-w-3xl">
       <Section title="Email">
         <p className="text-sm text-muted-foreground">
           {mailDomain ? (
@@ -88,6 +107,8 @@ export function SettingsForm({ profile, slug, mailDomain }: { profile: P; slug: 
           )}
         </p>
       </Section>
+      </TabsContent>
+      <TabsContent value="appearance">
       <Section title="Appearance">
         <ToggleGroup type="single" value={theme} onValueChange={(v) => v && setTheme(v)} variant="outline">
           <ToggleGroupItem value="light">
@@ -101,6 +122,7 @@ export function SettingsForm({ profile, slug, mailDomain }: { profile: P; slug: 
           </ToggleGroupItem>
         </ToggleGroup>
       </Section>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }

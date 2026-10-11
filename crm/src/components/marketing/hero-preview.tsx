@@ -15,17 +15,17 @@ const columns = [
 export function HeroPreview() {
   return (
     <div className="relative mx-auto max-w-5xl">
-      <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-b from-primary/25 to-transparent blur-2xl" />
-      <div className="relative overflow-hidden rounded-2xl border bg-card shadow-2xl shadow-primary/10">
-        <div className="flex items-center gap-1.5 border-b bg-muted/40 px-4 py-2.5">
+      <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-b from-orange-400/20 via-fuchsia-500/10 to-transparent blur-3xl" />
+      <div className="ring-gradient relative overflow-hidden rounded-2xl bg-[#141414] text-white shadow-2xl">
+        <div className="flex items-center gap-1.5 border-b border-white/10 bg-white/[0.03] px-4 py-2.5">
           <span className="size-2.5 rounded-full bg-rose-400" />
           <span className="size-2.5 rounded-full bg-amber-400" />
           <span className="size-2.5 rounded-full bg-emerald-400" />
-          <span className="ml-3 truncate text-xs text-muted-foreground">app.lodgely.au/app/matters</span>
+          <span className="ml-3 truncate text-xs text-white/45">app.lodgely.au/app/matters</span>
         </div>
         <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
           {columns.map((c, ci) => (
-            <div key={c.name} className="rounded-xl bg-muted/50 p-2.5">
+            <div key={c.name} className="rounded-xl bg-white/[0.04] p-2.5">
               <div className="mb-2 flex items-center gap-2 px-1 text-xs font-medium">
                 <span className={`size-2 rounded-full ${c.tone}`} />
                 <span className="truncate">{c.name}</span>
@@ -41,13 +41,13 @@ export function HeroPreview() {
                       scale: { delay: 0.3 + ci * 0.12 + i * 0.08 },
                       y: { duration: 4 + i, repeat: Infinity, ease: "easeInOut", delay: ci * 0.4 + i },
                     }}
-                    className="rounded-lg border bg-background p-2.5 text-left shadow-xs"
+                    className="rounded-lg border border-white/10 bg-[#1c1c1c] p-2.5 text-left"
                   >
                     <p className="truncate text-xs font-medium">{name}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{visa}</p>
-                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
+                    <p className="truncate text-[11px] text-white/45">{visa}</p>
+                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
                       <motion.div
-                        className="h-full rounded-full bg-primary"
+                        className="h-full rounded-full bg-gradient-to-r from-amber-300 to-orange-500"
                         initial={{ width: 0 }}
                         animate={{ width: `${(p as number) * 100}%` }}
                         transition={{ delay: 0.6 + ci * 0.12, duration: 0.9 }}

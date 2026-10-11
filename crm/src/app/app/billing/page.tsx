@@ -13,7 +13,7 @@ import { NewInvoiceDialog, RecordPaymentDialog } from "@/components/forms/dialog
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getBilling } from "@/lib/data";
-import { aud, dmy, todayIso } from "@/lib/format";
+import { aud, dmy, initials, todayIso } from "@/lib/format";
 
 export const metadata = { title: "Billing & trust" };
 
@@ -33,7 +33,7 @@ async function Billing() {
           <StatCard icon={HandCoins} label="Collected" value={Math.round(paid)} prefix="$" tone="emerald" hint={total ? `${Math.round((paid / total) * 100)}% of billed` : undefined} />
         </StaggerItem>
         <StaggerItem>
-          <StatCard icon={CircleDollarSign} label="Outstanding" value={Math.round(total - paid)} prefix="$" tone="amber" hint={`${overdue.length} overdue`} />
+          <StatCard icon={CircleDollarSign} label="Outstanding" value={Math.round(total - paid)} prefix="$" tone="rose" hint={`${overdue.length} overdue`} />
         </StaggerItem>
         <StaggerItem>
           <StatCard icon={Landmark} label="Held in trust" value={Math.round(trustBalance)} prefix="$" tone="sky" hint="Client money, not yet earned" />
@@ -46,42 +46,60 @@ async function Billing() {
             <TabsTrigger value="ledger">Ledger</TabsTrigger>
           </TabsList>
           <TabsContent value="invoices">
-            <Section bodyClassName="p-0 sm:p-0">
-              <ul>
-                {invoices.map(({ invoice: i, clientFirst, clientLast }) => {
-                  const owing = Number(i.total) - Number(i.paid);
-                  return (
-                    <li key={i.id} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-b px-4 py-3 last:border-0 sm:grid-cols-[7rem_minmax(0,1fr)_7rem_7rem_6rem_7rem] sm:px-5">
-                      <span className="font-mono text-sm">{i.number}</span>
-                      <Pill t={invoiceTone[i.status]} className="justify-self-end sm:order-5 sm:justify-self-start">
-                        {label(i.status)}
-                      </Pill>
-                      <Link href={`/app/clients/${i.clientId}`} className="truncate text-sm hover:text-primary sm:order-2">
-                        {clientFirst} {clientLast}
-                      </Link>
-                      <span className="text-right text-sm tabular-nums sm:order-3">{aud(i.total, 2)}</span>
-                      <span className="hidden text-xs text-muted-foreground sm:order-4 sm:block">Due {dmy(i.dueAt)}</span>
-                      <div className="col-span-2 justify-self-end sm:order-6 sm:col-span-1">
-                        {owing > 0.005 && i.status !== "void" ? (
-                          <RecordPaymentDialog
-                            invoiceId={i.id}
-                            outstanding={owing}
-                            trigger={
-                              <Button size="xs" variant="outline">
-                                Record payment
-                              </Button>
-                            }
-                          />
-                        ) : (
-                          <span className="text-xs text-emerald-600">Paid in full</span>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-                {!invoices.length ? <li className="p-8 text-center text-sm text-muted-foreground">No invoices yet.</li> : null}
-              </ul>
-            </Section>
+            <div className="overflow-x-auto rounded-xl border bg-card">
+              <table className="w-full min-w-[760px] text-[13px]">
+                <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+                  <tr>
+                    {["Invoice #", "Client", "Issued", "Amount", "Status", "Due date", "Actions"].map((h) => (
+                      <th key={h} className="border-r px-4 py-2.5 font-medium last:border-r-0 last:text-right">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.map(({ invoice: i, clientFirst, clientLast }) => {
+                    const owing = Number(i.total) - Number(i.paid);
+                    return (
+                      <tr key={i.id} className="border-t transition hover:bg-muted/30">
+                        <td className="px-4 py-3">
+                          <span className="flex items-center gap-2 font-mono">
+                            <Receipt className="size-3.5 text-muted-foreground" />
+                            {i.number}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link href={`/app/clients/${i.clientId}`} className="flex items-center gap-2 hover:underline">
+                            <span className="grid size-6 place-items-center rounded-full bg-muted text-[10px] font-semibold">{initials(`${clientFirst} ${clientLast}`)}</span>
+                            {clientFirst} {clientLast}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{dmy(i.issuedAt)}</td>
+                        <td className="px-4 py-3 tabular-nums">{aud(i.total, 2)}</td>
+                        <td className="px-4 py-3">
+                          <Pill t={invoiceTone[owing <= 0.005 ? "paid" : i.status]}>{label(owing <= 0.005 ? "paid" : i.status)}</Pill>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{dmy(i.dueAt)}</td>
+                        <td className="px-4 py-3 text-right">
+                          {owing > 0.005 && i.status !== "void" ? (
+                            <RecordPaymentDialog invoiceId={i.id} outstanding={owing} trigger={<Button size="xs" variant="outline">Record payment</Button>} />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Paid in full</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!invoices.length ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                        No invoices yet.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
           </TabsContent>
           <TabsContent value="ledger">
             <Section bodyClassName="p-0 sm:p-0">

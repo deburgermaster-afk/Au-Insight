@@ -62,7 +62,7 @@ export function ProgressBar({ value, className = "" }: { value: number; classNam
   return (
     <div className={`h-1.5 w-full overflow-hidden rounded-full bg-muted ${className}`}>
       <motion.div
-        className="h-full rounded-full bg-primary"
+        className="h-full rounded-full bg-gradient-to-r from-[var(--chart-3)] to-[var(--chart-2)]"
         initial={{ width: 0 }}
         animate={{ width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%` }}
         transition={{ duration: 0.7, ease }}

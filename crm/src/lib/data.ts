@@ -407,3 +407,21 @@ async function reportsFor(agencyId: string) {
   ]);
   return { byVisa, bySource, revenue: byMonth.map((r) => ({ month: r.month, amount: num(r.amount) })), outcomes };
 }
+
+/** Badge counts for the sidebar. */
+export async function getNavCounts() {
+  const { agencyId, userId } = await getCtx();
+  return navCountsFor(agencyId, userId);
+}
+
+async function navCountsFor(agencyId: string, userId: string) {
+  "use cache";
+  tag(agencyId);
+  const [[inbox], [tasks], [matters], [clients]] = await Promise.all([
+    db.select({ n: count() }).from(s.messages).where(and(eq(s.messages.agencyId, agencyId), eq(s.messages.folder, "inbox"), eq(s.messages.read, false))),
+    db.select({ n: count() }).from(s.tasks).where(and(eq(s.tasks.agencyId, agencyId), eq(s.tasks.assignedTo, userId), sql`${s.tasks.status} <> 'done'`)),
+    db.select({ n: count() }).from(s.matters).where(and(eq(s.matters.agencyId, agencyId), sql`${s.matters.stage} <> 'closed'`)),
+    db.select({ n: count() }).from(s.clients).where(eq(s.clients.agencyId, agencyId)),
+  ]);
+  return { "/app/inbox": inbox.n, "/app/tasks": tasks.n, "/app/matters": matters.n, "/app/clients": clients.n } as Record<string, number>;
+}

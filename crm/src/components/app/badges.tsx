@@ -2,19 +2,19 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const tone = {
-  gray: "bg-muted text-muted-foreground border-transparent",
-  blue: "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20",
-  violet: "bg-primary/10 text-primary border-primary/20",
-  green: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20",
-  amber: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
-  red: "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20",
-  pink: "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-500/20",
+  gray: "bg-muted/70 text-muted-foreground",
+  blue: "bg-sky-500/12 text-sky-700 dark:text-sky-300",
+  violet: "bg-violet-500/12 text-violet-700 dark:text-violet-300",
+  green: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+  amber: "bg-amber-500/14 text-amber-700 dark:text-amber-300",
+  red: "bg-rose-500/12 text-rose-700 dark:text-rose-300",
+  pink: "bg-orange-500/12 text-orange-700 dark:text-orange-300",
 } as const;
 export type Tone = keyof typeof tone;
 
 export function Pill({ children, t = "gray", className }: { children: React.ReactNode; t?: Tone; className?: string }) {
   return (
-    <Badge variant="outline" className={cn("rounded-full font-medium", tone[t], className)}>
+    <Badge variant="outline" className={cn("rounded-md border-transparent px-1.5 text-[11.5px] font-medium", tone[t], className)}>
       {children}
     </Badge>
   );

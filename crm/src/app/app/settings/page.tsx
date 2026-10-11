@@ -16,8 +16,8 @@ async function Form() {
 
 export default function SettingsPage() {
   return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader title="Settings" description="Your agency's registration, invoicing and appearance." />
+    <div>
+      <PageHeader title="Settings & subscription" description="Upgrade, manage your agency details, email and appearance." />
       <Suspense fallback={<PageSkeleton />}>
         <Form />
       </Suspense>

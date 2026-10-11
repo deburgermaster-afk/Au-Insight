@@ -39,7 +39,7 @@ export function ActionDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className={wide ? "sm:max-w-2xl" : "sm:max-w-lg"}>
+      <DialogContent className={`gap-0 overflow-hidden rounded-3xl p-0 ${wide ? "sm:max-w-2xl" : "sm:max-w-lg"}`}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -55,18 +55,19 @@ export function ActionDialog({
               if (goTo && r.id) router.push(goTo(r.id));
             });
           }}
-          className="grid gap-5"
+          className="grid"
         >
-          <DialogHeader>
+          <div className="h-20 bg-[radial-gradient(120%_140%_at_10%_0%,oklch(0.75_0.15_55/.55),transparent_55%),radial-gradient(120%_160%_at_90%_10%,oklch(0.6_0.18_300/.45),transparent_60%),linear-gradient(180deg,oklch(0.3_0.03_260),transparent)]" />
+          <DialogHeader className="-mt-6 px-6">
             <DialogTitle>{title}</DialogTitle>
             {description ? <DialogDescription>{description}</DialogDescription> : null}
           </DialogHeader>
-          <div className="-mx-1 grid max-h-[62vh] gap-4 overflow-y-auto px-1 py-0.5">{children}</div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+          <div className="grid max-h-[58vh] gap-4 overflow-y-auto px-6 py-5">{children}</div>
+          <DialogFooter className="mx-0 mb-0 grid grid-cols-2 gap-2 border-0 bg-transparent px-6 pb-6 pt-1 sm:grid-cols-2">
+            <Button type="button" variant="secondary" className="h-10 rounded-full" onClick={() => setOpen(false)}>
+              Close
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending} className="h-10 rounded-full">
               {pending ? <Loader2 className="animate-spin" /> : null}
               {submitLabel}
             </Button>

@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { ColumnChart, Donut } from "@/components/app/charts";
+import { ColumnChart, Donut, SplitBar, TrendChart } from "@/components/app/charts";
 import { FadeIn } from "@/components/app/motion";
 import { PageHeader } from "@/components/app/page-header";
 import { Section } from "@/components/app/section";
@@ -14,10 +14,11 @@ async function Reports() {
   const revenue = r.revenue.map((m) => ({ month: new Date(`${m.month}-01`).toLocaleString("en-AU", { month: "short" }), revenue: m.amount }));
   const total = r.revenue.reduce((a, m) => a + m.amount, 0);
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2">
       <FadeIn className="lg:col-span-2">
-        <Section title={`Fees collected · ${aud(total)}`}>
-          <ColumnChart data={revenue} x="month" y="revenue" label="Revenue" money height={260} />
+        <Section title="Fees collected">
+          <p className="mb-4 text-3xl font-semibold tracking-tight tabular-nums">{aud(total)}</p>
+          <TrendChart data={revenue} x="month" y="revenue" label="Revenue" height={280} />
         </Section>
       </FadeIn>
       <FadeIn delay={0.05}>
@@ -27,7 +28,7 @@ async function Reports() {
       </FadeIn>
       <FadeIn delay={0.1}>
         <Section title="Where clients come from">
-          <Donut data={r.bySource.map((s) => ({ name: s.source ?? "unknown", value: s.n }))} />
+          <SplitBar data={r.bySource.map((s) => ({ name: s.source ?? "unknown", value: s.n }))} />
         </Section>
       </FadeIn>
       <FadeIn delay={0.15} className="lg:col-span-2">

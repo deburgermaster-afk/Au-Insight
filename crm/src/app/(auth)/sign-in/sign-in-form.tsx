@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FadeIn } from "@/components/app/motion";
-import { Logo } from "@/components/app/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,11 +17,10 @@ export function SignInForm() {
   const [busy, setBusy] = useState(false);
   return (
     <FadeIn>
-      <Logo className="mb-6 size-10 lg:hidden" />
-      <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Sign in to your agency workspace.</p>
+            <h1 className="text-center text-xl font-semibold tracking-tight text-white">Sign in to your account</h1>
+      <p className="mt-1.5 text-center text-[13px] text-white/55">Welcome back to your agency workspace.</p>
       <form
-        className="mt-8 space-y-4"
+        className="mt-8 space-y-3.5"
         onSubmit={async (e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
@@ -34,20 +32,20 @@ export function SignInForm() {
         }}
       >
         <div className="space-y-2">
-          <Label htmlFor="email">Work email</Label>
-          <Input id="email" name="email" type="email" autoComplete="email" required placeholder="you@agency.com.au" className="h-11" />
+          <Label className="text-[13px] text-white/75" htmlFor="email">Work email</Label>
+          <Input id="email" name="email" type="email" autoComplete="email" required placeholder="you@agency.com.au" className="h-10 border-white/10 bg-white/[0.04]" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required className="h-11" />
+          <Label className="text-[13px] text-white/75" htmlFor="password">Password</Label>
+          <Input id="password" name="password" type="password" autoComplete="current-password" required className="h-10 border-white/10 bg-white/[0.04]" />
         </div>
-        <Button type="submit" className="h-11 w-full" disabled={busy}>
+        <Button type="submit" className="h-10 w-full rounded-lg bg-white text-black hover:bg-white/90" disabled={busy}>
           {busy ? <Loader2 className="animate-spin" /> : null} Sign in
         </Button>
       </form>
       <p className="mt-6 text-center text-sm text-muted-foreground">
         New agency?{" "}
-        <Link href="/sign-up" className="font-medium text-primary hover:underline">
+        <Link href="/sign-up" className="font-medium text-white underline-offset-4 hover:underline">
           Start free
         </Link>
       </p>

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FadeIn } from "@/components/app/motion";
-import { Logo } from "@/components/app/logo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -21,11 +20,10 @@ export function SignUpForm({ existingUser = false }: { existingUser?: boolean })
   const [demo, setDemo] = useState(true);
   return (
     <FadeIn>
-      <Logo className="mb-6 size-10 lg:hidden" />
-      <h1 className="text-2xl font-semibold tracking-tight">{existingUser ? "Create your agency" : "Start your agency workspace"}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Free while you set up. No card needed.</p>
+            <h1 className="text-center text-xl font-semibold tracking-tight text-white">{existingUser ? "Create your agency" : "Start your agency workspace"}</h1>
+      <p className="mt-1.5 text-center text-[13px] text-white/55">Free while you set up. No card needed.</p>
       <form
-        className="mt-8 space-y-4"
+        className="mt-8 space-y-3.5"
         onSubmit={async (e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
@@ -55,40 +53,40 @@ export function SignUpForm({ existingUser = false }: { existingUser?: boolean })
         }}
       >
         <div className="space-y-2">
-          <Label htmlFor="agency">Agency name</Label>
-          <Input id="agency" name="agency" required placeholder="Harbour Migration" className="h-11" />
+          <Label className="text-[13px] text-white/75" htmlFor="agency">Agency name</Label>
+          <Input id="agency" name="agency" required placeholder="Harbour Migration" className="h-10 border-white/10 bg-white/[0.04]" />
         </div>
         {existingUser ? null : (
           <>
             <div className="space-y-2">
-              <Label htmlFor="name">Your name</Label>
-              <Input id="name" name="name" required autoComplete="name" className="h-11" />
+              <Label className="text-[13px] text-white/75" htmlFor="name">Your name</Label>
+              <Input id="name" name="name" required autoComplete="name" className="h-10 border-white/10 bg-white/[0.04]" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Work email</Label>
-              <Input id="email" name="email" type="email" required autoComplete="email" className="h-11" />
+              <Label className="text-[13px] text-white/75" htmlFor="email">Work email</Label>
+              <Input id="email" name="email" type="email" required autoComplete="email" className="h-10 border-white/10 bg-white/[0.04]" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" className="h-11" />
+              <Label className="text-[13px] text-white/75" htmlFor="password">Password</Label>
+              <Input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" className="h-10 border-white/10 bg-white/[0.04]" />
             </div>
           </>
         )}
-        <label className="flex items-start gap-3 rounded-xl border bg-muted/40 p-3 text-sm">
+        <label className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-[13px]">
           <Checkbox checked={demo} onCheckedChange={(v) => setDemo(v === true)} className="mt-0.5" />
           <span>
             <span className="font-medium">Fill with a demo workspace</span>
             <span className="block text-muted-foreground">Sample clients, matters, invoices and mail so you can explore. Delete any time.</span>
           </span>
         </label>
-        <Button type="submit" className="h-11 w-full" disabled={busy}>
+        <Button type="submit" className="h-10 w-full rounded-lg bg-white text-black hover:bg-white/90" disabled={busy}>
           {busy ? <Loader2 className="animate-spin" /> : null} Create workspace
         </Button>
       </form>
       {existingUser ? null : (
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/sign-in" className="font-medium text-primary hover:underline">
+          <Link href="/sign-in" className="font-medium text-white underline-offset-4 hover:underline">
             Sign in
           </Link>
         </p>

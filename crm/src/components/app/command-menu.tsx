@@ -4,7 +4,6 @@ import { CalendarPlus, FilePlus2, Moon, Search, Sun, UserPlus } from "lucide-rea
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
 import { visas } from "@/lib/visas";
@@ -34,15 +33,15 @@ export function CommandMenu() {
 
   return (
     <>
-      <Button
-        variant="outline"
+      <button
+        type="button"
         onClick={() => setOpen(true)}
-        className="h-9 w-full min-w-0 max-w-sm shrink justify-start gap-2 rounded-xl bg-muted/40 px-3 text-muted-foreground shadow-none sm:w-64"
+        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-2.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
       >
-        <Search className="size-4" />
-        <span className="flex-1 truncate text-left text-sm font-normal">Search or jump to…</span>
-        <Kbd className="hidden sm:inline-flex">⌘K</Kbd>
-      </Button>
+        <Search className="size-4 shrink-0" />
+        <span className="flex-1 truncate text-left group-data-[collapsible=icon]:hidden">Search</span>
+        <Kbd className="bg-transparent text-[11px] group-data-[collapsible=icon]:hidden">⌘K</Kbd>
+      </button>
       <CommandDialog open={open} onOpenChange={setOpen} title="Search Lodgely">
         <CommandInput placeholder="Type a page, an action or a visa subclass…" />
         <CommandList>

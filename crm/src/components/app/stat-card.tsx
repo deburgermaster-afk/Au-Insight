@@ -2,6 +2,16 @@ import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { NumberTicker } from "./motion";
 
+const ticks = {
+  primary: "var(--chart-1)",
+  emerald: "var(--success)",
+  amber: "var(--chart-3)",
+  sky: "var(--chart-4)",
+  rose: "var(--chart-2)",
+  violet: "var(--chart-5)",
+} as const;
+
+/** A metric tile: icon, small label, large value, and a coloured hint line. */
 export function StatCard({
   icon: Icon,
   label,
@@ -17,26 +27,42 @@ export function StatCard({
   prefix?: string;
   hint?: string;
   href?: string;
-  tone?: "primary" | "emerald" | "amber" | "sky" | "rose";
+  tone?: keyof typeof ticks;
 }) {
-  const tones = {
-    primary: "bg-primary/10 text-primary",
-    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    sky: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-    rose: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  };
   const body = (
-    <div className="group relative h-full overflow-hidden rounded-2xl border bg-card p-4 shadow-xs transition hover:-translate-y-0.5 hover:shadow-md sm:p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground sm:text-sm">{label}</p>
-        <span className={`grid size-8 place-items-center rounded-lg transition group-hover:scale-110 ${tones[tone]}`}>
-          <Icon className="size-4" />
-        </span>
-      </div>
-      <NumberTicker value={value} prefix={prefix} className="mt-2 block text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl" />
-      {hint ? <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p> : null}
+    <div className="group relative h-full overflow-hidden rounded-xl border bg-card p-4 transition hover:border-foreground/15">
+      <div
+        className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full opacity-[0.07] blur-2xl transition group-hover:opacity-20"
+        style={{ background: ticks[tone] }}
+      />
+      <span className="grid size-8 place-items-center rounded-lg border bg-muted/40 text-foreground/80">
+        <Icon className="size-4" />
+      </span>
+      <p className="mt-3 text-[13px] text-muted-foreground">{label}</p>
+      <NumberTicker value={value} prefix={prefix} className="mt-0.5 block text-2xl font-semibold tabular-nums tracking-tight sm:text-[1.7rem]" />
+      {hint ? (
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          <span className="mr-1.5 inline-block size-1.5 rounded-full align-middle" style={{ background: ticks[tone] }} />
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
   return href ? <Link href={href}>{body}</Link> : body;
+}
+
+/** A strip of labelled facts with coloured ticks, as on a record's header. */
+export function FactStrip({ items }: { items: { label: string; value: React.ReactNode; tone?: keyof typeof ticks }[] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
+      {items.map((i) => (
+        <div key={i.label} className="min-w-0">
+          <dt className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/80">{i.label}</dt>
+          <dd className="tick mt-1.5 truncate text-sm font-medium" style={{ "--tick": ticks[i.tone ?? "primary"] } as React.CSSProperties}>
+            {i.value ?? "—"}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }

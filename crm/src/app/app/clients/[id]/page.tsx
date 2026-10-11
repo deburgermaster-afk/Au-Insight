@@ -1,34 +1,42 @@
-import { connection } from "next/server";
-import { ArrowLeft, Briefcase, CalendarDays, FileText, Mail, MapPin, Phone, Plus, Receipt, UsersRound } from "lucide-react";
+import { ArrowLeft, Briefcase, Download, Eye, FileText, Mail, Plus, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
-import { clientStageTone, ExpiryPill, invoiceTone, label, matterStageTone, Pill, priorityTone } from "@/components/app/badges";
+import { clientStageTone, invoiceTone, label, matterStageTone, Pill, priorityTone } from "@/components/app/badges";
 import { ClientStageSelect, NoteComposer, TaskCheck } from "@/components/app/inline-actions";
-import { FadeIn } from "@/components/app/motion";
+import { FadeIn, ProgressBar } from "@/components/app/motion";
 import { Section } from "@/components/app/section";
 import { PageSkeleton } from "@/components/app/skeletons";
+import { FactStrip } from "@/components/app/stat-card";
 import { Timeline } from "@/components/app/timeline";
-import { initials } from "@/lib/format";
 import { WithPickers } from "@/components/app/with-pickers";
-import { ComposeDialog, NewAppointmentDialog, NewInvoiceDialog, NewMatterDialog, NewTaskDialog } from "@/components/forms/dialogs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ComposeDialog, NewAppointmentDialog, NewInvoiceDialog, NewMatterDialog, NewTaskDialog, RecordPaymentDialog } from "@/components/forms/dialogs";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getClient } from "@/lib/data";
-import { aud, daysUntil, dmy, fullName, relativeDays, time } from "@/lib/format";
+import { aud, daysUntil, dmy, fullName, initials, relativeDays, time } from "@/lib/format";
 import { stages, visaByCode } from "@/lib/visas";
 
-function Detail({ k, v }: { k: string; v: React.ReactNode }) {
+const stageLabel = (k: string) => stages.find((s) => s.key === k)?.label ?? k;
+
+function Tile({ label: l, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b py-2 text-sm last:border-0">
-      <dt className="text-muted-foreground">{k}</dt>
-      <dd className="truncate text-right font-medium">{v ?? "—"}</dd>
+    <div className="rounded-xl border bg-muted/30 p-4">
+      <p className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/80">{l}</p>
+      <p className="mt-2 text-xl font-semibold tabular-nums tracking-tight">{value}</p>
     </div>
   );
 }
 
-const stageLabel = (k: string) => stages.find((s) => s.key === k)?.label ?? k;
+function Row({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-[12.5px]">
+      <span className="uppercase tracking-wide text-muted-foreground/80">{k}</span>
+      <span className="truncate text-right">{v}</span>
+    </div>
+  );
+}
 
 async function ClientView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,270 +45,303 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
   if (!data) notFound();
   const { client: c, matters, documents, activities, tasks, dependants, invoices, appointments } = data;
   const name = fullName(c);
-  const owing = invoices.reduce((a, i) => a + Number(i.total) - Number(i.paid), 0);
+  const invoiced = invoices.reduce((a, i) => a + Number(i.total), 0);
+  const paid = invoices.reduce((a, i) => a + Number(i.paid), 0);
+  const nextDue = invoices.filter((i) => Number(i.total) - Number(i.paid) > 0.005 && i.status !== "void").sort((a, b) => String(a.dueAt).localeCompare(String(b.dueAt)))[0];
+  const open = matters.filter((m) => m.stage !== "closed");
 
   return (
-    <>
-      <FadeIn className="mb-6 overflow-hidden rounded-2xl border bg-card shadow-xs">
-        <div className="h-20 bg-gradient-to-r from-primary/25 via-primary/10 to-fuchsia-500/15 sm:h-24" />
-        <div className="-mt-10 flex flex-col gap-4 px-4 pb-5 sm:flex-row sm:items-end sm:px-6">
-          <Avatar className="size-20 border-4 border-card shadow-md">
-            <AvatarFallback className="bg-primary text-xl font-semibold text-primary-foreground">{initials(name)}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">{name}</h1>
-              <Pill t={clientStageTone[c.stage]}>{label(c.stage)}</Pill>
-              <Pill t={c.onshore ? "blue" : "gray"}>{c.onshore ? "Onshore" : "Offshore"}</Pill>
-            </div>
-            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              {c.email ? (
-                <a href={`mailto:${c.email}`} className="flex items-center gap-1.5 hover:text-foreground">
-                  <Mail className="size-3.5" /> {c.email}
-                </a>
-              ) : null}
-              {c.phone ? (
-                <a href={`tel:${c.phone}`} className="flex items-center gap-1.5 hover:text-foreground">
-                  <Phone className="size-3.5" /> {c.phone}
-                </a>
-              ) : null}
-              {c.city || c.nationality ? (
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="size-3.5" /> {[c.city, c.nationality].filter(Boolean).join(" · ")}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <ClientStageSelect clientId={c.id} stage={c.stage} />
-            <WithPickers
-              render={(p) => (
-                <>
-                  <ComposeDialog
-                    to={c.email ?? ""}
-                    clientId={c.id}
-                    trigger={
-                      <Button size="sm" variant="outline">
-                        <Mail /> Email
-                      </Button>
-                    }
-                  />
-                  <NewMatterDialog pickers={p} clientId={c.id} />
-                </>
-              )}
-            />
-          </div>
+    <div className="grid gap-4">
+      <FadeIn className="flex flex-wrap items-center gap-3">
+        <Link href="/app/clients" aria-label="Back" className="grid size-8 place-items-center rounded-full border bg-card text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4" />
+        </Link>
+        <span className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-[oklch(0.78_0.15_60)] to-[oklch(0.62_0.2_20)] text-sm font-semibold text-white shadow-lg shadow-orange-500/10">{initials(name)}</span>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-xl font-semibold tracking-tight">{name}</h1>
+          <p className="truncate text-[13px] text-muted-foreground">{[c.occupation, c.nationality, c.onshore ? "Onshore" : "Offshore"].filter(Boolean).join(" • ")}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ClientStageSelect clientId={c.id} stage={c.stage} />
+          <ComposeDialog
+            to={c.email ?? ""}
+            clientId={c.id}
+            trigger={
+              <Button size="icon-sm" variant="outline" aria-label="Email">
+                <Mail />
+              </Button>
+            }
+          />
+          <WithPickers render={(p) => <NewMatterDialog pickers={p} clientId={c.id} />} />
         </div>
       </FadeIn>
 
-      <Tabs defaultValue="overview" className="gap-4">
-        <TabsList className="max-w-full justify-start overflow-x-auto">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="matters">Matters · {matters.length}</TabsTrigger>
-          <TabsTrigger value="documents">Documents · {documents.length}</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks · {tasks.filter((t) => t.status !== "done").length}</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
-          <TabsTrigger value="family">Family · {dependants.length}</TabsTrigger>
-        </TabsList>
+      <FadeIn delay={0.04}>
+        <Section title="Client details">
+          <FactStrip
+            items={[
+              { label: "Total matters", value: `${matters.length} matter${matters.length === 1 ? "" : "s"}`, tone: "rose" },
+              { label: "Open matters", value: `${open.length} open`, tone: "amber" },
+              { label: "Current visa", value: c.currentVisa ? `${c.currentVisa} · ${visaByCode(c.currentVisa)?.name ?? ""}` : null, tone: "primary" },
+              { label: "Visa expiry", value: c.visaExpiry ? dmy(c.visaExpiry) : null, tone: "violet" },
+              { label: "Passport", value: c.passportNumber, tone: "sky" },
+              { label: "Client status", value: <Pill t={clientStageTone[c.stage]}>{label(c.stage)}</Pill>, tone: "emerald" },
+            ]}
+          />
+        </Section>
+      </FadeIn>
+      <FadeIn delay={0.08}>
+        <Section title="Contact information">
+          <FactStrip
+            items={[
+              { label: "Address", value: [c.address, c.city, c.state].filter(Boolean).join(", ") || null, tone: "rose" },
+              { label: "Email", value: c.email, tone: "primary" },
+              { label: "Phone", value: c.phone, tone: "amber" },
+              { label: "Date of birth", value: c.dateOfBirth ? dmy(c.dateOfBirth) : null, tone: "violet" },
+              { label: "Source", value: c.source ? label(c.source) : null, tone: "sky" },
+              { label: "Client since", value: dmy(c.createdAt), tone: "emerald" },
+            ]}
+          />
+        </Section>
+      </FadeIn>
 
-        <TabsContent value="overview">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="grid content-start gap-6">
+      <FadeIn delay={0.12}>
+        <Section title="Client activity" bodyClassName="p-3 sm:p-4">
+          <Tabs defaultValue="matters" className="gap-4">
+            <TabsList className="max-w-full justify-start overflow-x-auto">
+              <TabsTrigger value="matters">Matters</TabsTrigger>
+              <TabsTrigger value="documents">Documents</TabsTrigger>
+              <TabsTrigger value="financial">Financial</TabsTrigger>
+              <TabsTrigger value="tasks">Tasks</TabsTrigger>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsTrigger value="family">Family</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="matters">
               {matters.length ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {matters.slice(0, 4).map((m) => (
-                    <Link key={m.id} href={`/app/matters/${m.id}`} className="rounded-2xl border bg-card p-4 shadow-xs transition hover:-translate-y-0.5 hover:shadow-md">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{m.reference}</span>
-                        <Pill t={matterStageTone[m.stage]}>{stageLabel(m.stage)}</Pill>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {matters.map((m) => (
+                    <Link key={m.id} href={`/app/matters/${m.id}`} className="rounded-xl border bg-muted/20 p-4 transition hover:border-foreground/15">
+                      <div className="flex items-center gap-2">
+                        <Briefcase className="size-4 text-muted-foreground" />
+                        <span className="font-mono text-[11px] text-muted-foreground">{m.reference}</span>
+                        <Pill t={matterStageTone[m.stage]} className="ml-auto">
+                          {stageLabel(m.stage)}
+                        </Pill>
                       </div>
-                      <p className="mt-2 truncate font-medium">{m.title}</p>
-                      <p className="text-xs text-muted-foreground">{m.lodgedAt ? `Lodged ${dmy(m.lodgedAt)}` : m.dueAt ? `Target ${dmy(m.dueAt)}` : "Not lodged"}</p>
+                      <p className="mt-3 truncate text-sm font-medium">{m.title}</p>
+                      <div className="mt-3 grid gap-1.5">
+                        <Row k="Priority" v={<Pill t={priorityTone[m.priority]}>{label(m.priority)}</Pill>} />
+                        <Row k="TRN" v={m.trn ?? "—"} />
+                        <Row k={m.lodgedAt ? "Lodged" : "Target"} v={dmy(m.lodgedAt ?? m.dueAt)} />
+                      </div>
                     </Link>
                   ))}
                 </div>
-              ) : null}
-              <Section title="Timeline">
-                <div className="grid gap-5">
-                  <NoteComposer clientId={c.id} />
-                  <Timeline items={activities} empty="No activity yet. Add the first note above." />
-                </div>
-              </Section>
-            </div>
-            <div className="grid content-start gap-6">
-              <Section title="Immigration">
-                <dl>
-                  <Detail k="Current visa" v={c.currentVisa ? `${c.currentVisa} · ${visaByCode(c.currentVisa)?.name ?? ""}` : null} />
-                  <Detail k="Visa expiry" v={c.visaExpiry ? <span className="flex items-center gap-2">{dmy(c.visaExpiry)} <ExpiryPill days={daysUntil(c.visaExpiry)} /></span> : null} />
-                  <Detail k="Conditions" v={c.visaConditions?.join(", ")} />
-                  <Detail k="Passport" v={c.passportNumber} />
-                  <Detail k="Passport expiry" v={c.passportExpiry ? dmy(c.passportExpiry) : null} />
-                  <Detail k="Occupation" v={c.occupation ? `${c.occupation}${c.anzsco ? ` (${c.anzsco})` : ""}` : null} />
-                  <Detail k="English" v={c.englishTest ? `${c.englishTest} ${c.englishScore ?? ""}` : null} />
-                </dl>
-              </Section>
-              <Section title="Personal">
-                <dl>
-                  <Detail k="Date of birth" v={c.dateOfBirth ? dmy(c.dateOfBirth) : null} />
-                  <Detail k="Nationality" v={c.nationality} />
-                  <Detail k="Source" v={c.source ? label(c.source) : null} />
-                  <Detail k="Client since" v={dmy(c.createdAt)} />
-                </dl>
-                {c.notes ? <p className="mt-3 rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">{c.notes}</p> : null}
-              </Section>
-              <Section title="Appointments" action={<WithPickers fallback="Book" render={(p) => <NewAppointmentDialog pickers={p} clientId={c.id} trigger={<Button size="xs" variant="ghost"><Plus /> Book</Button>} />} />}>
-                {appointments.length ? (
-                  <ul className="grid gap-2">
-                    {appointments.slice(0, 5).map((a) => (
-                      <li key={a.id} className="flex items-center gap-3 text-sm">
-                        <CalendarDays className="size-4 text-primary" />
-                        <span className="min-w-0 flex-1 truncate">{a.title}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {dmy(a.startsAt)} {time(a.startsAt)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">None booked.</p>
-                )}
-              </Section>
-            </div>
-          </div>
-        </TabsContent>
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">No matters yet.</p>
+              )}
+            </TabsContent>
 
-        <TabsContent value="matters">
-          <Section title="Matters" action={<WithPickers render={(p) => <NewMatterDialog pickers={p} clientId={c.id} />} />} bodyClassName="p-0 sm:p-0">
-            {matters.length ? (
-              <ul>
-                {matters.map((m) => (
-                  <li key={m.id} className="border-b last:border-0">
-                    <Link href={`/app/matters/${m.id}`} className="flex items-center gap-3 px-4 py-3 transition hover:bg-muted/50 sm:px-5">
-                      <Briefcase className="size-4 text-muted-foreground" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{m.title}</p>
-                        <p className="font-mono text-xs text-muted-foreground">
-                          {m.reference}
-                          {m.trn ? ` · TRN ${m.trn}` : ""}
+            <TabsContent value="documents">
+              {documents.length ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {documents.map((d) => {
+                    const days = d.expiresAt ? daysUntil(d.expiresAt) : null;
+                    const status = days != null && days < 0 ? ["Expired", "text-rose-500"] : d.certified ? ["Verified", "text-emerald-500"] : ["Pending review", "text-amber-500"];
+                    return (
+                      <div key={d.id} className="flex flex-col rounded-xl border bg-muted/20 p-3.5">
+                        <p className="flex items-center gap-2 text-sm font-medium">
+                          <FileText className="size-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{d.name}</span>
+                        </p>
+                        <div className="mt-3 grid gap-1.5">
+                          <Row k="Type" v={d.category ?? "Document"} />
+                          <Row k="Uploaded" v={dmy(d.createdAt)} />
+                          <Row k="Expiry" v={d.expiresAt ? `Valid till ${dmy(d.expiresAt)}` : "N/A"} />
+                          <Row k="Translated" v={d.translated ? "Yes" : "No"} />
+                          <Row k="Status" v={<span className={status[1]}>{status[0]}</span>} />
+                        </div>
+                        <div className="mt-3.5 grid grid-cols-2 gap-2">
+                          <Button size="sm" variant="secondary" disabled title="File storage arrives next">
+                            <Eye /> View
+                          </Button>
+                          <Button size="sm" variant="secondary" disabled title="File storage arrives next">
+                            <Download /> Download
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">No documents on file.</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="financial">
+              <div className="grid gap-3">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <Tile label="Total invoiced" value={aud(invoiced)} />
+                  <Tile label="Total paid" value={aud(paid)} />
+                  <Tile label="Outstanding balance" value={aud(invoiced - paid)} />
+                  <Tile label="Next payment due" value={nextDue ? aud(Number(nextDue.total) - Number(nextDue.paid)) : "—"} />
+                </div>
+                <div className="flex items-center gap-2 pt-2">
+                  <p className="tick text-sm font-medium" style={{ "--tick": "var(--chart-2)" } as React.CSSProperties}>
+                    Invoices
+                  </p>
+                  <div className="ml-auto">
+                    <WithPickers render={(p) => <NewInvoiceDialog pickers={p} clientId={c.id} />} />
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border">
+                  <table className="w-full min-w-[640px] text-[13px]">
+                    <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+                      <tr>
+                        {["Invoice #", "Issued", "Amount", "Paid", "Status", "Due date", ""].map((h) => (
+                          <th key={h} className="border-r px-3 py-2.5 font-medium last:border-r-0">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoices.map((i) => {
+                        const owing = Number(i.total) - Number(i.paid);
+                        return (
+                          <tr key={i.id} className="border-t">
+                            <td className="px-3 py-3 font-mono">{i.number}</td>
+                            <td className="px-3 py-3 text-muted-foreground">{dmy(i.issuedAt)}</td>
+                            <td className="px-3 py-3 tabular-nums">{aud(i.total, 2)}</td>
+                            <td className="px-3 py-3 tabular-nums text-muted-foreground">{aud(i.paid, 2)}</td>
+                            <td className="px-3 py-3">
+                              <Pill t={invoiceTone[owing <= 0.005 ? "paid" : i.status]}>{label(owing <= 0.005 ? "paid" : i.status)}</Pill>
+                            </td>
+                            <td className="px-3 py-3 text-muted-foreground">{dmy(i.dueAt)}</td>
+                            <td className="px-3 py-3 text-right">
+                              {owing > 0.005 && i.status !== "void" ? (
+                                <RecordPaymentDialog invoiceId={i.id} outstanding={owing} trigger={<Button size="xs" variant="outline">Record payment</Button>} />
+                              ) : null}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {!invoices.length ? (
+                        <tr>
+                          <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                            No invoices.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="tasks">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-xl border p-4">
+                  <div className="mb-3 flex items-center">
+                    <p className="text-sm font-medium">Tasks</p>
+                    <div className="ml-auto">
+                      <WithPickers render={(p) => <NewTaskDialog pickers={p} clientId={c.id} />} />
+                    </div>
+                  </div>
+                  {tasks.length ? (
+                    <ul className="grid gap-3">
+                      {tasks.map((t) => (
+                        <li key={t.id} className="flex items-center gap-3">
+                          <TaskCheck id={t.id} done={t.status === "done"} title={t.title} className="flex-1" />
+                          <Pill t={priorityTone[t.priority]}>{relativeDays(t.dueAt)}</Pill>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No tasks.</p>
+                  )}
+                </div>
+                <div className="rounded-xl border p-4">
+                  <div className="mb-3 flex items-center">
+                    <p className="text-sm font-medium">Appointments</p>
+                    <div className="ml-auto">
+                      <WithPickers fallback="Book" render={(p) => <NewAppointmentDialog pickers={p} clientId={c.id} trigger={<Button size="sm" variant="outline"><Plus /> Book</Button>} />} />
+                    </div>
+                  </div>
+                  {appointments.length ? (
+                    <ul className="grid gap-2">
+                      {appointments.map((a) => (
+                        <li key={a.id} className="flex items-center gap-3 text-sm">
+                          <span className="min-w-0 flex-1 truncate">{a.title}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {dmy(a.startsAt)} {time(a.startsAt)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">None booked.</p>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="activity">
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                <div className="grid content-start gap-3">
+                  <NoteComposer clientId={c.id} />
+                  {c.notes ? <p className="rounded-xl border bg-muted/30 p-3 text-[13px] text-muted-foreground">{c.notes}</p> : null}
+                  {open.length ? (
+                    <div className="rounded-xl border p-4">
+                      <p className="mb-3 text-sm font-medium">Checklist progress</p>
+                      {open.map((m) => (
+                        <div key={m.id} className="mb-2 last:mb-0">
+                          <p className="mb-1 flex justify-between text-xs text-muted-foreground">
+                            <span>{m.title}</span>
+                            <span>{stageLabel(m.stage)}</span>
+                          </p>
+                          <ProgressBar value={(stages.findIndex((s) => s.key === m.stage) + 1) / stages.length} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <Timeline items={activities} empty="No activity yet. Add the first note." />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="family">
+              {dependants.length ? (
+                <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {dependants.map((d) => (
+                    <li key={d.id} className="flex items-center gap-3 rounded-xl border bg-muted/20 p-3">
+                      <UsersRound className="size-4 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{d.fullName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {label(d.relationship)}
+                          {d.dateOfBirth ? ` · born ${dmy(d.dateOfBirth)}` : ""}
                         </p>
                       </div>
-                      <Pill t={priorityTone[m.priority]}>{label(m.priority)}</Pill>
-                      <Pill t={matterStageTone[m.stage]}>{stageLabel(m.stage)}</Pill>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="p-6 text-center text-sm text-muted-foreground">No matters yet.</p>
-            )}
-          </Section>
-        </TabsContent>
-
-        <TabsContent value="documents">
-          <Section title="Documents" bodyClassName="p-0 sm:p-0">
-            {documents.length ? (
-              <ul>
-                {documents.map((d) => (
-                  <li key={d.id} className="flex items-center gap-3 border-b px-4 py-3 last:border-0 sm:px-5">
-                    <FileText className="size-4 text-primary" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{d.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {d.category ?? "Document"} · added {dmy(d.createdAt)}
-                      </p>
-                    </div>
-                    {d.certified ? <Pill t="green">Certified</Pill> : null}
-                    {d.translated ? <Pill t="blue">Translated</Pill> : null}
-                    {d.expiresAt ? <ExpiryPill days={daysUntil(d.expiresAt)} /> : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="p-6 text-center text-sm text-muted-foreground">No documents on file.</p>
-            )}
-          </Section>
-        </TabsContent>
-
-        <TabsContent value="tasks">
-          <Section title="Tasks" action={<WithPickers render={(p) => <NewTaskDialog pickers={p} clientId={c.id} />} />}>
-            {tasks.length ? (
-              <ul className="grid gap-3">
-                {tasks.map((t) => (
-                  <li key={t.id} className="flex items-center gap-3">
-                    <TaskCheck id={t.id} done={t.status === "done"} title={t.title} className="flex-1" />
-                    <Pill t={priorityTone[t.priority]}>{relativeDays(t.dueAt)}</Pill>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No tasks.</p>
-            )}
-          </Section>
-        </TabsContent>
-
-        <TabsContent value="billing">
-          <Section
-            title={
-              <span className="flex items-center gap-2">
-                <Receipt className="size-4" /> Invoices · {aud(owing)} owing
-              </span>
-            }
-            action={<WithPickers render={(p) => <NewInvoiceDialog pickers={p} clientId={c.id} />} />}
-            bodyClassName="p-0 sm:p-0"
-          >
-            {invoices.length ? (
-              <ul>
-                {invoices.map((i) => (
-                  <li key={i.id} className="flex items-center gap-3 border-b px-4 py-3 last:border-0 sm:px-5">
-                    <span className="font-mono text-sm">{i.number}</span>
-                    <span className="text-xs text-muted-foreground">{dmy(i.issuedAt)}</span>
-                    <span className="ml-auto text-sm tabular-nums">{aud(i.total, 2)}</span>
-                    <Pill t={invoiceTone[i.status]}>{label(i.status)}</Pill>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="p-6 text-center text-sm text-muted-foreground">No invoices.</p>
-            )}
-          </Section>
-        </TabsContent>
-
-        <TabsContent value="family">
-          <Section title="Family members">
-            {dependants.length ? (
-              <ul className="grid gap-3 sm:grid-cols-2">
-                {dependants.map((d) => (
-                  <li key={d.id} className="flex items-center gap-3 rounded-xl border p-3">
-                    <UsersRound className="size-4 text-primary" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{d.fullName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {label(d.relationship)}
-                        {d.dateOfBirth ? ` · born ${dmy(d.dateOfBirth)}` : ""}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No family members recorded.</p>
-            )}
-          </Section>
-        </TabsContent>
-      </Tabs>
-    </>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">No family members recorded.</p>
+              )}
+            </TabsContent>
+          </Tabs>
+        </Section>
+      </FadeIn>
+    </div>
   );
 }
 
 export default function ClientPage({ params }: PageProps<"/app/clients/[id]">) {
   return (
-    <>
-      <Link href="/app/clients" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Clients
-      </Link>
-      <Suspense fallback={<PageSkeleton />}>
-        <ClientView params={params} />
-      </Suspense>
-    </>
+    <Suspense fallback={<PageSkeleton />}>
+      <ClientView params={params} />
+    </Suspense>
   );
 }

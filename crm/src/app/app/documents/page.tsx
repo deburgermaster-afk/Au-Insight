@@ -1,48 +1,70 @@
-import { connection } from "next/server";
-import { FileText } from "lucide-react";
+import { Download, Eye, FileText } from "lucide-react";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense } from "react";
-import { ExpiryPill, Pill } from "@/components/app/badges";
+import { Stagger, StaggerItem } from "@/components/app/motion";
 import { PageHeader } from "@/components/app/page-header";
-import { Section } from "@/components/app/section";
 import { TableSkeleton } from "@/components/app/skeletons";
+import { Button } from "@/components/ui/button";
 import { listDocuments } from "@/lib/data";
 import { daysUntil, dmy } from "@/lib/format";
 
 export const metadata = { title: "Documents" };
 
+function Row({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-[12.5px]">
+      <span className="uppercase tracking-wide text-muted-foreground/80">{k}</span>
+      <span className="truncate text-right">{v}</span>
+    </div>
+  );
+}
+
 async function Docs() {
   await connection();
   const rows = await listDocuments();
+  if (!rows.length) return <p className="rounded-xl border p-10 text-center text-sm text-muted-foreground">No documents yet.</p>;
   return (
-    <Section bodyClassName="p-0 sm:p-0">
-      <ul>
-        {rows.map(({ doc: d, clientFirst, clientLast }) => (
-          <li key={d.id} className="flex items-center gap-3 border-b px-4 py-3 last:border-0 sm:px-5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-              <FileText className="size-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{d.name}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {d.clientId ? (
-                  <Link href={`/app/clients/${d.clientId}`} className="hover:text-primary">
-                    {clientFirst} {clientLast}
-                  </Link>
-                ) : null}
-                {` · ${d.category ?? "Document"} · ${dmy(d.createdAt)}`}
-              </p>
+    <Stagger className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      {rows.map(({ doc: d, clientFirst, clientLast }) => {
+        const days = d.expiresAt ? daysUntil(d.expiresAt) : null;
+        const status = days != null && days < 0 ? ["Expired", "text-rose-500"] : d.certified ? ["Verified", "text-emerald-500"] : ["Pending review", "text-amber-500"];
+        return (
+          <StaggerItem key={d.id} className="flex flex-col rounded-xl border bg-card p-3.5">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <FileText className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{d.name}</span>
+            </p>
+            <div className="mt-3 grid gap-1.5">
+              <Row
+                k="Client"
+                v={
+                  d.clientId ? (
+                    <Link href={`/app/clients/${d.clientId}`} className="hover:underline">
+                      {clientFirst} {clientLast}
+                    </Link>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              <Row k="Type" v={d.category ?? "Document"} />
+              <Row k="Uploaded" v={dmy(d.createdAt)} />
+              <Row k="Expiry" v={d.expiresAt ? `Valid till ${dmy(d.expiresAt)}` : "N/A"} />
+              <Row k="Status" v={<span className={status[1]}>{status[0]}</span>} />
             </div>
-            <div className="hidden gap-1.5 sm:flex">
-              {d.certified ? <Pill t="green">Certified</Pill> : null}
-              {d.translated ? <Pill t="blue">Translated</Pill> : null}
+            <div className="mt-3.5 grid grid-cols-2 gap-2">
+              <Button size="sm" variant="secondary" disabled title="File storage arrives next">
+                <Eye /> View
+              </Button>
+              <Button size="sm" variant="secondary" disabled title="File storage arrives next">
+                <Download /> Download
+              </Button>
             </div>
-            {d.expiresAt ? <ExpiryPill days={daysUntil(d.expiresAt)} /> : null}
-          </li>
-        ))}
-        {!rows.length ? <li className="p-10 text-center text-sm text-muted-foreground">No documents yet. Uploads arrive with file storage, coming next.</li> : null}
-      </ul>
-    </Section>
+          </StaggerItem>
+        );
+      })}
+    </Stagger>
   );
 }
 
