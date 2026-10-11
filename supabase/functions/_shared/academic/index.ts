@@ -149,3 +149,5 @@ export type CreditGuide = {
 export { gradePoint, summariseRecord } from "./record.ts";
 export { studyPlan } from "./plan.ts";
 export { aqfCreditGuide } from "./credit.ts";
+export { wamProjection } from "./project.ts";
+export type { WamProjection, WamTarget } from "./project.ts";

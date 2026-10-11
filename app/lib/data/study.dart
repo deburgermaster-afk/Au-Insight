@@ -705,3 +705,78 @@ String planStatusLabel(String status) => switch (status) {
   'completed' => 'Completed',
   _ => 'Needs info',
 };
+
+// ── Course eligibility (chat function tool `course_eligibility`) ─────────────────────────────────
+
+class EligibilityRequirement {
+  EligibilityRequirement.fromJson(Map<String, dynamic> j)
+    : name = _s(j['name']),
+      required = _s(j['required']),
+      you = _s(j['you']),
+      met = j['met'] is bool ? j['met'] as bool : null;
+  final String name;
+  final String required;
+  final String you;
+  final bool? met;
+}
+
+class WamTarget {
+  WamTarget.fromJson(Map<String, dynamic> j)
+    : wam = _num(j['wam']) ?? 0,
+      neededAverage = _num(j['neededAverage']),
+      reachable = j['reachable'] == true;
+  final double wam;
+  final double? neededAverage;
+  final bool reachable;
+}
+
+/// What the rest of the current course needs for each final WAM (computed, not guessed).
+class WamProjection {
+  WamProjection.fromJson(Map<String, dynamic> j)
+    : currentWam = _num(j['currentWam']) ?? 0,
+      remainingCredit = _num(j['remainingCredit']) ?? 0,
+      bestPossible = _num(j['bestPossible']),
+      targets = [for (final t in _maps(j['targets'])) WamTarget.fromJson(t)];
+  final double currentWam;
+  final double remainingCredit;
+  final double? bestPossible;
+  final List<WamTarget> targets;
+}
+
+class CourseEligibility {
+  CourseEligibility.fromJson(Map<String, dynamic> j)
+    : status = _s(j['status']).isEmpty ? 'unknown' : _s(j['status']),
+      headline = _s(j['headline']),
+      requirements = [for (final r in _maps(j['requirements'])) EligibilityRequirement.fromJson(r)],
+      conditions = [for (final c in (j['conditions'] as List? ?? const [])) '$c'],
+      toQualify = [for (final c in (j['toQualify'] as List? ?? const [])) '$c'],
+      question = (j['question'] as String?)?.trim().isEmpty ?? true ? null : (j['question'] as String).trim(),
+      sources = [for (final s in _maps(j['sources'])) (_s(s['title']), _s(s['url']))],
+      projection = j['projection'] is Map ? WamProjection.fromJson((j['projection'] as Map).cast()) : null;
+
+  final String status; // eligible | eligible_if | not_yet | unknown
+  final String headline;
+  final List<EligibilityRequirement> requirements;
+  final List<String> conditions;
+  final List<String> toQualify;
+  final String? question;
+  final List<(String, String)> sources;
+  final WamProjection? projection;
+}
+
+final _eligibility = <String, CourseEligibility>{};
+
+/// Stores a result as if it had been checked (widget tests).
+@visibleForTesting
+void rememberEligibility(String code, CourseEligibility r) => _eligibility['${people.ownerKey}|$code'] = r;
+
+/// The last check for [code] by the open person, if any.
+CourseEligibility? cachedEligibility(String code) => _eligibility['${people.ownerKey}|$code'];
+
+/// Reads the course's entry requirements and compares them with the open person's record. A course
+/// they are still studying counts as one they'll finish; [expectedWam] is the final WAM they expect.
+Future<CourseEligibility> checkEligibility(String code, {double? expectedWam}) async {
+  final r = CourseEligibility.fromJson(await callTool('course_eligibility', {'courseCode': code, 'expectedWam': ?expectedWam}));
+  _eligibility['${people.ownerKey}|$code'] = r;
+  return r;
+}

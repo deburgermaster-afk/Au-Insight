@@ -18,12 +18,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assessAll, type CaseFacts, caseFactsSchema, todayISO } from "../_shared/engine/index.ts";
 import { analystPrompt, ANALYSTS } from "./analysts.ts";
-import { classifyAndSave, describeExtracted, isExtracted } from "./docintel.ts";
+import { classifyAndSave, describeExtracted, isExtracted, parseJson } from "./docintel.ts";
+import { type Eligibility, eligibilityPrompt, normaliseEligibility } from "./eligibility.ts";
 import { educationDefs, educationTools } from "./education.ts";
 import { mergeProfile, missingSections, type Profile, profileJsonSchema } from "./profile.ts";
 import { occupationDefs, occupationTools } from "./occupations.ts";
 import { siteDefs, siteTools } from "./site.ts";
-import { coeHistory, describeHistory, studyDefs, studyTools } from "./study.ts";
+import { academicRecord, coeHistory, currentCourse, describeHistory, studyDefs, studyTools } from "./study.ts";
 
 const BUCKET = "case-documents";
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
@@ -1058,4 +1059,61 @@ export async function runAgent(
     MAX_STEPS,
     turnEnds,
   );
+}
+
+/** Tools the course-page eligibility check may use: the course, the provider's pages, the record. */
+const ELIGIBILITY_TOOLS = [
+  "get_course",
+  "get_provider",
+  "search_university_policies",
+  "read_official_page",
+  "search_official_site",
+  "academic_record",
+  "credit_guide",
+];
+
+/**
+ * Checks one course's entry requirements against the open person's record, for the course page.
+ * `expectedWam` is the final WAM they expect in their current course, if they gave one.
+ */
+export async function courseEligibility(
+  supabase: SupabaseClient,
+  llm: LLMConfig,
+  args: { courseCode?: unknown; expectedWam?: unknown },
+  signal?: AbortSignal,
+): Promise<Eligibility & { projection: unknown; course: unknown }> {
+  const code = String(args.courseCode ?? "").trim().toUpperCase();
+  const expected = Number(args.expectedWam);
+  const cited: { n: number; title: string; url: string }[] = [];
+  const emit: Emit = (e) => {
+    if (e.type === "source") cited.push({ n: e.n as number, title: e.title as string, url: e.url as string });
+  };
+  const tools = makeTools(supabase, emit, llm) as unknown as Record<string, ToolFn>;
+  const [course, record, caseFile] = await Promise.all([
+    tools.get_course({ code }),
+    academicRecord(supabase).catch(() => null),
+    tools.get_case_file({}),
+  ]);
+  const profile = ((caseFile as { profile?: Profile }).profile ?? {}) as Profile;
+  const current = currentCourse(profile) ?? {};
+  const projection = record?.projection ?? null;
+  const facts = {
+    course,
+    student: {
+      profile,
+      story: (caseFile as { story?: string }).story ?? "",
+      currentCourse: current,
+      academicRecord: record?.summary ?? null,
+      wamProjection: projection ?? "Unknown: the course's total credit points or the transcript are missing.",
+      expectedFinalWam: Number.isFinite(expected) && expected > 0 ? expected : null,
+    },
+  };
+  const messages: Msg[] = [
+    { role: "system", content: eligibilityPrompt(todayISO()) },
+    { role: "user", content: JSON.stringify(facts).slice(0, 24000) },
+  ];
+  const defs = toolDefs.filter((d) => ELIGIBILITY_TOOLS.includes(d.function.name));
+  const deadline = Date.now() + 60_000;
+  const text = await runLoop(llm, messages, tools, defs, emit, signal ? AbortSignal.any([signal, AbortSignal.timeout(100_000)]) : AbortSignal.timeout(100_000), 4, deadline);
+  return { ...normaliseEligibility(parseJson(text), cited), projection, course };
 }

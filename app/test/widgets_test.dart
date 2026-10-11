@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:immi_insight/data/occupations.dart';
 import 'package:immi_insight/data/people.dart';
 import 'package:immi_insight/screens/occupations/eoi_card.dart';
+import 'package:immi_insight/data/study.dart';
+import 'package:immi_insight/screens/study/eligibility_panel.dart';
 import 'package:immi_insight/screens/occupations/round_screen.dart';
 import 'package:immi_insight/widgets/chat_markdown.dart';
 import 'package:immi_insight/widgets/people.dart';
@@ -113,6 +115,43 @@ void main() {
     await tester.tap(find.text('190'));
     await tester.pump();
     expect(find.textContaining('waiting with more points than', findRichText: true), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('eligibility panel shows a conditional verdict on a phone', (tester) async {
+    tester.view.physicalSize = const Size(375 * 3, 812 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    rememberEligibility(
+      '079732M',
+      CourseEligibility.fromJson({
+        'status': 'eligible_if',
+        'headline': 'Eligible once you finish your Bachelor of IT with a WAM of 65 or more.',
+        'requirements': [
+          {'name': 'Academic', 'required': 'Bachelor degree in any field', 'you': 'Bachelor of IT (Cyber Security), finishing March 2028', 'met': true},
+          {'name': 'Grades', 'required': 'WAM 65', 'you': 'WAM 37.6 so far', 'met': null},
+          {'name': 'English', 'required': 'IELTS 6.5 (no band below 6.0)', 'you': 'PTE 58', 'met': false},
+        ],
+        'conditions': ['Finish with a WAM of 65 (an average of 84.6 in your remaining 156 credit points)'],
+        'toQualify': ['Retake PTE for 58+ in every band', 'Ask RMIT about its Graduate Certificate pathway'],
+        'question': 'What final WAM do you expect?',
+        'sources': [
+          {'title': 'RMIT entry requirements', 'url': 'https://www.rmit.edu.au/x'},
+        ],
+        'projection': {
+          'currentWam': 37.6,
+          'remainingCredit': 156,
+          'bestPossible': 66.9,
+          'targets': [
+            for (final w in [50, 55, 60, 65, 70]) {'wam': w, 'neededAverage': w * 2.2 - 50, 'reachable': w <= 65},
+          ],
+        },
+      }),
+    );
+    await tester.pumpWidget(_phone(SingleChildScrollView(child: EligibilityPanel(courseCode: '079732M', onAskMore: () {}))));
+    expect(find.text('Eligible if…'), findsOneWidget);
+    expect(find.textContaining('average'), findsWidgets);
+    expect(find.text('out of reach'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

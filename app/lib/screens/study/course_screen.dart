@@ -9,6 +9,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/course_card.dart';
 import '../shell.dart';
+import 'eligibility_panel.dart';
 import 'study_home.dart';
 import 'widgets.dart';
 
@@ -216,7 +217,18 @@ class _CourseScreenState extends State<CourseScreen> {
           padding: const EdgeInsets.only(top: 6, left: 2),
           child: Text('Taught in ${states.join(', ')}', style: AppText.tiny),
         ),
-      const SectionLabel('Ask the assistant'),
+      const SectionLabel('Check and ask'),
+      // Answered in place, no chat.
+      Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: EligibilityPanel(
+          courseCode: c.courseCode,
+          onAskMore: () => askInChat(
+            context,
+            'I checked my eligibility for ${_id(c, d)}. What are my best options to get in, and what should I do first?',
+          ),
+        ),
+      ),
       for (final q in _questions(c, d))
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
@@ -290,14 +302,6 @@ class _CourseScreenState extends State<CourseScreen> {
   List<(IconData, String, String, String)> _questions(CourseSummary c, CourseDetail? d) {
     final id = _id(c, d);
     return [
-      (
-        LucideIcons.badgeCheck,
-        'Am I eligible?',
-        'Entry and English requirements against my record, and how to qualify if not',
-        'Am I eligible for $id? Check the academic and English entry requirements on the provider\'s official website against my '
-            'profile, transcripts and test results. If I am not eligible yet, tell me exactly what I would need to do to become '
-            'eligible and how long it would take.',
-      ),
       if (c.isResearch)
         (
           LucideIcons.microscope,

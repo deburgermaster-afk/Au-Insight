@@ -10,6 +10,7 @@ import {
   studyPlan,
   summariseRecord,
   type UnitResult,
+  wamProjection,
 } from "../_shared/academic/index.ts";
 import { dateOf, type Extracted, field, isExtracted } from "./docintel.ts";
 import { isoDate, num, type ToolDef } from "./shared.ts";
@@ -198,9 +199,12 @@ export async function loadStudyContext(supabase: SupabaseClient) {
 }
 
 export async function academicRecord(supabase: SupabaseClient) {
-  const { docs } = await loadStudyContext(supabase);
+  const { profile, docs } = await loadStudyContext(supabase);
   const { units, documents } = recordUnits(docs);
-  return { summary: units.length ? summariseRecord(units) : null, units, documents };
+  const summary = units.length ? summariseRecord(units) : null;
+  // What the rest of the current course needs for a target WAM (null when its length is unknown).
+  const projection = wamProjection(summary, num(currentCourse(profile)?.creditPointsTotal) ?? null);
+  return { summary, units, documents, projection };
 }
 
 export async function studyPlanFor(supabase: SupabaseClient, today: string, overrides: Record<string, unknown> = {}) {
@@ -269,7 +273,13 @@ export function studyTools(supabase: SupabaseClient, today: () => string) {
     },
     async academic_record() {
       const r = await academicRecord(supabase);
-      return { summary: r.summary, units: r.units.slice(0, 120), documents: r.documents };
+      return {
+        summary: r.summary,
+        wamProjection: r.projection ??
+          "Unknown: needs the current course's total credit points (ask, then save_profile study.creditPointsTotal).",
+        units: r.units.slice(0, 120),
+        documents: r.documents,
+      };
     },
     async study_history() {
       const { docs } = await loadStudyContext(supabase);

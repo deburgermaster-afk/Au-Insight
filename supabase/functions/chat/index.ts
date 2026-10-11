@@ -2,7 +2,15 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { todayISO } from "../_shared/engine/index.ts";
-import { type Emit, type LLMConfig, type Msg, prepareDocuments, processDocuments, runAgent } from "./agent.ts";
+import {
+  courseEligibility,
+  type Emit,
+  type LLMConfig,
+  type Msg,
+  prepareDocuments,
+  processDocuments,
+  runAgent,
+} from "./agent.ts";
 import { academicRecord, coeHistory, loadStudyContext, studyPlanFor } from "./study.ts";
 import { missingSections } from "./profile.ts";
 import { changesQuery, systemPrompt, type UserContext } from "./prompt.ts";
@@ -100,6 +108,10 @@ async function direct(supabase: SupabaseClient, body: { tool?: unknown; args?: u
       case "study_history": {
         const { docs } = await loadStudyContext(supabase);
         return json(200, { result: { coes: coeHistory(docs) } });
+      }
+      case "course_eligibility": {
+        await apiKey();
+        return json(200, { result: await courseEligibility(supabase, llm, args) });
       }
       case "process_documents": {
         await apiKey();

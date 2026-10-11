@@ -56,7 +56,12 @@ class People extends ChangeNotifier {
 
   /// Keys caches by user and person, so one person's data is never shown for another.
   String? get ownerKey {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
+    String? uid;
+    try {
+      uid = Supabase.instance.client.auth.currentUser?.id;
+    } catch (_) {
+      // Supabase not initialised (widget tests): no signed-in user.
+    }
     return uid == null ? null : '$uid:${activeId ?? ''}';
   }
 
