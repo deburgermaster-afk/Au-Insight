@@ -82,13 +82,10 @@ alter table public.course_shortlist add primary key (user_id, case_id, course_co
 
 -- ─────────────────────────────── 3. Row-level security ───────────────────────────────
 
-drop policy if exists "own cases" on public.cases;
-create policy "open person" on public.cases for select to authenticated
-  using ((select auth.uid()) = user_id and id = (select public.active_case_id()));
-create policy "open person update" on public.cases for update to authenticated
+-- The existing "own …" policies keep their names; they now also require the open person. (For
+-- cases, inserts are checked by WITH CHECK only, so a new person can be added while another is open.)
+alter policy "own cases" on public.cases
   using ((select auth.uid()) = user_id and id = (select public.active_case_id()))
-  with check ((select auth.uid()) = user_id);
-create policy "add person" on public.cases for insert to authenticated
   with check ((select auth.uid()) = user_id);
 
 do $$
@@ -99,8 +96,7 @@ begin
   foreach t in array array['chats', 'folders', 'documents', 'solutions', 'course_shortlist']
   loop
     p := case t when 'course_shortlist' then 'own shortlist' else 'own ' || t end;
-    execute format('drop policy if exists %I on public.%I', p, t);
-    execute format('create policy %I on public.%I for all to authenticated
+    execute format('alter policy %I on public.%I
                     using ((select auth.uid()) = user_id and case_id = (select public.active_case_id()))
                     with check ((select auth.uid()) = user_id and public.owns_case(case_id))', p, t);
   end loop;

@@ -4,7 +4,9 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:immi_insight/data/occupations.dart';
 import 'package:immi_insight/data/people.dart';
+import 'package:immi_insight/screens/occupations/eoi_card.dart';
 import 'package:immi_insight/screens/occupations/round_screen.dart';
 import 'package:immi_insight/widgets/chat_markdown.dart';
 import 'package:immi_insight/widgets/people.dart';
@@ -16,7 +18,7 @@ Widget _phone(Widget child) => MaterialApp(
       body: Column(
         children: [
           const TopBar(),
-          Padding(padding: const EdgeInsets.all(16), child: child),
+          Expanded(child: Padding(padding: const EdgeInsets.all(16), child: child)),
         ],
       ),
     ),
@@ -82,6 +84,35 @@ void main() {
   testWidgets('cut-off histogram fits a phone', (tester) async {
     await tester.pumpWidget(_phone(const CutoffHistogram(histogram: {65: 12, 70: 3, 80: 20, 95: 1, 110: 2}, points: 80)));
     expect(find.text('OCCUPATIONS BY CUT-OFF'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('EOI card fits a phone and switches streams', (tester) async {
+    tester.view.physicalSize = const Size(375 * 3, 812 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final pool = parseEoiPool({
+      'as_at': '2026-09-30',
+      'subclasses': [
+        for (final code in ['189PTS', '190SAS', '491SNR'])
+          {
+            'subclass': code,
+            'visa_type': code,
+            'by_status': {'SUBMITTED': 9596, 'INVITED': '<20', 'LODGED': 146},
+            'by_points': [
+              for (var p = 45; p <= 120; p += 5) {'points': '$p', 'SUBMITTED': p == 110 ? '<20' : p * 13},
+            ],
+            'by_month': [
+              for (var m = 1; m <= 12; m++) {'as_at': '2026-${m.toString().padLeft(2, '0')}-28', 'SUBMITTED': 8000 + m * 100, 'INVITED': m == 3 ? 31 : '<20'},
+            ],
+          },
+      ],
+    }, 'subclasses')!;
+    await tester.pumpWidget(_phone(SingleChildScrollView(child: EoiPoolCard(pool: pool))));
+    expect(find.text('9,596'), findsOneWidget);
+    await tester.tap(find.text('190'));
+    await tester.pump();
+    expect(find.textContaining('waiting with more points than', findRichText: true), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

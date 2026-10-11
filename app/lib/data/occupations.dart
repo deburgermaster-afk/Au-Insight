@@ -875,3 +875,126 @@ Future<List<RoundCutoffs>> cutoffTrend(String subclass) async {
   }
   return out..sort((a, b) => a.date.compareTo(b.date));
 }
+
+// ── SkillSelect EOIs: who else is in the pool ────────────────────────────────────────────────────
+
+/// One published EOI count: a number, or "<20" (Home Affairs hides small counts).
+class EoiCount {
+  const EoiCount(this.value, this.text);
+  final int? value;
+  final String text;
+
+  static const none = EoiCount(0, '0');
+
+  factory EoiCount.from(Object? v) {
+    if (v == null) return none;
+    final n = _int(v);
+    return n != null ? EoiCount(n, formatThousands(n)) : EoiCount(null, '$v');
+  }
+
+  /// For totals: "<20" counts as its floor (0) and marks the total as a minimum.
+  int get floor => value ?? 0;
+  bool get hidden => value == null;
+}
+
+String formatThousands(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+
+class EoiPointsRow {
+  const EoiPointsRow(this.points, this.counts);
+  final int points;
+  final Map<String, EoiCount> counts; // SUBMITTED, INVITED, LODGED, HOLD, CLOSED
+  EoiCount operator [](String status) => counts[status] ?? EoiCount.none;
+}
+
+class EoiMonth {
+  const EoiMonth(this.asAt, this.counts);
+  final DateTime asAt;
+  final Map<String, EoiCount> counts;
+  EoiCount operator [](String status) => counts[status] ?? EoiCount.none;
+}
+
+/// One visa stream's EOIs (189 points-tested, 190, 491 state or family) for an occupation or overall.
+class EoiStream {
+  const EoiStream({required this.code, required this.label, required this.byStatus, required this.byPoints, required this.byMonth});
+  final String code; // 189PTS, 190SAS, 491SNR, 491FSR
+  final String label;
+  final Map<String, EoiCount> byStatus;
+  final List<EoiPointsRow> byPoints; // lowest score first
+  final List<EoiMonth> byMonth; // oldest first
+
+  /// "189", "190", "491 state", "491 family".
+  String get short => switch (code) {
+    '189PTS' => '189',
+    '190SAS' => '190',
+    '491SNR' => '491 state',
+    '491FSR' => '491 family',
+    _ => code,
+  };
+
+  /// Waiting EOIs above / at [points]: (count, whether hidden "<20" rows make it a minimum).
+  (int, bool) waitingAbove(int points) => _sum(byPoints.where((r) => r.points > points));
+  (int, bool) waitingAt(int points) => _sum(byPoints.where((r) => r.points == points));
+
+  (int, bool) _sum(Iterable<EoiPointsRow> rows) {
+    var n = 0;
+    var hidden = false;
+    for (final r in rows) {
+      final c = r['SUBMITTED'];
+      n += c.floor;
+      hidden |= c.hidden;
+    }
+    return (n, hidden);
+  }
+}
+
+class EoiPool {
+  const EoiPool({required this.asAt, required this.streams, required this.notes, this.sourceUrl});
+  final DateTime? asAt;
+  final List<EoiStream> streams;
+  final List<String> notes;
+  final String? sourceUrl;
+}
+
+Map<String, EoiCount> _eoiCounts(Map<String, dynamic> m) => {
+  for (final s in const ['SUBMITTED', 'INVITED', 'LODGED', 'HOLD', 'CLOSED'])
+    if (m.containsKey(s)) s: EoiCount.from(m[s]),
+};
+
+/// Reads an `occupation_eoi` (list key "subclasses") or `eoi_overview` ("visa_types") response.
+EoiPool? parseEoiPool(Object? raw, String listKey) {
+  final j = _map(raw);
+  final streams = [
+    for (final s in _maps(j[listKey]))
+      EoiStream(
+        code: _str(s['subclass']) ?? '',
+        label: _str(s['visa_type']) ?? '',
+        byStatus: _eoiCounts(_map(s['by_status'])),
+        byPoints: [
+          for (final p in _maps(s['by_points']))
+            if (_int(p['points']) != null) EoiPointsRow(_int(p['points'])!, _eoiCounts(p)),
+        ]..sort((a, b) => a.points.compareTo(b.points)),
+        byMonth: [
+          for (final m in _maps(s['by_month']))
+            if (DateTime.tryParse(_str(m['as_at']) ?? '') != null) EoiMonth(DateTime.parse(_str(m['as_at'])!), _eoiCounts(m)),
+        ]..sort((a, b) => a.asAt.compareTo(b.asAt)),
+      ),
+  ];
+  if (streams.isEmpty) return null;
+  const order = ['189PTS', '190SAS', '491SNR', '491FSR'];
+  int rank(EoiStream s) => order.contains(s.code) ? order.indexOf(s.code) : order.length;
+  streams.sort((a, b) => rank(a).compareTo(rank(b)));
+  return EoiPool(
+    asAt: DateTime.tryParse(_str(j['as_at']) ?? ''),
+    streams: streams,
+    notes: [for (final n in (j['notes'] as List? ?? const [])) '$n'],
+    sourceUrl: _str(j['source_url']),
+  );
+}
+
+/// The SkillSelect EOI pool for one occupation, by visa stream, points and month (`occupation_eoi`).
+Future<EoiPool?> occupationEoi(String anzsco) async => parseEoiPool(await _sb.rpc('occupation_eoi', params: {'p_anzsco': anzsco}), 'subclasses');
+
+/// The whole pool for a subclass, every occupation (`eoi_overview`).
+Future<EoiPool?> eoiOverview(String subclass) async => parseEoiPool(await _sb.rpc('eoi_overview', params: {'p_subclass': subclass}), 'visa_types');
+
+const eoiDashboardUrl = 'https://api.dynamic.reports.employment.gov.au/anonap/extensions/hSKLS02_SkillSelect_EOI_Data/hSKLS02_SkillSelect_EOI_Data.html';

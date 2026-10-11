@@ -7,6 +7,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../shell.dart' show PageHeader;
 import '../study/widgets.dart';
+import 'eoi_card.dart';
 import 'round_screen.dart';
 import 'widgets.dart';
 
@@ -22,6 +23,7 @@ class _RoundsScreenState extends State<RoundsScreen> {
   RoundsOverview? _o;
   Object? _error;
   final Map<String, List<RoundCutoffs>> _trends = {};
+  EoiPool? _pool;
 
   void _openRound(DateTime date, String subclass) => context.push('/jobs/rounds/$subclass/${isoDay(date)}');
 
@@ -36,6 +38,19 @@ class _RoundsScreenState extends State<RoundsScreen> {
     try {
       final o = await latestRounds(limit: 40);
       if (mounted) setState(() => _o = o);
+      // The whole pool: every occupation, for 189, 190 and 491.
+      Future.wait([for (final sub in ['189', '190', '491']) eoiOverview(sub).catchError((Object _) => null)]).then((pools) {
+        final got = [for (final p in pools) ?p];
+        if (!mounted || got.isEmpty) return;
+        setState(
+          () => _pool = EoiPool(
+            asAt: got.first.asAt,
+            streams: [for (final p in got) ...p.streams],
+            notes: got.first.notes,
+            sourceUrl: got.first.sourceUrl,
+          ),
+        );
+      });
       for (final sub in ['189', '491']) {
         cutoffTrend(sub).then((t) {
           if (mounted) setState(() => _trends[sub] = t);
@@ -99,6 +114,7 @@ class _RoundsScreenState extends State<RoundsScreen> {
                     child: MonthBars(months: months),
                   ),
                 ],
+            if (_pool != null) ...eoiSection(context, _pool!, heading: 'Everyone in the pool (all occupations)'),
             for (final sub in ['189', '491'])
               if ((_trends[sub] ?? const []).isNotEmpty) ...[
                 SectionLabel('Points cut-off by round · ${sub == '189' ? 'subclass 189' : '491 family sponsored'}'),

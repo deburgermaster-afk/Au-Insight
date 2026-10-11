@@ -8,6 +8,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../shell.dart' show PageHeader;
 import '../study/widgets.dart';
+import 'eoi_card.dart';
 import 'widgets.dart';
 
 /// One occupation: lists and visas, assessing authority, invitation history and minimum points,
@@ -27,6 +28,7 @@ class _OccupationScreenState extends State<OccupationScreen> {
   bool _allRounds = false;
   RoundsOverview? _published; // every round, for "invited in N of M"
   PrPathway? _pathway;
+  EoiPool? _eoi;
 
   @override
   void initState() {
@@ -37,6 +39,9 @@ class _OccupationScreenState extends State<OccupationScreen> {
     }, onError: (_) {});
     allRounds().then((r) {
       if (mounted) setState(() => _published = r);
+    }, onError: (_) {});
+    occupationEoi(widget.anzsco).then((p) {
+      if (mounted) setState(() => _eoi = p);
     }, onError: (_) {});
   }
 
@@ -197,6 +202,7 @@ class _OccupationScreenState extends State<OccupationScreen> {
             ),
           ),
       ],
+      if (_eoi != null) ...eoiSection(context, _eoi!, heading: 'Who else is waiting (SkillSelect EOIs)'),
       const SectionLabel('Invitation rounds'),
       Panel(
         child: Column(
