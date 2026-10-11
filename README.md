@@ -137,7 +137,7 @@ The Vercel project `au-insight` (team Xerox) is linked to this repo with root di
 
 The repository is public, so the `chat` function can be deployed straight from a pushed commit: deploy an
 `index.ts` that only imports `https://raw.githubusercontent.com/deburgermaster-afk/Au-Insight/<full sha>/supabase/functions/chat/index.ts`,
-next to a `deno.json` with the same `imports` as `supabase/functions/deno.json` (without `vitest`). Supabase fetches and
+next to a `deno.json` with the same `imports` as `supabase/functions/deno.json` (without `vitest`), and pass `import_map_path: deno.json`. Supabase fetches and
 bundles that commit's source at deploy time, so what runs is exactly what's in git. Behaviour tweaks that don't need code
 go in the `assistant_guidance` table (`lead`, `analysts` or `all`), read on every chat.
 
