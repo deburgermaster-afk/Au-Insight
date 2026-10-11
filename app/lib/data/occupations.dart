@@ -749,3 +749,129 @@ String dayRange(int? min, int? max) {
   if (min == null || max == null || min == max) return aboutDays((min ?? max)!);
   return '${aboutDays(min).replaceFirst('about ', '')} to ${aboutDays(max).replaceFirst('about ', '')}';
 }
+
+// ── One round in detail ──────────────────────────────────────────────────────────────────────────
+
+/// An occupation invited in a round: its published cut-off (and count, when published).
+class RoundOccupation {
+  const RoundOccupation({required this.title, this.anzsco, this.minPoints, this.invited});
+  final String title;
+  final String? anzsco;
+  final int? minPoints;
+  final int? invited;
+}
+
+class RoundDetail {
+  const RoundDetail({required this.round, required this.occupations, this.programYear, this.sourceUrl});
+  final InvitationRound round;
+  final List<RoundOccupation> occupations; // lowest cut-off first
+  final String? programYear;
+  final String? sourceUrl;
+
+  List<int> get cutoffs => [for (final o in occupations) ?o.minPoints]..sort();
+
+  /// Occupations whose cut-off was at or below [points].
+  int clearedAt(int points) => occupations.where((o) => o.minPoints != null && o.minPoints! <= points).length;
+
+  /// Number of occupations at each published cut-off.
+  Map<int, int> get histogram {
+    final h = <int, int>{};
+    for (final p in cutoffs) {
+      h[p] = (h[p] ?? 0) + 1;
+    }
+    return h;
+  }
+}
+
+String isoDay(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// A round's totals and every occupation invited in it (`skillselect_rounds`, `skillselect_round_occupations`).
+Future<RoundDetail?> roundDetail(DateTime date, String subclass) async {
+  final day = isoDay(date);
+  final res = await Future.wait<dynamic>([
+    _sb
+        .from('skillselect_rounds')
+        .select('round_date,subclass,subclass_name,invited,min_points,tie_break,program_year,source_url')
+        .eq('round_date', day)
+        .eq('subclass', subclass)
+        .maybeSingle(),
+    _sb
+        .from('skillselect_round_occupations')
+        .select('occupation,anzsco,min_points,invited')
+        .eq('round_date', day)
+        .eq('subclass', subclass)
+        .eq('listed', true)
+        .order('min_points')
+        .order('occupation')
+        .limit(1000),
+  ]);
+  final r = res[0] as Map<String, dynamic>?;
+  if (r == null) return null;
+  final occs = [
+    for (final o in _maps(res[1]))
+      RoundOccupation(
+        title: _str(o['occupation']) ?? '',
+        anzsco: _str(o['anzsco']),
+        minPoints: _int(o['min_points']),
+        invited: _int(o['invited']),
+      ),
+  ];
+  return RoundDetail(
+    round: InvitationRound(
+      date: date,
+      subclass: subclass,
+      subclassName: _str(r['subclass_name']),
+      invited: _int(r['invited']),
+      tieBreak: _str(r['tie_break']),
+      occupations: occs.length,
+      lowestPoints: _int(r['min_points']) ?? (occs.isEmpty ? null : occs.map((o) => o.minPoints ?? 999).reduce((a, b) => a < b ? a : b)),
+    ),
+    occupations: occs,
+    programYear: _str(r['program_year']),
+    sourceUrl: _str(r['source_url']),
+  );
+}
+
+/// The cut-offs of one round: how many occupations, the lowest, the middle one and the highest.
+class RoundCutoffs {
+  const RoundCutoffs(this.date, this.count, this.lowest, this.median, this.highest);
+  final DateTime date;
+  final int count;
+  final int lowest;
+  final int median;
+  final int highest;
+}
+
+/// Occupation cut-offs per round for [subclass], oldest first: how the points needed moved.
+Future<List<RoundCutoffs>> cutoffTrend(String subclass) async {
+  // The API returns at most 1,000 rows a request: page through.
+  const page = 1000;
+  final rows = <Map<String, dynamic>>[];
+  for (var from = 0; from < 20 * page; from += page) {
+    final batch = await _sb
+        .from('skillselect_round_occupations')
+        .select('round_date,min_points')
+        .eq('subclass', subclass)
+        .eq('listed', true)
+        .not('min_points', 'is', null)
+        .order('round_date')
+        .order('occupation')
+        .range(from, from + page - 1);
+    rows.addAll(batch);
+    if (batch.length < page) break;
+  }
+  final byRound = <String, List<int>>{};
+  for (final r in rows) {
+    final p = _int(r['min_points']);
+    final d = _str(r['round_date']);
+    if (p != null && d != null) (byRound[d] ??= []).add(p);
+  }
+  final out = <RoundCutoffs>[];
+  for (final e in byRound.entries) {
+    final d = DateTime.tryParse(e.key);
+    if (d == null) continue;
+    final v = e.value..sort();
+    out.add(RoundCutoffs(d, v.length, v.first, v[v.length ~/ 2], v.last));
+  }
+  return out..sort((a, b) => a.date.compareTo(b.date));
+}

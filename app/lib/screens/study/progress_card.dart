@@ -6,6 +6,7 @@ import '../../data/study.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import 'widgets.dart';
+import '../../data/people.dart';
 
 // "My study progress": the study plan from the chat function's `study_plan` tool (the academic engine),
 // built from the profile's current course, the transcripts and the CoE and visa dates.
@@ -203,7 +204,13 @@ class StudyProgressCard extends StatefulWidget {
   State<StudyProgressCard> createState() => _StudyProgressCardState();
 }
 
-class _StudyProgressCardState extends State<StudyProgressCard> {
+class _StudyProgressCardState extends State<StudyProgressCard> with PersonAware {
+  @override
+  void onPersonChanged() {
+    setState(() => _res = cachedStudyPlan);
+    if (_res == null) _load();
+  }
+
   StudyPlanResult? _res;
   Object? _error;
   bool _loading = false;

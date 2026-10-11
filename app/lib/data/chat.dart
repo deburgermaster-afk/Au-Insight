@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import 'people.dart';
 
 class ChatStep {
   ChatStep({required this.id, required this.tool, required this.label, this.done = false, this.hits = const []});
@@ -58,7 +59,9 @@ class ChatMessage {
     List<(String, String)>? cases,
     List<Map<String, dynamic>>? courses,
     this.error,
-  }) : steps = steps ?? [],
+    List<String>? attachments,
+  }) : attachments = attachments ?? [],
+       steps = steps ?? [],
        courses = courses ?? [],
        actions = actions ?? [],
        cases = cases ?? [],
@@ -66,6 +69,9 @@ class ChatMessage {
        decisions = decisions ?? [];
   final String role;
   String text;
+
+  /// Names of files the user attached to this message (uploaded to their Documents).
+  final List<String> attachments;
   String reasoning;
   final List<ChatStep> steps;
   final List<SourceRef> sources;
@@ -86,6 +92,7 @@ class ChatMessage {
   Map<String, dynamic> toJson() => {
     'role': role,
     'text': text,
+    if (attachments.isNotEmpty) 'attachments': attachments,
     if (reasoning.isNotEmpty) 'reasoning': reasoning,
     if (steps.isNotEmpty) 'steps': [for (final s in steps) s.toJson()],
     if (sources.isNotEmpty) 'sources': [for (final s in sources) s.toJson()],
@@ -113,7 +120,14 @@ class ChatMessage {
         if (c is Map) c.cast<String, dynamic>(),
     ],
     error: j['error'] as String?,
+    attachments: [for (final a in (j['attachments'] as List? ?? const [])) '$a'],
   );
+
+  /// What the assistant reads: the text, plus which files came with it.
+  String get content => attachments.isEmpty
+      ? text
+      : '${text.trim()}\n\n[Attached to this message and saved to their Documents: ${attachments.join(', ')}. '
+            'Read them from the documents before answering.]';
 }
 
 /// Streams events from the `chat` edge function (server-sent events).
@@ -127,9 +141,10 @@ class ChatClient {
       ..headers.addAll({'Content-Type': 'application/json', 'Authorization': 'Bearer ${session.accessToken}', 'apikey': Config.supabaseKey})
       ..body = jsonEncode({
         'chatId': ?chatId,
+        'caseId': ?people.activeId,
         'messages': [
           for (final m in history)
-            if (m.text.trim().isNotEmpty) {'role': m.role, 'content': m.text},
+            if (m.text.trim().isNotEmpty || m.attachments.isNotEmpty) {'role': m.role, 'content': m.content},
         ],
       });
     final res = await _http.send(req);

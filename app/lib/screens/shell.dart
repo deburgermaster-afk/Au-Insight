@@ -8,6 +8,7 @@ import '../data/safe_area.dart';
 import '../data/uploads.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/people.dart';
 
 /// The tabs, in branch order (router.dart builds the branches in the same order).
 const _tabs = [
@@ -54,7 +55,14 @@ class AppShell extends StatelessWidget {
                 Expanded(child: shell),
               ],
             )
-          : shell,
+          // Phones: a header pinned above every tab, with who is open. It takes the notch, so the
+          // pages below don't add it again.
+          : Column(
+              children: [
+                const TopBar(),
+                Expanded(child: MediaQuery.removePadding(context: context, removeTop: true, child: shell)),
+              ],
+            ),
       bottomNavigationBar: wide ? null : _TabBar(index: shell.currentIndex, onTap: _go),
     );
   }
@@ -159,18 +167,15 @@ class _Rail extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
               children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(color: AppColors.fg, borderRadius: BorderRadius.circular(7)),
-                  child: const Icon(LucideIcons.plane, size: 12, color: AppColors.bg),
-                ),
+                const AppLogo(size: 24),
                 const SizedBox(width: 8),
                 const Text('Immi Insight', style: AppText.heading),
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
+          const PersonChip(expand: true),
+          const SizedBox(height: 14),
           for (final (i, t) in _tabs.indexed)
             SizedBox(
               height: 34,

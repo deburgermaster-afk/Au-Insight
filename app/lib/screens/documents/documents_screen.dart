@@ -17,6 +17,8 @@ import '../../widgets/common.dart';
 import '../auth/auth_screens.dart' show toast;
 import '../onboarding.dart' show CountBadge, FolderGlyph;
 import '../shell.dart' show PageHeader;
+import '../../data/people.dart';
+import '../../widgets/people.dart';
 
 const _bucket = documentsBucket;
 const _tints = [Color(0xCC7DD3FC), AppColors.brand, Color(0xE6FDE68A), Color(0xE6FECDD3), Color(0xCCC4B5FD), Color(0xE6A7F3D0)];
@@ -42,7 +44,10 @@ class DocumentsScreen extends StatefulWidget {
   State<DocumentsScreen> createState() => _DocumentsScreenState();
 }
 
-class _DocumentsScreenState extends State<DocumentsScreen> {
+class _DocumentsScreenState extends State<DocumentsScreen> with PersonAware {
+  @override
+  void onPersonChanged() => _load();
+
   final _sb = Supabase.instance.client;
   List<DocFolder> _folders = [];
 
@@ -590,6 +595,13 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                             _RoundIcon(LucideIcons.upload, () => upload(null), label: 'Upload'),
                           ],
                         ),
+                      ),
+                      PeopleStrip(
+                        caption: people.enabled
+                            ? (people.all.length == 1
+                                  ? 'Keep someone else\'s documents apart: add them as a person.'
+                                  : 'Showing ${people.active?.name ?? 'this person'}\'s documents. Switching person switches the whole app.')
+                            : null,
                       ),
                       if (docs.length > 3) ...[
                         ShadInput(

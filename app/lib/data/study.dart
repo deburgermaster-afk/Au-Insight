@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'backend.dart';
+import 'people.dart';
 import 'study_models.dart';
 
 // Queries behind the Study tab: the CRICOS register (courses, providers, campuses, fees) through the
@@ -494,11 +495,11 @@ String? _shortlistOwner;
 String? get _uid => _sb.auth.currentUser?.id;
 
 Future<List<String>> loadShortlist({bool force = false}) async {
-  final uid = _uid;
-  if (uid == null) return shortlist.value = const [];
-  if (!force && _shortlistOwner == uid) return shortlist.value;
+  final owner = people.ownerKey;
+  if (owner == null) return shortlist.value = const [];
+  if (!force && _shortlistOwner == owner) return shortlist.value;
   final rows = await _sb.from('course_shortlist').select('course_code').order('created_at', ascending: false);
-  _shortlistOwner = uid;
+  _shortlistOwner = owner;
   return shortlist.value = [for (final r in rows) _s(r['course_code'])];
 }
 
@@ -508,7 +509,12 @@ Future<void> setShortlisted(String code, bool on) async {
   shortlist.value = on ? [code, ...before.where((c) => c != code)] : [...before.where((c) => c != code)];
   try {
     if (on) {
-      await _sb.from('course_shortlist').upsert({'user_id': _uid, 'course_code': code}, onConflict: 'user_id,course_code', ignoreDuplicates: true);
+      // With people, a course can be on several people's shortlists (the open person is the default).
+      await _sb.from('course_shortlist').upsert(
+        {'user_id': _uid, 'course_code': code, if (people.enabled) 'case_id': people.activeId},
+        onConflict: people.enabled ? 'user_id,case_id,course_code' : 'user_id,course_code',
+        ignoreDuplicates: true,
+      );
     } else {
       await _sb.from('course_shortlist').delete().eq('course_code', code);
     }
@@ -658,14 +664,14 @@ String? _planOwner;
 Future<StudyPlanResult> fetchStudyPlan([Map<String, dynamic> overrides = const {}]) async {
   final res = StudyPlanResult.fromJson(await callTool('study_plan', overrides));
   if (overrides.isEmpty) {
-    _planOwner = _uid;
+    _planOwner = people.ownerKey;
     studyPlanCache.value = res;
   }
   return res;
 }
 
 /// The cached plan if it belongs to the signed-in user.
-StudyPlanResult? get cachedStudyPlan => _planOwner == _uid ? studyPlanCache.value : null;
+StudyPlanResult? get cachedStudyPlan => _planOwner == people.ownerKey ? studyPlanCache.value : null;
 
 // ── Formatting ───────────────────────────────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../cases/cases_screen.dart' show shortDate;
 import '../shell.dart';
+import '../../data/people.dart';
 
 /// Past conversations. Tapping one opens it in the chat.
 class ChatHistoryScreen extends StatefulWidget {
@@ -16,7 +17,10 @@ class ChatHistoryScreen extends StatefulWidget {
   State<ChatHistoryScreen> createState() => _ChatHistoryScreenState();
 }
 
-class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
+class _ChatHistoryScreenState extends State<ChatHistoryScreen> with PersonAware {
+  @override
+  void onPersonChanged() => _load();
+
   final _sb = Supabase.instance.client;
   List<Map<String, dynamic>>? _chats;
 

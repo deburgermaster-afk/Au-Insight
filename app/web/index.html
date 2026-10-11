@@ -45,6 +45,22 @@
   <div id="splash"><img src="icon.svg" alt=""></div>
   <button id="immi-pill" type="button" aria-hidden="true" tabindex="-1"></button>
   <script>
+    // Inside the iOS/Android app (mobile/, Capacitor): hide the ⌃ ⌄ Done toolbar iOS puts above the
+    // keyboard, so the chat's send button sits right on the keyboard. A browser tab can't do this.
+    (function () {
+      const cap = window.Capacitor;
+      if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
+      document.documentElement.classList.add('native-app');
+      const call = (plugin, method, args) => {
+        try {
+          const p = cap.Plugins && cap.Plugins[plugin];
+          if (p && p[method]) return p[method](args);
+          if (cap.nativePromise) return cap.nativePromise(plugin, method, args);
+        } catch (_) {}
+      };
+      call('Keyboard', 'setAccessoryBarVisible', { isVisible: false });
+      call('StatusBar', 'setOverlaysWebView', { overlay: true });
+    })();
     // iOS Safari ignores user-scalable=no in a browser tab, so block its pinch gestures directly.
     for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
       document.addEventListener(t, (e) => e.preventDefault(), { passive: false });

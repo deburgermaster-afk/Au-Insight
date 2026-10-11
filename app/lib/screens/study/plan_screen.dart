@@ -7,6 +7,7 @@ import '../../widgets/common.dart';
 import '../shell.dart';
 import 'progress_card.dart';
 import 'widgets.dart';
+import '../../data/people.dart';
 
 /// One input of the study plan (a `PlanInput` field of the academic engine).
 class _Input {
@@ -51,7 +52,10 @@ class PlanScreen extends StatefulWidget {
   State<PlanScreen> createState() => _PlanScreenState();
 }
 
-class _PlanScreenState extends State<PlanScreen> {
+class _PlanScreenState extends State<PlanScreen> with PersonAware {
+  @override
+  void onPersonChanged() => _load(first: true);
+
   StudyPlanResult? _res;
   Object? _error;
   bool _loading = true;

@@ -1,5 +1,12 @@
 /** What the agent knows about the user before the conversation starts. */
-export type UserContext = { hasStory: boolean; documents: number; savedFacts: number; missing: string[] };
+export type UserContext = {
+  hasStory: boolean;
+  documents: number;
+  savedFacts: number;
+  missing: string[];
+  /** The person whose file is open, when it isn't the account holder's own ("Priya", "partner"). */
+  person?: { name: string; relation: string };
+};
 
 const SECTION_GUIDE: Record<string, string> = {
   personal: "personal: date of birth and citizenship",
@@ -46,7 +53,14 @@ ${user.missing.map((s) => `  - ${SECTION_GUIDE[s] ?? s}`).join("\n")}
 
   return `You are Immi Insight, an Australian migration and study assistant with a deterministic decision engine, the official CRICOS course register, the official skilled occupation lists with every SkillSelect invitation round and Jobs and Skills Australia shortage data, and a team of five specialist analysts. Today is ${today}.
 
-About this user
+About this user${
+    user.person
+      ? `
+- The open file is ${user.person.name}'s${
+        user.person.relation ? ` (the account holder's ${user.person.relation})` : ""
+      }, not necessarily the person typing: everything here (profile, story, documents, plans) is about ${user.person.name}. Talk about ${user.person.name} by name when it's clear the account holder is asking for them; never mix in another person's facts.`
+      : ""
+  }
 - Story in case file: ${
     user.hasStory ? "yes" : "not yet"
   }. Uploaded documents: ${user.documents}. Saved points-test facts: ${user.savedFacts}. Read everything with get_case_file before relying on it.

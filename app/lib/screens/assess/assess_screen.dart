@@ -9,6 +9,7 @@ import '../../widgets/common.dart';
 import '../../widgets/decision_card.dart';
 import '../auth/auth_screens.dart' show toast;
 import '../shell.dart';
+import '../../data/people.dart';
 
 const _yesNo = [(true, 'Yes'), (false, 'No')];
 
@@ -18,7 +19,10 @@ class AssessScreen extends StatefulWidget {
   State<AssessScreen> createState() => _AssessScreenState();
 }
 
-class _AssessScreenState extends State<AssessScreen> {
+class _AssessScreenState extends State<AssessScreen> with PersonAware {
+  @override
+  void onPersonChanged() => _load();
+
   final _sb = Supabase.instance.client;
   String? _caseId;
   CaseFacts _facts = const CaseFacts();

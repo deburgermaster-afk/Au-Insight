@@ -4,6 +4,7 @@ import '../../data/backend.dart';
 import '../../data/documents.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import '../../data/people.dart';
 
 // Profile cards built from the profile and the documents: key dates, and the student's CoE history.
 
@@ -27,13 +28,20 @@ class KeyDatesCard extends StatefulWidget {
   State<KeyDatesCard> createState() => _KeyDatesCardState();
 }
 
-class _KeyDatesCardState extends State<KeyDatesCard> {
+class _KeyDatesCardState extends State<KeyDatesCard> with PersonAware {
+  @override
+  void onPersonChanged() => _fetch();
+
   List<DocItem>? _docs;
   bool _all = false;
 
   @override
   void initState() {
     super.initState();
+    _fetch();
+  }
+
+  void _fetch() {
     loadDocuments().then((r) {
       if (mounted) setState(() => _docs = r.$2);
     }, onError: (_) {
@@ -126,12 +134,19 @@ class CoeHistoryCard extends StatefulWidget {
   State<CoeHistoryCard> createState() => _CoeHistoryCardState();
 }
 
-class _CoeHistoryCardState extends State<CoeHistoryCard> {
+class _CoeHistoryCardState extends State<CoeHistoryCard> with PersonAware {
+  @override
+  void onPersonChanged() => _fetch();
+
   List<Map<String, dynamic>>? _coes;
 
   @override
   void initState() {
     super.initState();
+    _fetch();
+  }
+
+  void _fetch() {
     callTool('study_history').then((r) {
       final list = [for (final c in (r['coes'] as List? ?? const [])) (c as Map).cast<String, dynamic>()];
       if (mounted) setState(() => _coes = list);

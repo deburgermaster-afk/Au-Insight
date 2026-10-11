@@ -38,7 +38,7 @@ async function apiKey(): Promise<string> {
 /** Whether the user has told their story yet and what they've uploaded, so the agent knows where to start. */
 async function userContext(supabase: SupabaseClient): Promise<UserContext & { profile: Record<string, unknown> }> {
   const [caseRow, docs] = await Promise.all([
-    supabase.from("cases").select("facts, story, profile").order("created_at").limit(1).maybeSingle(),
+    supabase.from("cases").select("*").order("created_at").limit(1).maybeSingle(),
     supabase.from("documents").select("id", { count: "exact", head: true }),
   ]);
   return {
@@ -47,7 +47,15 @@ async function userContext(supabase: SupabaseClient): Promise<UserContext & { pr
     savedFacts: Object.keys(caseRow.data?.facts ?? {}).length,
     missing: missingSections(caseRow.data?.profile ?? {}),
     profile: caseRow.data?.profile ?? {},
+    person: personOf(caseRow.data),
   };
+}
+
+/** Names the open person unless it's the account holder's own file ("Me", or the pre-people default). */
+function personOf(row: { title?: string; relation?: string } | null): UserContext["person"] {
+  const name = row?.title?.trim() ?? "";
+  if (!name || ["me", "my case", "myself"].includes(name.toLowerCase())) return undefined;
+  return { name, relation: row?.relation?.trim() ?? "" };
 }
 
 /** The recent official changes most relevant to the user, one line each, for the system prompt. */
@@ -99,6 +107,8 @@ async function direct(supabase: SupabaseClient, body: { tool?: unknown; args?: u
   }
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -110,14 +120,17 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: cors });
 
   const authHeader = req.headers.get("Authorization") ?? "";
+  const startedAt = Date.now();
+  const body = await req.json().catch(() => ({}));
+  // The person the app has open: row-level security then shows only their case, chats, documents
+  // and plans, and rows the agent saves go to them (migration 20261011090000_people_profiles).
+  const caseId = typeof body?.caseId === "string" && UUID.test(body.caseId) ? body.caseId : undefined;
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: authHeader, ...(caseId ? { "x-case-id": caseId } : {}) } },
   });
   const { data: auth } = await supabase.auth.getClaims(authHeader.replace(/^Bearer /i, ""));
   if (!auth?.claims) return new Response("Unauthorized", { status: 401, headers: cors });
 
-  const startedAt = Date.now();
-  const body = await req.json().catch(() => ({}));
   if (body?.action === "tool") return direct(supabase, body);
   const user = await userContext(supabase);
   const history = Array.isArray(body.messages) ? body.messages.slice(-24) : [];

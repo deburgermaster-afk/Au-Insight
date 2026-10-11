@@ -78,6 +78,14 @@ class Uploads extends ChangeNotifier {
   Future<void> pickAndUpload({String? folderId}) async {
     final files = await pickFiles();
     if (files.isEmpty) return;
+    await upload(files, folderId: folderId);
+  }
+
+  /// Uploads files already picked. Returns each landed file's document id and name. With [read]
+  /// the reader goes through them in the background (the chat skips this: it reads attachments
+  /// itself before answering).
+  Future<List<(String, String)>> upload(List<PickedFile> files, {String? folderId, bool read = true}) async {
+    final landed = <(String, String)>[];
     final sb = Supabase.instance.client;
     final uid = sb.auth.currentUser!.id;
     final added = <String>[];
@@ -100,6 +108,7 @@ class Uploads extends ChangeNotifier {
               .select('id')
               .single();
           added.add(row['id'] as String);
+          landed.add((row['id'] as String, f.name));
           finished++;
         } on StorageException catch (e) {
           errors.add('${f.name}: ${e.message}');
@@ -111,11 +120,15 @@ class Uploads extends ChangeNotifier {
       }),
     );
     // Read the new files in the background: the list shows "Reading…" until the reader is done.
-    if (added.isNotEmpty) unawaited(readDocuments(added));
+    if (added.isNotEmpty && read) unawaited(readDocuments(added));
     // Leave the ticks up for a moment; the files are already in the list.
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
-    if (inProgress.values.every((done) => done)) inProgress.clear();
-    notifyListeners();
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 1200)).then((_) {
+        if (inProgress.values.every((done) => done)) inProgress.clear();
+        notifyListeners();
+      }),
+    );
+    return landed;
   }
 
   /// Storage keys only allow a limited character set; the real name is kept in the documents table.

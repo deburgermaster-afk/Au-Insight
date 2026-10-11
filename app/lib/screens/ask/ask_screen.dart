@@ -1,15 +1,18 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/chat.dart';
+import '../../data/file_input.dart';
+import '../../data/uploads.dart';
+import '../../data/people.dart';
 import '../../data/quick_actions.dart';
 import '../../data/study_models.dart';
 import '../../motion.dart';
@@ -17,6 +20,8 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/course_card.dart';
 import '../../widgets/decision_card.dart';
+import '../../widgets/chat_markdown.dart';
+import '../auth/auth_screens.dart' show toast;
 import '../shell.dart';
 
 const _suggestions = [
@@ -41,7 +46,15 @@ class AskScreen extends StatefulWidget {
   State<AskScreen> createState() => _AskScreenState();
 }
 
-class _AskScreenState extends State<AskScreen> {
+class _AskScreenState extends State<AskScreen> with PersonAware {
+  /// Another person was opened: stop any reply and open their latest chat.
+  @override
+  void onPersonChanged() {
+    _sub?.cancel();
+    _sub = null;
+    _load();
+  }
+
   final _sb = Supabase.instance.client;
   final _client = ChatClient();
   final _input = TextEditingController();
@@ -55,6 +68,7 @@ class _AskScreenState extends State<AskScreen> {
   /// Bumped when the streaming reply changed; only that reply listens, so the rest of the chat
   /// doesn't rebuild while it streams. Events are applied at most every [_flushEvery].
   final _live = ValueNotifier<int>(0);
+  final _idle = ValueNotifier<int>(0);
   static const _flushEvery = Duration(milliseconds: 90);
   Timer? _flushTimer;
 
@@ -64,6 +78,9 @@ class _AskScreenState extends State<AskScreen> {
   /// Whether the user is at (or near) the newest message; the chat only follows new text then.
   bool _atBottom = true;
   final _showJump = ValueNotifier<bool>(false);
+
+  /// Files attached to the message being written: uploading, ready or failed.
+  final _attachments = ValueNotifier<List<_Attachment>>(const []);
 
   /// A message another screen asked to send before this chat finished loading.
   String? _pendingPrompt;
@@ -140,6 +157,8 @@ class _AskScreenState extends State<AskScreen> {
     _sub?.cancel();
     _flushTimer?.cancel();
     _live.dispose();
+    _idle.dispose();
+    _attachments.dispose();
     _showJump.dispose();
     _scroll.dispose();
     super.dispose();
@@ -148,6 +167,8 @@ class _AskScreenState extends State<AskScreen> {
   /// Opens chat [id], or the most recent one.
   Future<void> _load({String? id}) async {
     if (id != null) _sub?.cancel();
+    await people.ready();
+    if (!mounted) return;
     final query = _sb.from('chats').select('id, messages');
     final row = await (id != null ? query.eq('id', id) : query.order('updated_at', ascending: false).limit(1)).maybeSingle();
     if (!mounted) return;
@@ -205,12 +226,11 @@ class _AskScreenState extends State<AskScreen> {
 
   Future<void> _save() async {
     if (_chatId == null) return;
-    final title = _messages
-        .firstWhere(
-          (m) => m.role == 'user',
-          orElse: () => ChatMessage(role: 'user', text: 'New chat'),
-        )
-        .text;
+    final first = _messages.firstWhere(
+      (m) => m.role == 'user',
+      orElse: () => ChatMessage(role: 'user', text: 'New chat'),
+    );
+    final title = first.text.trim().isEmpty && first.attachments.isNotEmpty ? first.attachments.join(', ') : first.text;
     await _sb
         .from('chats')
         .update({
@@ -236,9 +256,39 @@ class _AskScreenState extends State<AskScreen> {
     }
   }
 
+  /// Opens the file picker (straight from the tap: browsers only allow it there), then uploads the
+  /// picks to the open person's Documents while they finish typing.
+  void _attach() {
+    pickFiles().then((files) async {
+      if (files.isEmpty || !mounted) return;
+      final picked = [for (final f in files) _Attachment(f.name)];
+      _attachments.value = [..._attachments.value, ...picked];
+      final landed = await uploads.upload(files, read: false);
+      if (!mounted) return;
+      final names = {for (final l in landed) l.$2};
+      for (final a in picked) {
+        a.state = names.contains(a.name) ? _AttachState.ready : _AttachState.failed;
+      }
+      _attachments.value = [..._attachments.value];
+      if (uploads.errors.isNotEmpty) {
+        toast(context, uploads.errors.join('\n'), error: true);
+        uploads.errors.clear();
+      }
+    });
+  }
+
   void _send(String text) {
     text = text.trim();
-    if (text.isEmpty) return;
+    final attached = [
+      for (final a in _attachments.value)
+        if (a.state == _AttachState.ready) a.name,
+    ];
+    if (text.isEmpty && attached.isEmpty) return;
+    if (_attachments.value.any((a) => a.state == _AttachState.uploading)) {
+      toast(context, 'Still uploading your files: send once they are ready.');
+      return;
+    }
+    _attachments.value = const [];
     // The keyboard can report one press twice (a submit and a typed line break).
     final now = DateTime.now();
     if (text == _lastSent && now.difference(_lastSentAt) < const Duration(seconds: 1)) return;
@@ -258,7 +308,7 @@ class _AskScreenState extends State<AskScreen> {
     _flushTimer = null;
     setState(() {
       _animateFrom = _messages.length < _animateFrom ? _messages.length : _animateFrom;
-      _messages.add(ChatMessage(role: 'user', text: text));
+      _messages.add(ChatMessage(role: 'user', text: text, attachments: attached));
       _messages.add(reply);
       _input.clear();
     });
@@ -409,15 +459,15 @@ class _AskScreenState extends State<AskScreen> {
                               itemBuilder: (context, i) {
                                 final m = _messages[i];
                                 final streaming = _busy && i == _messages.length - 1;
+                                // Only the streaming reply listens to updates. Every reply has the same
+                                // widget shape, so when the stream ends the reply keeps its state and
+                                // finishes revealing its last words instead of jumping.
                                 Widget child = m.role == 'user'
-                                    ? _UserBubble(m.text)
-                                    : streaming
-                                    // Only the streaming reply listens to updates.
-                                    ? ValueListenableBuilder<int>(
-                                        valueListenable: _live,
-                                        builder: (context, _, _) => _AssistantTurn(m, streaming: true),
-                                      )
-                                    : _AssistantTurn(m, streaming: false);
+                                    ? _UserBubble(m.text, attachments: m.attachments)
+                                    : ValueListenableBuilder<int>(
+                                        valueListenable: streaming ? _live : _idle,
+                                        builder: (context, _, _) => _AssistantTurn(m, streaming: streaming, onGrow: _follow),
+                                      );
                                 child = RepaintBoundary(child: child);
                                 if (i < _animateFrom) return child;
                                 return child.animate(key: ValueKey('msg-$i')).fadeIn(duration: Motion.medium, curve: Motion.ease);
@@ -468,7 +518,16 @@ class _AskScreenState extends State<AskScreen> {
             ),
           ),
         ),
-        _Composer(controller: _input, focus: _focus, busy: _busy, onSend: _send, onStop: _stop),
+        _Composer(
+          controller: _input,
+          focus: _focus,
+          busy: _busy,
+          onSend: _send,
+          onStop: _stop,
+          attachments: _attachments,
+          onAttach: _attach,
+          onRemoveAttachment: (a) => _attachments.value = [..._attachments.value.where((x) => x != a)],
+        ),
       ],
     );
   }
@@ -512,27 +571,101 @@ class _AskScreenState extends State<AskScreen> {
 }
 
 class _UserBubble extends StatelessWidget {
-  const _UserBubble(this.text);
+  const _UserBubble(this.text, {this.attachments = const []});
   final String text;
+  final List<String> attachments;
 
   @override
   Widget build(BuildContext context) => Align(
     alignment: Alignment.centerRight,
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 520),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(16)),
-        child: SelectableText(text, style: AppText.body),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (attachments.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(bottom: text.trim().isEmpty ? 0 : 6),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 6,
+                runSpacing: 6,
+                children: [for (final a in attachments) _FileChip(name: a)],
+              ),
+            ),
+          if (text.trim().isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(color: AppColors.raised, borderRadius: BorderRadius.circular(16)),
+              child: SelectableText(text, style: AppText.body),
+            ),
+        ],
       ),
     ),
   );
 }
 
+enum _AttachState { uploading, ready, failed }
+
+class _Attachment {
+  _Attachment(this.name);
+  final String name;
+  _AttachState state = _AttachState.uploading;
+}
+
+/// A file attached to a message: its name, with upload progress or a remove button in the composer.
+class _FileChip extends StatelessWidget {
+  const _FileChip({required this.name, this.state = _AttachState.ready, this.onRemove});
+  final String name;
+  final _AttachState state;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = state == _AttachState.failed;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 220),
+      padding: EdgeInsets.fromLTRB(8, 5, onRemove == null ? 10 : 4, 5),
+      decoration: BoxDecoration(
+        color: failed ? AppColors.danger.withValues(alpha: 0.12) : AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: failed ? AppColors.danger.withValues(alpha: 0.4) : AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (state == _AttachState.uploading)
+            const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.4, color: AppColors.fg))
+          else
+            Icon(failed ? LucideIcons.triangleAlert : LucideIcons.fileText, size: 13, color: failed ? AppColors.danger : AppColors.muted),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              failed ? '$name · failed' : name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.small.copyWith(color: failed ? AppColors.danger : AppColors.fg),
+            ),
+          ),
+          if (onRemove != null)
+            Pressable(
+              onTap: onRemove,
+              child: const Padding(
+                padding: EdgeInsets.all(3),
+                child: Icon(LucideIcons.x, size: 12, color: AppColors.muted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AssistantTurn extends StatelessWidget {
-  const _AssistantTurn(this.m, {required this.streaming});
+  const _AssistantTurn(this.m, {required this.streaming, this.onGrow});
   final ChatMessage m;
   final bool streaming;
+  final VoidCallback? onGrow;
 
   @override
   Widget build(BuildContext context) {
@@ -543,7 +676,15 @@ class _AssistantTurn extends StatelessWidget {
         if (m.reasoning.isNotEmpty) _Reasoning(m.reasoning, streaming: waiting),
         if (m.steps.isNotEmpty) _Steps(m.steps, working: waiting),
         if (waiting && m.steps.isEmpty) const Padding(padding: EdgeInsets.only(bottom: 6), child: ShimmerText('Reading the law…')),
-        if (m.text.isNotEmpty) GptMarkdown(_readable(m.text), style: AppText.body, onLinkTap: (url, _) => launchUrl(Uri.parse(url))),
+        if (m.text.isNotEmpty)
+          ChatMarkdown(
+            text: () => m.text,
+            streaming: streaming,
+            style: AppText.body,
+            clean: _readable,
+            onLinkTap: (url, _) => launchUrl(Uri.parse(url)),
+            onGrow: onGrow,
+          ),
         if (m.courses.isNotEmpty) ...[
           const SizedBox(height: 10),
           for (final c in m.courses.take(6))
@@ -944,23 +1085,38 @@ class _SourcesState extends State<_Sources> {
 }
 
 class _Composer extends StatefulWidget {
-  const _Composer({required this.controller, required this.focus, required this.busy, required this.onSend, required this.onStop});
+  const _Composer({
+    required this.controller,
+    required this.focus,
+    required this.busy,
+    required this.onSend,
+    required this.onStop,
+    required this.attachments,
+    required this.onAttach,
+    required this.onRemoveAttachment,
+  });
   final TextEditingController controller;
   final FocusNode focus;
   final bool busy;
   final ValueChanged<String> onSend;
   final VoidCallback onStop;
+  final ValueListenable<List<_Attachment>> attachments;
+  final VoidCallback onAttach;
+  final ValueChanged<_Attachment> onRemoveAttachment;
 
   @override
   State<_Composer> createState() => _ComposerState();
 }
 
+/// Phones and tablets: the keyboard's Return key adds a line; the send button sends.
+bool get _touchKeyboard => defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android;
+
 class _ComposerState extends State<_Composer> {
   String _previous = '';
   bool _shiftNewline = false;
 
-  /// Phone keyboards' Return key types a line break into the field instead of submitting it. One
-  /// typed line break (not a paste, not Shift+Enter) sends the message instead.
+  /// Desktop browsers deliver Enter as a typed line break in a multi-line field. One typed line
+  /// break (not a paste, not Shift+Enter) sends the message instead.
   void _changed(String text) {
     final before = _previous;
     _previous = text;
@@ -972,7 +1128,7 @@ class _ComposerState extends State<_Composer> {
     final at = widget.controller.selection.isValid ? widget.controller.selection.baseOffset - 1 : text.length - 1;
     if (at < 0 || at >= text.length || text[at] != '\n') return;
     final message = text.replaceRange(at, at + 1, '');
-    if (message.trim().isEmpty) {
+    if (message.trim().isEmpty && widget.attachments.value.isEmpty) {
       widget.controller.value = TextEditingValue(
         text: message,
         selection: TextSelection.collapsed(offset: at),
@@ -984,83 +1140,149 @@ class _ComposerState extends State<_Composer> {
     widget.onSend(message);
   }
 
+  void _send() {
+    _previous = '';
+    widget.onSend(widget.controller.text);
+  }
+
   @override
   Widget build(BuildContext context) {
     final narrow = MediaQuery.sizeOf(context).width < 860;
     final controller = widget.controller;
+    final touch = _touchKeyboard;
+    final field = TextField(
+      controller: controller,
+      focusNode: widget.focus,
+      minLines: 1,
+      maxLines: 6,
+      keyboardType: TextInputType.multiline,
+      textInputAction: touch ? TextInputAction.newline : TextInputAction.send,
+      textCapitalization: TextCapitalization.sentences,
+      onChanged: touch ? null : _changed,
+      onSubmitted: touch
+          ? null
+          : (text) {
+              widget.onSend(text);
+              widget.focus.requestFocus();
+            },
+      style: AppText.body,
+      cursorColor: AppColors.fg,
+      cursorWidth: 1.5,
+      decoration: const InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        hintText: 'Describe your situation or ask a question…',
+        hintStyle: AppText.small,
+        contentPadding: EdgeInsets.symmetric(vertical: 10),
+      ),
+    );
     return Padding(
       padding: EdgeInsets.fromLTRB(12, 6, 12, narrow ? 8 : 14),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 4, 5, 4),
+            padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  // Enter (the keyboard's send/return key on phones) sends; Shift+Enter adds a line.
-                  child: CallbackShortcuts(
-                    bindings: {
-                      const SingleActivator(LogicalKeyboardKey.enter, shift: true): () {
-                        _shiftNewline = true;
-                        _newLine(controller);
-                        _previous = controller.text;
-                      },
-                    },
-                    child: TextField(
-                      controller: controller,
-                      focusNode: widget.focus,
-                      minLines: 1,
-                      maxLines: 6,
-                      keyboardType: TextInputType.multiline,
-                      textInputAction: TextInputAction.send,
-                      onChanged: _changed,
-                      onSubmitted: (text) {
-                        widget.onSend(text);
-                        widget.focus.requestFocus();
-                      },
-                      style: AppText.body,
-                      cursorColor: AppColors.fg,
-                      cursorWidth: 1.5,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: InputBorder.none,
-                        hintText: 'Describe your situation or ask a question…',
-                        hintStyle: AppText.small,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10),
-                      ),
-                    ),
+                ValueListenableBuilder<List<_Attachment>>(
+                  valueListenable: widget.attachments,
+                  builder: (context, list, _) => AnimatedSize(
+                    duration: Motion.fast,
+                    alignment: Alignment.topLeft,
+                    child: list.isEmpty
+                        ? const SizedBox(width: double.infinity)
+                        : Padding(
+                            padding: const EdgeInsets.fromLTRB(6, 4, 6, 2),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  for (final a in list)
+                                    _FileChip(name: a.name, state: a.state, onRemove: () => widget.onRemoveAttachment(a)),
+                                ],
+                              ),
+                            ),
+                          ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                ListenableBuilder(
-                  listenable: controller,
-                  builder: (context, _) {
-                    final busy = widget.busy;
-                    final canSend = controller.text.trim().isNotEmpty;
-                    final stopping = busy && !canSend;
-                    return Pressable(
-                      scale: 0.88,
-                      onTap: canSend ? () => widget.onSend(controller.text) : (busy ? widget.onStop : null),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        margin: const EdgeInsets.only(bottom: 2),
-                        decoration: BoxDecoration(color: busy || canSend ? AppColors.fg : AppColors.raised, shape: BoxShape.circle),
-                        child: Icon(
-                          stopping ? LucideIcons.square : LucideIcons.arrowUp,
-                          size: stopping ? 11 : 15,
-                          color: busy || canSend ? AppColors.bg : AppColors.muted,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Attach files',
+                      child: Pressable(
+                        scale: 0.88,
+                        onTap: widget.onAttach,
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          margin: const EdgeInsets.only(bottom: 2),
+                          decoration: const BoxDecoration(color: AppColors.raised, shape: BoxShape.circle),
+                          child: const Icon(LucideIcons.paperclip, size: 15, color: AppColors.fg),
                         ),
                       ),
-                    );
-                  },
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      // Desktop: Enter sends, Shift+Enter adds a line. Touch keyboards: Return adds a line.
+                      child: touch
+                          ? field
+                          : CallbackShortcuts(
+                              bindings: {
+                                const SingleActivator(LogicalKeyboardKey.enter, shift: true): () {
+                                  _shiftNewline = true;
+                                  _newLine(controller);
+                                  _previous = controller.text;
+                                },
+                              },
+                              child: field,
+                            ),
+                    ),
+                    const SizedBox(width: 6),
+                    ListenableBuilder(
+                      listenable: Listenable.merge([controller, widget.attachments]),
+                      builder: (context, _) {
+                        final busy = widget.busy;
+                        final files = widget.attachments.value;
+                        final uploading = files.any((a) => a.state == _AttachState.uploading);
+                        final canSend =
+                            !uploading && (controller.text.trim().isNotEmpty || files.any((a) => a.state == _AttachState.ready));
+                        final stopping = busy && !canSend && !uploading;
+                        return Semantics(
+                          button: true,
+                          label: stopping ? 'Stop' : 'Send',
+                          child: Pressable(
+                            scale: 0.88,
+                            onTap: canSend ? _send : (stopping ? widget.onStop : null),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              margin: const EdgeInsets.only(bottom: 2),
+                              decoration: BoxDecoration(
+                                color: canSend || stopping ? AppColors.fg : AppColors.raised,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                stopping ? LucideIcons.square : LucideIcons.arrowUp,
+                                size: stopping ? 11 : 15,
+                                color: canSend || stopping ? AppColors.bg : AppColors.muted,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),

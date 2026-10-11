@@ -13,6 +13,7 @@ import '../../widgets/course_card.dart';
 import '../shell.dart';
 import 'progress_card.dart';
 import 'widgets.dart';
+import '../../data/people.dart';
 
 const _pageSize = 20;
 
@@ -28,7 +29,10 @@ class StudyHomeScreen extends StatefulWidget {
   State<StudyHomeScreen> createState() => _StudyHomeScreenState();
 }
 
-class _StudyHomeScreenState extends State<StudyHomeScreen> {
+class _StudyHomeScreenState extends State<StudyHomeScreen> with PersonAware {
+  @override
+  void onPersonChanged() => loadShortlist(force: true).catchError((_) => const <String>[]);
+
   final _q = TextEditingController();
   final _city = TextEditingController();
   final _scroll = ScrollController();

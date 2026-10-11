@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../data/occupations.dart';
@@ -6,6 +7,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../shell.dart' show PageHeader;
 import '../study/widgets.dart';
+import 'round_screen.dart';
 import 'widgets.dart';
 
 /// SkillSelect invitation rounds (newest first), the next round, and state and territory nominations.
@@ -19,6 +21,9 @@ class RoundsScreen extends StatefulWidget {
 class _RoundsScreenState extends State<RoundsScreen> {
   RoundsOverview? _o;
   Object? _error;
+  final Map<String, List<RoundCutoffs>> _trends = {};
+
+  void _openRound(DateTime date, String subclass) => context.push('/jobs/rounds/$subclass/${isoDay(date)}');
 
   @override
   void initState() {
@@ -31,6 +36,11 @@ class _RoundsScreenState extends State<RoundsScreen> {
     try {
       final o = await latestRounds(limit: 40);
       if (mounted) setState(() => _o = o);
+      for (final sub in ['189', '491']) {
+        cutoffTrend(sub).then((t) {
+          if (mounted) setState(() => _trends[sub] = t);
+        }, onError: (_) {});
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
@@ -89,6 +99,21 @@ class _RoundsScreenState extends State<RoundsScreen> {
                     child: MonthBars(months: months),
                   ),
                 ],
+            for (final sub in ['189', '491'])
+              if ((_trends[sub] ?? const []).isNotEmpty) ...[
+                SectionLabel('Points cut-off by round · ${sub == '189' ? 'subclass 189' : '491 family sponsored'}'),
+                Panel(
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+                  child: CutoffTrendChart(rounds: _trends[sub]!, onTap: (r) => _openRound(r.date, sub)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Bars: the typical (middle) occupation cut-off in each round. Under them: the lowest. Tap a round for every occupation.',
+                    style: AppText.tiny,
+                  ),
+                ),
+              ],
             const SectionLabel('Rounds'),
             if (o.rounds.isEmpty)
               Text('No rounds imported yet.', style: AppText.small)
@@ -98,14 +123,18 @@ class _RoundsScreenState extends State<RoundsScreen> {
                 child: Column(
                   children: [
                     for (final r in o.rounds)
-                      KeyValue(
-                        formatDay(r.date),
-                        r.invited == null ? '–' : '${formatCount(r.invited!)} invited',
-                        hint: [
-                          'Subclass ${r.subclass}${(r.subclassName ?? '').toLowerCase().contains('family') ? ' (family sponsored)' : ''}',
-                          if (r.occupations != null) plural(r.occupations!, 'occupation'),
-                          if (r.lowestPoints != null) 'from ${r.lowestPoints} points',
-                        ].join(' · '),
+                      Pressable(
+                        scale: 0.99,
+                        onTap: () => _openRound(r.date, r.subclass),
+                        child: KeyValue(
+                          formatDay(r.date),
+                          r.invited == null ? '–' : '${formatCount(r.invited!)} invited',
+                          hint: [
+                            'Subclass ${r.subclass}${(r.subclassName ?? '').toLowerCase().contains('family') ? ' (family sponsored)' : ''}',
+                            if (r.occupations != null) plural(r.occupations!, 'occupation'),
+                            if (r.lowestPoints != null) 'from ${r.lowestPoints} points',
+                          ].join(' · '),
+                        ),
                       ),
                   ],
                 ),

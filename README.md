@@ -24,6 +24,15 @@ Australian migration decisions computed from the law itself. A Flutter web app (
 | `supabase/functions/chat/` | Agent: streams steps, sources, decisions and text as server-sent events. Works with any OpenAI-compatible API. |
 | `supabase/functions/_shared/engine/` | TypeScript rules engine (the same rules as the Dart one; both test suites pass the same cases). |
 | `worker/` | Crawler: queue-based, resumable, several can run at once. |
+| `mobile/` | iOS and Android shells (Capacitor) around the live app: full screen, no keyboard toolbar. See `mobile/README.md`. |
+
+## People
+
+One account can keep several people's files apart: the account holder, a partner, a child, a friend or client they help. Each person is a row in `cases` (their facts, story and structured profile), and their chats, documents, folders, plans, shortlisted courses and assessments carry its `case_id`.
+
+- The header on every tab shows who is open; tap it to switch, add, rename or delete a person. Documents and Profile also show everyone as chips, with **Add person**.
+- The app sends the open person's id in the `x-case-id` request header (and as `caseId` to the chat function). Row-level security (`20261011090000_people_profiles.sql`) then shows only that person's rows and files new rows under them, so every screen and every agent tool works on the selected person unchanged. Without the header (older builds) everything is the first person, which is what the account held before.
+- The app switches the feature on by itself once `list_people()` exists. Deploy the `chat` function first, then apply the migration.
 
 ## How a decision is made
 

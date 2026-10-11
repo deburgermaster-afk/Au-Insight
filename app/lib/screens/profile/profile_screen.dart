@@ -10,6 +10,8 @@ import '../../widgets/common.dart';
 import '../shell.dart';
 import '../study/progress_card.dart' show StudyProgressCard;
 import 'profile_cards.dart';
+import '../../data/people.dart';
+import '../../widgets/people.dart';
 
 /// Intake sections, in the order the chat asks about them (see supabase/functions/chat/profile.ts).
 const _sections = [
@@ -91,13 +93,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
               children: [
                 PageHeader(title: 'Profile', subtitle: email),
+                const PeopleStrip(),
                 Panel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Text('Your story', style: AppText.heading),
+                          Text(people.isPrimary ? 'Your story' : "${people.active?.name}'s story", style: AppText.heading),
                           const Spacer(),
                           Text('$covered of ${_sections.length} covered', style: AppText.tiny),
                         ],
