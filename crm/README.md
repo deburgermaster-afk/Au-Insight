@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lodgely
 
-## Getting Started
+A CRM for Australian migration agencies: clients, matters with visa document checklists, a
+mailbox, tasks, calendar, invoicing with a separate client trust ledger, employers, a visa
+library, reports, team roles and an audit log.
 
-First, run the development server:
+## Stack
 
-```bash
+- Next.js 16 (App Router, Cache Components, Partial Prefetching), React 19
+- shadcn/ui on Tailwind v4, motion for animation, recharts
+- Better Auth (email + password, organisations = agencies, roles)
+- Drizzle ORM on Postgres (Neon, Sydney region) over the serverless HTTP driver
+- Resend for outgoing mail (optional)
+
+## Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection string |
+| `BETTER_AUTH_SECRET` | Random 32+ byte secret for sessions |
+| `BETTER_AUTH_URL` | Public URL (optional; defaults to the request origin) |
+| `RESEND_API_KEY`, `MAIL_FROM_DOMAIN` | Turn on real email sending |
+
+Locally these live in `.env.local` (git-ignored).
+
+## Develop
+
+```sh
+npm install
+npx tsx --env-file=.env.local scripts/migrate.mts   # apply drizzle/ migrations
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Sign up at `/sign-up` and tick "Load demo data" to get a sample agency with clients, matters,
+invoices and mail.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How data stays fast and isolated
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Every table has `agency_id`. Reads in `src/lib/data.ts` resolve the agency from the session and
+are cached with `"use cache"` under the tag `agency:<id>`; every server action in
+`src/lib/actions.ts` checks the caller's role and calls `updateTag` on that tag, so pages update
+immediately after a change.
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Vercel project `lodgely` builds this folder (`rootDirectory: crm`) on every push that touches it.
