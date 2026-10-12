@@ -6,6 +6,7 @@ import { db, schema as s } from "@/db";
 import { auth } from "@/lib/auth";
 import { agencyTag } from "@/lib/data";
 import { completeConnection, isProvider, syncConnection } from "@/lib/mail-connect";
+import { safeReturn } from "@/lib/connect-return";
 import { verify } from "@/lib/secure";
 import { eq } from "drizzle-orm";
 
@@ -13,8 +14,8 @@ import { eq } from "drizzle-orm";
 export async function GET(req: Request, { params }: RouteContext<"/api/connect/[provider]/callback">) {
   const { provider } = await params;
   const url = new URL(req.url);
-  const back = new URL("/app/inbox", req.url);
-  const state = verify<{ u: string; a: string; n: string; p: string }>(url.searchParams.get("state") ?? "");
+  const state = verify<{ u: string; a: string; n: string; p: string; r?: string }>(url.searchParams.get("state") ?? "");
+  const back = new URL(safeReturn(state?.r, "/app/inbox"), req.url);
   const code = url.searchParams.get("code");
   const session = await auth.api.getSession({ headers: await headers() });
   if (!isProvider(provider) || !state || state.p !== provider || !session || session.user.id !== state.u) {

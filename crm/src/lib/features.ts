@@ -192,6 +192,21 @@ export const features: { group: string; items: Feature[] }[] = [
     ],
   },
   {
+    group: "Settings & connectors",
+    items: [
+      ...live(
+        "Settings hub: one card per area with live status, each opening its own page with tabs",
+        "Connectors: Resend, Gmail, Outlook, your domain and Lodgely AI, each showing what it can and can't access",
+        "Connect Resend with one click (OAuth, no API keys): mail on your domain sends from your own plan",
+        "Lodgely adds its webhook to your Resend account, so replies come straight in",
+        "Picks up a domain already verified in your Resend account automatically",
+        "Live usage against your plan (Resend free plan: 100 a day, 3,000 a month)",
+        "Automatic limit emails to owners and admins at 80% and 100%, once per period",
+        "Domain DNS checked automatically while you add records, with a link to your DNS provider",
+      ),
+    ],
+  },
+  {
     group: "Onboarding",
     items: [
       ...live(

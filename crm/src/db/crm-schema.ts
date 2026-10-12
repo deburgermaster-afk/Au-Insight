@@ -11,8 +11,10 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { organization, user } from "./auth-schema";
 
@@ -83,6 +85,8 @@ export const agencyProfile = pgTable("agency_profile", {
   mailDomainStatus: text("mail_domain_status"), // not_started | pending | verified | failed | partially_verified …
   mailDomainRecords: jsonb("mail_domain_records").$type<{ record: string; name: string; type: string; value: string; priority?: number; status: string }[]>(),
   mailDomainCheckedAt: timestamp("mail_domain_checked_at", { withTimezone: true }),
+  mailDomainVia: text("mail_domain_via"), // lodgely (shared account) | resend (the agency's connected account)
+  mailUsageAlerts: jsonb("mail_usage_alerts").$type<string[]>(), // limit emails already sent, e.g. "day:2026-10-12:80"
   ...stamps,
 });
 
@@ -707,3 +711,45 @@ export const mailConnections = pgTable("mail_connections", {
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   ...stamps,
 });
+
+/** OAuth clients this deployment registered with a provider (dynamic client registration). */
+export const oauthClients = pgTable(
+  "oauth_clients",
+  {
+    provider: text("provider").notNull(),
+    redirectUri: text("redirect_uri").notNull(),
+    clientId: text("client_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.provider, t.redirectUri] })],
+);
+
+export type MailUsage = {
+  daily: { used: number; limit: number | null; resetsAt: string | null };
+  monthly: { used: number; limit: number | null; resetsAt: string | null };
+};
+
+/** Agency-wide app connections authorized with OAuth (one per kind). Tokens are encrypted at rest. */
+export const connectors = pgTable(
+  "connectors",
+  {
+    id: id(),
+    agencyId: agency(),
+    kind: text("kind").notNull(), // resend
+    status: text("status").notNull().default("active"), // active | error
+    account: text("account"),
+    scope: text("scope"),
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    connectedBy: text("connected_by"),
+    connectedByName: text("connected_by_name"),
+    webhookId: text("webhook_id"),
+    webhookSecret: text("webhook_secret"),
+    usage: jsonb("usage").$type<MailUsage>(),
+    usageCheckedAt: timestamp("usage_checked_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    ...stamps,
+  },
+  (t) => [uniqueIndex("connectors_agency_kind").on(t.agencyId, t.kind)],
+);

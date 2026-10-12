@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { after } from "next/server";
 import sanitize from "sanitize-html";
 import { db, schema as s } from "@/db";
 import type { MailAttachment } from "@/db/crm-schema";
@@ -10,10 +11,11 @@ const API = "https://api.resend.com";
 export const mailDomain = () => process.env.MAIL_FROM_DOMAIN ?? null;
 export const mailEnabled = () => Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM_DOMAIN);
 
-export async function resend<T>(path: string, init?: RequestInit): Promise<T> {
+/** Calls Resend with Lodgely's key, or with an agency's own token when their account is connected. */
+export async function resend<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
-    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", ...init?.headers },
+    headers: { Authorization: `Bearer ${token ?? process.env.RESEND_API_KEY}`, "Content-Type": "application/json", ...init?.headers },
   });
   if (!res.ok) throw new Error(`Email provider: ${res.status} ${await res.text()}`);
   return res.json() as Promise<T>;
@@ -96,6 +98,33 @@ ${footer ? `<p style="max-width:640px;margin:14px auto 0;color:#71717a;font-size
 </body></html>`;
 }
 
+/**
+ * Mail from the agency's own domain goes through their connected Resend account (their plan, their
+ * limits). Everything else uses Lodgely's account. Returns the agency token, or null.
+ */
+async function agencySender(agencyId: string, from: string) {
+  const domain = from.split("@")[1]?.toLowerCase();
+  const [p] = await db.select({ domain: s.agencyProfile.mailDomain, via: s.agencyProfile.mailDomainVia }).from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, agencyId));
+  if (!p || p.via !== "resend" || p.domain !== domain) return null;
+  const { resendConnector, resendToken } = await import("@/lib/resend-connect");
+  const c = await resendConnector(agencyId);
+  if (!c) throw new Error("Resend was disconnected. Reconnect it in Settings → Connectors to send from your domain.");
+  return resendToken(c);
+}
+
+/** After a send: refresh usage and email owners/admins if a limit is near (in the background when possible). */
+function watchUsage(agencyId: string) {
+  const run = async () => {
+    const { checkUsageAlerts } = await import("@/lib/mail-usage");
+    await checkUsageAlerts(agencyId, { maxAgeSeconds: 60 }).catch((e) => console.error("usage alerts", e));
+  };
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}
+
 export async function sendMail(opts: {
   agencyId: string;
   from: { address: string; name: string };
@@ -118,12 +147,13 @@ export async function sendMail(opts: {
   let status = "saved";
   const { connectionFor, sendViaConnection } = await import("@/lib/mail-connect");
   const connected = await connectionFor(opts.agencyId, opts.from.address);
+  const token = connected ? null : await agencySender(opts.agencyId, opts.from.address);
   if (connected) {
     // A connected Gmail/Outlook address sends from the person's own account.
     messageId = `<${crypto.randomUUID()}@${opts.from.address.split("@")[1]}>`;
     providerId = await sendViaConnection(connected, { fromName: opts.from.name, to: opts.to, cc: opts.cc, bcc: opts.bcc, subject: opts.subject, html: emailShell(html, opts.footer), text, attachments: opts.attachments ?? [], messageId, inReplyTo: opts.inReplyTo });
     status = "sent";
-  } else if (mailEnabled()) {
+  } else if (token || mailEnabled()) {
     const attachments = await Promise.all(
       (opts.attachments ?? []).map(async (a) => ({ filename: a.name, content: (await fileBytes(a.key)).toString("base64"), content_type: a.type })),
     );
@@ -142,9 +172,10 @@ export async function sendMail(opts: {
         attachments: attachments.length ? attachments : undefined,
         headers: { "Message-ID": messageId, ...(opts.inReplyTo ? { "In-Reply-To": opts.inReplyTo, References: opts.inReplyTo } : {}) },
       }),
-    });
+    }, token ?? undefined);
     providerId = sent.id;
     status = "sent";
+    watchUsage(opts.agencyId);
   }
   const [row] = await db
     .insert(s.messages)
@@ -177,8 +208,7 @@ export async function sendMail(opts: {
 // ── Webhooks ─────────────────────────────────────────────────────────────────────────────────
 
 /** Verifies a Resend (Svix) webhook signature. */
-export function verifyWebhook(body: string, h: Headers) {
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
+export function verifyWebhook(body: string, h: Headers, secret = process.env.RESEND_WEBHOOK_SECRET) {
   const id = h.get("svix-id");
   const ts = h.get("svix-timestamp");
   const sig = h.get("svix-signature");
@@ -222,13 +252,16 @@ function decodeHtml(r: Received) {
   return r.html;
 }
 
-/** Pulls a received email from Resend into every agency mailbox it was addressed to. */
-export async function ingestReceived(emailId: string) {
-  const r = await resend<Received>(`/emails/receiving/${emailId}`);
+/**
+ * Pulls a received email from Resend into every agency mailbox it was addressed to. Mail from an
+ * agency's own connected account is read with their token and only lands in that agency.
+ */
+export async function ingestReceived(emailId: string, via?: { token: string; agencyId: string }) {
+  const r = await resend<Received>(`/emails/receiving/${emailId}`, undefined, via?.token);
   const recipients = [...new Set([...(r.received_for ?? []), ...r.to, ...(r.cc ?? [])].map(addr))];
   const none = { agencies: [] as string[], messages: [] as string[] };
   if (!recipients.length) return none;
-  const boxes = await db.select().from(s.mailboxes).where(inArray(s.mailboxes.address, recipients));
+  const boxes = await db.select().from(s.mailboxes).where(via ? and(inArray(s.mailboxes.address, recipients), eq(s.mailboxes.agencyId, via.agencyId)) : inArray(s.mailboxes.address, recipients));
   if (!boxes.length) return none; // not ours (another app on the same domain)
   const already = await db.select({ id: s.messages.id }).from(s.messages).where(eq(s.messages.providerId, r.id)).limit(1);
   if (already.length) return none;
@@ -240,7 +273,7 @@ export async function ingestReceived(emailId: string) {
   const inReplyTo = r.headers?.["in-reply-to"] ?? null;
 
   // Attachments: download once, store per agency.
-  const list = r.attachments.length ? await resend<{ data: { id: string; download_url: string; content_type: string; size: number; filename?: string }[] }>(`/emails/receiving/${emailId}/attachments`) : { data: [] };
+  const list = r.attachments.length ? await resend<{ data: { id: string; download_url: string; content_type: string; size: number; filename?: string }[] }>(`/emails/receiving/${emailId}/attachments`, undefined, via?.token) : { data: [] };
   const done: string[] = [];
   const inserted: string[] = [];
   for (const agencyId of [...new Set(boxes.map((b) => b.agencyId))]) {

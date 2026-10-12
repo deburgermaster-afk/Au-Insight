@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
+import { sectionBySlug } from "@/lib/settings-sections";
 import { nav } from "./nav";
 
 const titles = Object.fromEntries(nav.flatMap((g) => g.items.map((i) => [i.href, i.title])));
@@ -12,7 +13,7 @@ function Trail() {
   const path = usePathname();
   const parts = path.split("/").filter(Boolean).slice(1);
   const section = parts[0] ? `/app/${parts[0]}` : "/app";
-  const leaf = parts[1] ? (parts[1] === "new" ? "New" : parts[0] === "visas" ? `Subclass ${decodeURIComponent(parts[1])}` : "Details") : null;
+  const leaf = parts[1] ? (parts[1] === "new" ? "New" : parts[0] === "visas" ? `Subclass ${decodeURIComponent(parts[1])}` : parts[0] === "settings" ? (sectionBySlug(parts[1])?.title ?? "Details") : "Details") : null;
   return (
     <>
       <ChevronRight className="size-3.5 text-muted-foreground/50" />

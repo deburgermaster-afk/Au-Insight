@@ -548,3 +548,25 @@ async function educationFor(agencyId: string) {
   ]);
   return { apps: apps.map((r) => ({ ...r.a, student: `${r.first} ${r.last}`, institution: r.inst, agent: r.agent })), institutions };
 }
+
+/** Everything the settings hub and its pages show. Tokens never leave the server. */
+export async function getSettings() {
+  const { agencyId } = await getCtx();
+  return settingsFor(agencyId);
+}
+
+async function settingsFor(agencyId: string) {
+  "use cache";
+  tag(agencyId);
+  const [[profile], [resend], mailboxes, connections, [members]] = await Promise.all([
+    db.select().from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, agencyId)),
+    db
+      .select({ id: s.connectors.id, status: s.connectors.status, account: s.connectors.account, scope: s.connectors.scope, connectedByName: s.connectors.connectedByName, createdAt: s.connectors.createdAt, webhookReady: sql<boolean>`${s.connectors.webhookSecret} is not null`, usage: s.connectors.usage, usageCheckedAt: s.connectors.usageCheckedAt, lastError: s.connectors.lastError })
+      .from(s.connectors)
+      .where(and(eq(s.connectors.agencyId, agencyId), eq(s.connectors.kind, "resend"))),
+    db.select({ address: s.mailboxes.address, name: s.mailboxes.name, kind: s.mailboxes.kind, userId: s.mailboxes.userId }).from(s.mailboxes).where(eq(s.mailboxes.agencyId, agencyId)).orderBy(asc(s.mailboxes.kind), asc(s.mailboxes.address)),
+    db.select({ id: s.mailConnections.id, userId: s.mailConnections.userId, provider: s.mailConnections.provider, email: s.mailConnections.email, status: s.mailConnections.status, lastError: s.mailConnections.lastError, lastSyncAt: s.mailConnections.lastSyncAt }).from(s.mailConnections).where(eq(s.mailConnections.agencyId, agencyId)),
+    db.select({ n: count() }).from(s.member).where(eq(s.member.organizationId, agencyId)),
+  ]);
+  return { profile: profile ?? null, resend: resend ?? null, mailboxes, connections, members: members?.n ?? 0 };
+}

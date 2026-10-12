@@ -78,6 +78,13 @@
       "when": 1791845367729,
       "tag": "0010_mail_domain_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791846358707,
+      "tag": "0011_connectors",
+      "breakpoints": true
     }
   ]
 }
