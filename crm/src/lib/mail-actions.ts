@@ -153,6 +153,7 @@ export async function sendChecklist(input: { matterId: string; itemIds: string[]
       matterId: row.matter.id,
       clientId: row.client.id,
       note: input.note ?? null,
+      itemIds: items.map((i) => i.id),
       dueAt: input.dueAt || null,
       expiresAt: new Date(Date.now() + days * 864e5),
       createdBy: ctx.name,

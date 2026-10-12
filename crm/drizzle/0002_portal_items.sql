@@ -1,0 +1,1 @@
+ALTER TABLE "portal_links" ADD COLUMN "item_ids" text[];

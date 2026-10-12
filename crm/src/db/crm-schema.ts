@@ -374,6 +374,8 @@ export const portalLinks = pgTable("portal_links", {
     .notNull()
     .references(() => clients.id, { onDelete: "cascade" }),
   note: text("note"),
+  /** The checklist items requested in this link; null means every outstanding item. */
+  itemIds: text("item_ids").array(),
   dueAt: date("due_at"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdBy: text("created_by"),

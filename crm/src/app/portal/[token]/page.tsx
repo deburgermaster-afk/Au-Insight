@@ -20,7 +20,8 @@ async function Portal({ params }: { params: Promise<{ token: string }> }) {
       </div>
     );
   const visa = visaByCode(p.matter.visaCode);
-  const items = p.items.map((i) => ({ id: i.id, category: i.category, label: i.label, required: i.required, status: i.status, files: p.docs.filter((d) => d.checklistItemId === i.id).map((d) => d.name) }));
+  const asked = p.link.itemIds ? new Set(p.link.itemIds) : null;
+  const items = p.items.filter((i) => !asked || asked.has(i.id)).map((i) => ({ id: i.id, category: i.category, label: i.label, required: i.required, status: i.status, files: p.docs.filter((d) => d.checklistItemId === i.id).map((d) => d.name) }));
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
       <header className="flex items-center gap-3">

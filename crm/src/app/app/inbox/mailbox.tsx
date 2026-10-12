@@ -206,7 +206,7 @@ export function Mailbox({ messages, boxes }: { messages: Msg[]; boxes: Box[] }) 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className={cn("truncate text-[13px]", !m.read ? "font-semibold" : "font-medium")}>{out ? `To: ${m.toAddresses.join(", ")}` : (m.fromName ?? m.fromAddress)}</p>
-                        <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{ago(m.sentAt).replace(" ago", "")}</span>
+                        <span suppressHydrationWarning className="ml-auto shrink-0 text-[11px] text-muted-foreground">{ago(m.sentAt).replace(" ago", "")}</span>
                       </div>
                       <p className={cn("truncate text-[13px]", !m.read ? "text-foreground" : "text-foreground/80")}>{m.subject}</p>
                       <p className="truncate text-xs text-muted-foreground">{m.bodyText?.slice(0, 140)}</p>

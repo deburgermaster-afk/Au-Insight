@@ -245,7 +245,7 @@ export async function ingestReceived(emailId: string) {
       folder: "inbox",
       mailbox: box.address,
       fromAddress: from,
-      fromName: display(r.from),
+      fromName: display(r.headers?.from ?? r.from) ?? boxes.find((b) => b.address === from)?.name ?? null,
       toAddresses: r.to.map(addr),
       ccAddresses: r.cc?.map(addr) ?? null,
       subject: r.subject || "(no subject)",
