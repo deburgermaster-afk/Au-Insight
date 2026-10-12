@@ -4,6 +4,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema as s } from "@/db";
+import { completeJson } from "@/lib/llm";
 import { searchCourses } from "@/lib/occupations";
 
 // ── Shape of a suggestion ──────────────────────────────────────────────────────────────────────
@@ -134,6 +135,12 @@ export async function pathwayContext(agencyId: string, clientId: string) {
   };
 }
 export type PathwayContext = NonNullable<Awaited<ReturnType<typeof pathwayContext>>>;
+
+// ── xKiro (the provider Immi Insight uses) ─────────────────────────────────────────────────────
+export async function pathwayFromXkiro(ctx: PathwayContext): Promise<{ pathway: Pathway; model: string } | null> {
+  const r = await completeJson(PathwaySchema, SYSTEM, `Mode: ${ctx.mode}\nToday: ${new Date().toISOString().slice(0, 10)}\n\n<context>\n${JSON.stringify(ctx, null, 1)}\n</context>`);
+  return r ? { pathway: { ...r.value, mode: ctx.mode }, model: r.model } : null;
+}
 
 // ── Claude ─────────────────────────────────────────────────────────────────────────────────────
 export const PATHWAY_MODEL = "claude-opus-5-5";

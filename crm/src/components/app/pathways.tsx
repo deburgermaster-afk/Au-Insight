@@ -31,7 +31,7 @@ export function PathwayPanel({ clientId, row, study }: { clientId: string; row: 
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">Suggested pathways</p>
-          <p className="truncate text-[11px] text-muted-foreground">{row ? (row.source === "claude" ? "Claude · personalised" : "Rules estimate") : "Study to permanent residence"}</p>
+          <p className="truncate text-[11px] text-muted-foreground">{row ? (row.source === "rules" ? "Rules estimate" : `AI · ${row.model?.split("/").pop()?.replace(":free", "") ?? row.source}`) : "Study to permanent residence"}</p>
         </div>
         {row ? <SuggestButton clientId={clientId} again /> : null}
       </div>
@@ -55,7 +55,7 @@ export function PathwayPanel({ clientId, row, study }: { clientId: string; row: 
       {!p ? (
         <div className="grid gap-3 p-4">
           <p className="text-[13px] text-muted-foreground">
-            Claude reviews this file against similar students your agency has helped and maps the route to PR. With too little history, it plans the fastest route from the current visa and course, plus courses that add points.
+            AI reviews this file against similar students your agency has helped and maps the route to PR. With too little history, it plans the fastest route from the current visa and course, plus courses that add points.
           </p>
           <SuggestButton clientId={clientId} />
         </div>

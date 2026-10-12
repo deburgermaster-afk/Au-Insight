@@ -22,7 +22,7 @@ export function SuggestButton({ clientId, again = false }: { clientId: string; a
     start(async () => {
       const r = await suggestPathways(clientId);
       if (!r.ok) return void toast.error(r.error);
-      toast.success(r.id === "claude" ? "Pathways suggested by Claude" : "Pathways estimated with the rules engine");
+      toast.success(r.id === "rules" ? "Pathways estimated with the rules engine (AI unavailable)" : "Pathways suggested by AI");
       router.refresh();
     });
   if (again)
