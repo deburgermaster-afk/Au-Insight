@@ -16,7 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getDashboard, getReports } from "@/lib/data";
 import { aud, daysUntil, dmy, fullName, relativeDays, time } from "@/lib/format";
-import { getCtx } from "@/lib/session";
+import { and, eq } from "drizzle-orm";
+import { db, schema } from "@/db";
+import { canAtLeast, getCtx } from "@/lib/session";
 import { stages } from "@/lib/visas";
 
 export const metadata = { title: "Dashboard" };
@@ -244,9 +246,37 @@ export default function DashboardPage() {
           />
         }
       />
+      <Suspense>
+        <SetupNudge />
+      </Suspense>
       <Suspense fallback={<CardsSkeleton />}>
         <Overview />
       </Suspense>
     </>
+  );
+}
+
+/** Reminds owners to finish agency setup, and new staff to finish their welcome. */
+async function SetupNudge() {
+  await connection();
+  const ctx = await getCtx();
+  const admin = canAtLeast(ctx.role, "admin");
+  const [[agency], [me]] = await Promise.all([
+    db.select({ at: schema.agencyProfile.onboardedAt }).from(schema.agencyProfile).where(eq(schema.agencyProfile.agencyId, ctx.agencyId)),
+    db.select({ at: schema.staffProfiles.onboardedAt }).from(schema.staffProfiles).where(and(eq(schema.staffProfiles.agencyId, ctx.agencyId), eq(schema.staffProfiles.userId, ctx.userId))),
+  ]);
+  const href = admin && !agency?.at ? "/setup" : !me?.at ? "/welcome" : null;
+  if (!href) return null;
+  return (
+    <Link href={href} className="mb-3 flex items-center gap-3 rounded-xl border border-orange-400/30 bg-gradient-to-r from-orange-500/10 to-fuchsia-500/10 p-3 transition hover:border-orange-400/50">
+      <span className="grid size-9 place-items-center rounded-lg bg-gradient-to-br from-orange-400 to-fuchsia-500 text-white">
+        <ArrowUpRight className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium">{href === "/setup" ? "Finish setting up your agency" : "Finish your welcome"}</span>
+        <span className="block truncate text-xs text-muted-foreground">{href === "/setup" ? "Practice details, services, branding, trust account and team: about two minutes." : "Contact, pay details and agreements: about a minute."}</span>
+      </span>
+      <ChevronRight className="size-4 text-muted-foreground" />
+    </Link>
   );
 }

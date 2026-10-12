@@ -16,6 +16,7 @@ import { ComposeDialog, NewAppointmentDialog, NewInvoiceDialog, NewMatterDialog,
 import { Button } from "@/components/ui/button";
 import { HeaderActions } from "@/components/app/header-actions";
 import { PortalMenu } from "@/components/portal/staff-actions";
+import { PathwayPanel } from "@/components/app/pathways";
 import { UploadButton } from "@/components/mail/upload-button";
 import { getCtx } from "@/lib/session";
 import { fileUrl } from "@/components/mail/file-icon";
@@ -49,7 +50,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
   await connection();
   const [data, ctx] = await Promise.all([getClient(id), getCtx()]);
   if (!data) notFound();
-  const { client: c, matters, documents, activities, tasks, dependants, invoices, appointments } = data;
+  const { client: c, matters, documents, activities, tasks, dependants, invoices, appointments, pathway, studies } = data;
   const name = fullName(c);
   const invoiced = invoices.reduce((a, i) => a + Number(i.total), 0);
   const paid = invoices.reduce((a, i) => a + Number(i.paid), 0);
@@ -84,6 +85,8 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
         </HeaderActions>
       </FadeIn>
 
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_23rem]">
+      <div className="grid min-w-0 gap-4">
       <FadeIn delay={0.04}>
         <Section title="Client details">
           <FactStrip
@@ -352,6 +355,11 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
           </Tabs>
         </Section>
       </FadeIn>
+      </div>
+      <FadeIn delay={0.1} className="xl:sticky xl:top-16">
+        <PathwayPanel clientId={c.id} row={pathway} study={studies[0] ? { course: studies[0].a.course, institution: studies[0].inst, status: studies[0].a.status, intake: studies[0].a.intake } : null} />
+      </FadeIn>
+      </div>
     </div>
   );
 }

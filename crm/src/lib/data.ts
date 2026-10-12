@@ -151,7 +151,14 @@ async function clientFor(agencyId: string, id: string) {
     db.select().from(s.invoices).where(and(eq(s.invoices.agencyId, agencyId), eq(s.invoices.clientId, id))).orderBy(desc(s.invoices.createdAt)),
     db.select().from(s.appointments).where(and(eq(s.appointments.agencyId, agencyId), eq(s.appointments.clientId, id))).orderBy(desc(s.appointments.startsAt)),
   ]);
-  return { client, matters, documents, activities, tasks, dependants, invoices, appointments };
+  const [pathway] = await db.select().from(s.aiPathways).where(and(eq(s.aiPathways.agencyId, agencyId), eq(s.aiPathways.clientId, id))).orderBy(desc(s.aiPathways.createdAt)).limit(1);
+  const studies = await db
+    .select({ a: s.studentApplications, inst: s.institutions.name })
+    .from(s.studentApplications)
+    .leftJoin(s.institutions, eq(s.institutions.id, s.studentApplications.institutionId))
+    .where(and(eq(s.studentApplications.agencyId, agencyId), eq(s.studentApplications.clientId, id)))
+    .orderBy(desc(s.studentApplications.createdAt));
+  return { client, matters, documents, activities, tasks, dependants, invoices, appointments, pathway: pathway ?? null, studies };
 }
 
 // ── Matters ───────────────────────────────────────────────────────────────────────────────────

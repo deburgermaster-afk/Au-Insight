@@ -173,6 +173,18 @@ export const features: { group: string; items: Feature[] }[] = [
     ],
   },
   {
+    group: "Onboarding",
+    items: [
+      ...live(
+        "Guided agency setup: practice, MARN, services, brand, trust account, team, demo or clean start",
+        "Live preview of the agency brand while setting up",
+        "Team invites from setup with positions",
+        "Welcome wizard for new staff: contact, emergency contact, MARN or QEAC, bank and super, policy agreements",
+        "Role-aware welcome: shows what each position can do",
+      ),
+    ],
+  },
+  {
     group: "Education agents",
     items: [
       ...live(
@@ -182,6 +194,9 @@ export const features: { group: string; items: Feature[] }[] = [
         "Partner institutions with commission rate and agreement expiry",
         "Commission tracking: claimable, invoiced, received",
         "Onshore-transfer commission ban flagged automatically (after 31 March 2026)",
+        "Suggested pathways on every student file: learns from the agency's similar students",
+        "Fastest PR route from the current visa and course when there's no agency history",
+        "Courses that add points, matched to real CRICOS courses",
       ),
       ...next("Offer letter and CoE upload to the student", "Commission invoices to providers", "Provider portal links"),
     ],

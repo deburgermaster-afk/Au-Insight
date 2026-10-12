@@ -21,7 +21,7 @@ export function AcceptInvite({ id, email, agency, inviter, position, about, sign
   async function join() {
     const r = await acceptInvite(id);
     if (!r.ok) throw new Error(r.error);
-    location.assign("/app/me");
+    location.assign("/welcome");
   }
 
   async function run(fn: () => Promise<void>) {

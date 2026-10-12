@@ -6,7 +6,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { FadeIn } from "@/components/app/motion";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { bootstrapAgency } from "@/lib/actions";
@@ -17,11 +16,10 @@ const slugify = (s: string) =>
 
 export function SignUpForm({ existingUser = false }: { existingUser?: boolean }) {
   const [busy, setBusy] = useState(false);
-  const [demo, setDemo] = useState(true);
   return (
     <FadeIn>
             <h1 className="text-center text-xl font-semibold tracking-tight text-white">{existingUser ? "Create your agency" : "Start your agency workspace"}</h1>
-      <p className="mt-1.5 text-center text-[13px] text-white/55">Free while you set up. No card needed.</p>
+      <p className="mt-1.5 text-center text-[13px] text-white/55">Free while you set up. No card needed. Next, a two-minute guided setup.</p>
       <form
         className="mt-8 space-y-3.5"
         onSubmit={async (e) => {
@@ -44,8 +42,9 @@ export function SignUpForm({ existingUser = false }: { existingUser?: boolean })
             });
             if (orgError || !org) throw new Error(orgError?.message ?? "Couldn't create the agency");
             await authClient.organization.setActive({ organizationId: org.id });
-            const r = await bootstrapAgency(demo);
+            const r = await bootstrapAgency(false);
             if (r && !r.ok) throw new Error(r.error);
+            location.assign("/setup");
           } catch (err) {
             toast.error(err instanceof Error ? err.message : String(err));
             setBusy(false);
@@ -72,13 +71,6 @@ export function SignUpForm({ existingUser = false }: { existingUser?: boolean })
             </div>
           </>
         )}
-        <label className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-[13px]">
-          <Checkbox checked={demo} onCheckedChange={(v) => setDemo(v === true)} className="mt-0.5" />
-          <span>
-            <span className="font-medium">Fill with a demo workspace</span>
-            <span className="block text-muted-foreground">Sample clients, matters, invoices and mail so you can explore. Delete any time.</span>
-          </span>
-        </label>
         <Button type="submit" className="h-10 w-full rounded-lg bg-white text-black hover:bg-white/90" disabled={busy}>
           {busy ? <Loader2 className="animate-spin" /> : null} Create workspace
         </Button>

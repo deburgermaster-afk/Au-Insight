@@ -546,8 +546,8 @@ export async function bootstrapAgency(withDemo: boolean): Promise<ActionResult> 
       await seedDemo(ctx);
     }
     refresh(ctx);
+    return { ok: true };
   } catch (e) {
     return fail(e);
   }
-  redirect("/app");
 }
