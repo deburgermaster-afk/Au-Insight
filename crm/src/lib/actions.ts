@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db, schema as s } from "@/db";
 import { agencyTag } from "@/lib/data";
-import { actionCtx, type Ctx, requireRole } from "@/lib/session";
+import { actionCtx, type Ctx, requireCap, requireRole } from "@/lib/session";
 import { visaByCode } from "@/lib/visas";
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
@@ -123,7 +123,7 @@ export async function togglePin(activityId: string, pinned: boolean): Promise<Ac
 
 export async function createMatter(form: FormData): Promise<ActionResult> {
   try {
-    const ctx = await requireRole("agent");
+    const ctx = await requireRole("staff");
     const clientId = blank(form.get("clientId"));
     const visaCode = blank(form.get("visaCode"));
     if (!clientId || !visaCode) return { ok: false, error: "Choose a client and a visa." };
@@ -165,7 +165,9 @@ export async function createMatter(form: FormData): Promise<ActionResult> {
 
 export async function moveMatter(matterId: string, stage: string): Promise<ActionResult> {
   try {
-    const ctx = await requireRole("agent");
+    const ctx = await requireRole("staff");
+    if (["ready", "lodged", "rfi", "decision"].includes(stage) && !ctx.caps.includes("immigration"))
+      return { ok: false, error: "Only a registered migration agent with a current MARN can move a matter to lodgement stages." };
     const [m] = await db
       .update(s.matters)
       .set({
@@ -185,7 +187,7 @@ export async function moveMatter(matterId: string, stage: string): Promise<Actio
 
 export async function updateMatter(matterId: string, form: FormData): Promise<ActionResult> {
   try {
-    const ctx = await requireRole("agent");
+    const ctx = await requireCap("immigration", "Only a registered migration agent can record lodgement details.");
     await db
       .update(s.matters)
       .set({
@@ -194,9 +196,31 @@ export async function updateMatter(matterId: string, form: FormData): Promise<Ac
         decisionAt: blank(form.get("decisionAt")),
         outcome: blank(form.get("outcome")),
         dueAt: blank(form.get("dueAt")),
+        rfiDueAt: blank(form.get("rfiDueAt")),
         notes: blank(form.get("notes")),
       })
       .where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)));
+    refresh(ctx);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Records (or clears) the Code of Conduct steps: Consumer Guide given, service agreement signed. */
+export async function setCompliance(matterId: string, field: "consumerGuideAt" | "agreementSignedAt", on: boolean): Promise<ActionResult> {
+  try {
+    const ctx = await requireRole("staff");
+    const today = new Date().toISOString().slice(0, 10);
+    const [m] = await db
+      .update(s.matters)
+      .set({ [field]: on ? today : null })
+      .where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)))
+      .returning({ clientId: s.matters.clientId });
+    if (!m) return { ok: false, error: "Matter not found." };
+    const what = field === "consumerGuideAt" ? "Consumer Guide given to client" : "Service agreement signed";
+    await log(ctx, { clientId: m.clientId, matterId, kind: "note", title: on ? what : `${what}: cleared` });
+    await audit(ctx, "update", "matter_compliance", matterId, { [field]: on ? today : null });
     refresh(ctx);
     return { ok: true };
   } catch (e) {
@@ -311,7 +335,7 @@ export async function createAppointment(form: FormData): Promise<ActionResult> {
 
 export async function createInvoice(form: FormData): Promise<ActionResult> {
   try {
-    const ctx = await requireRole("agent");
+    const ctx = await requireCap("billing", "Only accounts staff or agents can invoice.");
     const clientId = blank(form.get("clientId"));
     if (!clientId) return { ok: false, error: "Choose a client." };
     const descriptions = form.getAll("description").map(String);
@@ -321,6 +345,11 @@ export async function createInvoice(form: FormData): Promise<ActionResult> {
       .map((d, i) => ({ description: d.trim(), quantity: 1, unitPrice: amounts[i] || 0, gst: gstFlags[i] !== "no", disbursement: gstFlags[i] === "no" }))
       .filter((i) => i.description && i.unitPrice > 0);
     if (!items.length) return { ok: false, error: "Add at least one line." };
+    const matterId = blank(form.get("matterId"));
+    if (matterId) {
+      const [m] = await db.select({ signed: s.matters.agreementSignedAt }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)));
+      if (m && !m.signed) return { ok: false, error: "No signed service agreement on this matter yet. Record it on the matter first (Code s42, s51)." };
+    }
     const subtotal = items.reduce((a, i) => a + i.unitPrice * i.quantity, 0);
     const gst = items.filter((i) => i.gst).reduce((a, i) => a + i.unitPrice * i.quantity * 0.1, 0);
     const [profile] = await db.select().from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, ctx.agencyId));
@@ -357,7 +386,7 @@ export async function createInvoice(form: FormData): Promise<ActionResult> {
 
 export async function recordPayment(form: FormData): Promise<ActionResult> {
   try {
-    const ctx = await requireRole("agent");
+    const ctx = await requireCap("billing", "Only accounts staff or agents can record payments.");
     const invoiceId = blank(form.get("invoiceId"));
     const amount = Number(blank(form.get("amount")));
     const account = blank(form.get("account")) === "trust" ? "trust" : "office";

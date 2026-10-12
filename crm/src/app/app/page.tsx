@@ -1,5 +1,5 @@
 import { connection } from "next/server";
-import { AlarmClock, ArrowUpRight, Briefcase, CalendarDays, ChevronRight, CircleDollarSign, ClipboardCheck, UsersRound } from "lucide-react";
+import { AlarmClock, ArrowUpRight, Briefcase, CalendarDays, ChevronRight, CircleDollarSign, ClipboardCheck, ShieldAlert, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ExpiryPill, Pill, priorityTone } from "@/components/app/badges";
@@ -86,6 +86,34 @@ async function Overview() {
           <StatCard icon={CircleDollarSign} label="Outstanding" value={Math.round(d.outstanding)} prefix="$" href="/app/billing" tone="rose" hint={`${aud(d.collected)} collected of ${aud(d.billed)}`} />
         </StaggerItem>
       </Stagger>
+
+      {d.rfis.length || d.complianceGaps ? (
+        <FadeIn delay={0.03}>
+          <div className="grid gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.04] p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
+            <span className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-300">
+              <ShieldAlert className="size-4" /> Deadlines & compliance
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {d.rfis.map((m) => {
+                const left = m.due ? daysUntil(m.due) : 0;
+                return (
+                  <Link key={m.id} href={`/app/matters/${m.id}`} className="flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs hover:border-foreground/20">
+                    <span className={`size-1.5 rounded-full ${left <= 7 ? "bg-rose-500" : "bg-amber-500"}`} />
+                    RFI · {m.first} {m.last}
+                    <span className="text-muted-foreground">{left < 0 ? `${-left}d overdue` : left === 0 ? "due today" : `due in ${left}d`}</span>
+                  </Link>
+                );
+              })}
+              {d.complianceGaps ? (
+                <Link href="/app/matters" className="flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs hover:border-foreground/20">
+                  <span className="size-1.5 rounded-full bg-amber-500" />
+                  {d.complianceGaps} matter{d.complianceGaps === 1 ? "" : "s"} missing Consumer Guide or signed agreement
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        </FadeIn>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <FadeIn delay={0.05}>

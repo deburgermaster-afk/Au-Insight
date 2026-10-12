@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { PageHeader } from "@/components/app/page-header";
 import { Composer } from "@/components/mail/composer";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ export default function InboxPage() {
         }
       />
       <Suspense fallback={<Skeleton className="-m-3 h-[calc(100dvh-4.25rem)] rounded-none" />}>
-        <Box />
+        <Guard cap="mail"><Box /></Guard>
       </Suspense>
     </>
   );

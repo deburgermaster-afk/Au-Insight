@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { clientStageTone, invoiceTone, label, matterStageTone, Pill, priorityTone } from "@/components/app/badges";
 import { ClientStageSelect, NoteComposer, TaskCheck } from "@/components/app/inline-actions";
 import { FadeIn, ProgressBar } from "@/components/app/motion";
@@ -356,7 +357,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
 export default function ClientPage({ params }: PageProps<"/app/clients/[id]">) {
   return (
     <Suspense fallback={<PageSkeleton />}>
-      <ClientView params={params} />
+      <Guard cap="clients"><ClientView params={params} /></Guard>
     </Suspense>
   );
 }

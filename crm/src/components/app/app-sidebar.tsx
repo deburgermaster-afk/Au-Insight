@@ -24,10 +24,12 @@ import {
 import { CommandMenu } from "./command-menu";
 import { Logo } from "./logo";
 import { nav } from "./nav";
+import type { Cap } from "@/lib/permissions";
 
 type Counts = Record<string, number>;
+type NavData = { counts: Counts; caps: Cap[] };
 
-export function AppSidebar({ agency, user, counts }: { agency: ReactNode; user: ReactNode; counts: Promise<Counts> }) {
+export function AppSidebar({ agency, user, nav: data }: { agency: ReactNode; user: ReactNode; nav: Promise<NavData> }) {
   const { setOpenMobile } = useSidebar();
   return (
     <Sidebar collapsible="icon" variant="inset" className="border-none">
@@ -42,8 +44,8 @@ export function AppSidebar({ agency, user, counts }: { agency: ReactNode; user: 
         <CommandMenu />
       </SidebarHeader>
       <SidebarContent className="gap-0">
-        <Suspense fallback={<NavGroups path={null} counts={{}} />}>
-          <ActiveNav counts={counts} />
+        <Suspense fallback={<NavGroups path={null} counts={{}} caps={null} />}>
+          <ActiveNav data={data} />
         </Suspense>
       </SidebarContent>
       <SidebarFooter className="gap-1">
@@ -54,18 +56,22 @@ export function AppSidebar({ agency, user, counts }: { agency: ReactNode; user: 
   );
 }
 
-function ActiveNav({ counts }: { counts: Promise<Counts> }) {
-  return <NavGroups path={usePathname()} counts={use(counts)} />;
+function ActiveNav({ data }: { data: Promise<NavData> }) {
+  const d = use(data);
+  return <NavGroups path={usePathname()} counts={d.counts} caps={d.caps} />;
 }
 
 /** The nav links; [path] marks the active one (null while the URL streams in on dynamic routes). */
-function NavGroups({ path, counts }: { path: string | null; counts: Counts }) {
+function NavGroups({ path, counts, caps }: { path: string | null; counts: Counts; caps: Cap[] | null }) {
   const { setOpenMobile } = useSidebar();
   const close = () => setOpenMobile(false);
   const active = (href: string) => path != null && (href === "/app" ? path === "/app" : path === href || path.startsWith(`${href}/`));
   return (
     <>
-      {nav.map((group, gi) => (
+      {nav
+        .map((g) => ({ ...g, items: g.items.filter((i) => !i.cap || Boolean(caps?.includes(i.cap))) }))
+        .filter((g) => g.items.length)
+        .map((group, gi) => (
         <SidebarGroup key={group.label} className={gi ? "border-t border-sidebar-border" : undefined}>
           <SidebarGroupLabel className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">{group.label}</SidebarGroupLabel>
           {group.label === "Practice" ? (

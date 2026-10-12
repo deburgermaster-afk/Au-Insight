@@ -10,7 +10,7 @@ import { AreaField, Row, TextField } from "@/components/forms/fields";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { addChecklistItem, moveMatter, setChecklistStatus, updateMatter } from "@/lib/actions";
+import { addChecklistItem, moveMatter, setChecklistStatus, setCompliance, updateMatter } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 import { fileUrl } from "@/components/mail/file-icon";
 import { UploadButton } from "@/components/mail/upload-button";
@@ -191,7 +191,7 @@ export function MatterDetailsForm({
   m,
 }: {
   matterId: string;
-  m: { trn: string | null; lodgedAt: string | null; decisionAt: string | null; outcome: string | null; dueAt: string | null; notes: string | null };
+  m: { trn: string | null; lodgedAt: string | null; decisionAt: string | null; outcome: string | null; dueAt: string | null; rfiDueAt: string | null; notes: string | null };
 }) {
   const [pending, start] = useTransition();
   return (
@@ -227,10 +227,45 @@ export function MatterDetailsForm({
           </select>
         </div>
       </Row>
+      <TextField label="RFI / s56 response due" name="rfiDueAt" type="date" defaultValue={m.rfiDueAt ?? ""} hint="From the Department's request letter. Shows on the dashboard until it's met." />
       <AreaField label="Notes" name="notes" defaultValue={m.notes ?? ""} />
       <Button type="submit" disabled={pending} className="justify-self-end">
         {pending ? <Loader2 className="animate-spin" /> : null} Save details
       </Button>
     </form>
+  );
+}
+
+export function ComplianceChecks({ matterId, guide, agreement }: { matterId: string; guide: string | null; agreement: string | null }) {
+  const [pending, start] = useTransition();
+  const rows = [
+    { key: "consumerGuideAt" as const, value: guide, title: "Consumer Guide given", code: "Code s38", hint: "Before giving immigration assistance" },
+    { key: "agreementSignedAt" as const, value: agreement, title: "Service agreement signed", code: "Code s42 · s51", hint: "With fee estimate; needed before invoicing" },
+  ];
+  return (
+    <ul className="grid gap-2">
+      {rows.map((r) => (
+        <li key={r.key}>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const res = await setCompliance(matterId, r.key, !r.value);
+                if (!res.ok) toast.error(res.error);
+              })
+            }
+            className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition hover:border-foreground/20 ${r.value ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}
+          >
+            <span className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border ${r.value ? "border-emerald-500 bg-emerald-500 text-white" : "border-amber-500/60"}`}>{r.value ? <Check className="size-3.5" /> : null}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">{r.title}</span>
+              <span className="block text-xs text-muted-foreground">{r.value ? `Recorded ${r.value}` : r.hint}</span>
+            </span>
+            <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">{r.code}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

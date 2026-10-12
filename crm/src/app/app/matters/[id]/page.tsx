@@ -9,6 +9,7 @@ import { getCtx } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { label, Pill, priorityTone } from "@/components/app/badges";
 import { NoteComposer, TaskCheck } from "@/components/app/inline-actions";
 import { FadeIn } from "@/components/app/motion";
@@ -18,9 +19,9 @@ import { Timeline } from "@/components/app/timeline";
 import { WithPickers } from "@/components/app/with-pickers";
 import { NewTaskDialog } from "@/components/forms/dialogs";
 import { getMatter } from "@/lib/data";
-import { aud, dmy, fullName, relativeDays } from "@/lib/format";
+import { aud, daysUntil, dmy, fullName, relativeDays } from "@/lib/format";
 import { visaByCode } from "@/lib/visas";
-import { Checklist, MatterDetailsForm, StageStepper } from "./matter-client";
+import { Checklist, ComplianceChecks, MatterDetailsForm, StageStepper } from "./matter-client";
 
 async function MatterView({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
@@ -69,6 +70,12 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
           <div className="flex flex-wrap gap-2">
             <Pill t={priorityTone[m.priority]}>{label(m.priority)} priority</Pill>
             {m.outcome ? <Pill t={m.outcome === "granted" ? "green" : "red"}>{label(m.outcome)}</Pill> : null}
+            {m.rfiDueAt && !m.decisionAt ? (
+              <Pill t={daysUntil(m.rfiDueAt) <= 7 ? "red" : "amber"}>
+                RFI due {daysUntil(m.rfiDueAt) < 0 ? `${-daysUntil(m.rfiDueAt)}d overdue` : daysUntil(m.rfiDueAt) === 0 ? "today" : `in ${daysUntil(m.rfiDueAt)}d`}
+              </Pill>
+            ) : null}
+            {!m.consumerGuideAt || !m.agreementSignedAt ? <Pill t="amber">Compliance incomplete</Pill> : null}
           </div>
         </div>
         <StageStepper matterId={m.id} stage={m.stage} />
@@ -96,6 +103,9 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
           </Section>
         </div>
         <div className="grid content-start gap-4">
+          <Section title="Code of Conduct">
+            <ComplianceChecks matterId={m.id} guide={m.consumerGuideAt} agreement={m.agreementSignedAt} />
+          </Section>
           <Section title="Lodgement">
             <MatterDetailsForm matterId={m.id} m={m} />
           </Section>
@@ -148,7 +158,7 @@ export default function MatterPage({ params, searchParams }: PageProps<"/app/mat
   return (
     <>
       <Suspense fallback={<PageSkeleton />}>
-        <MatterView params={params} searchParams={searchParams} />
+        <Guard cap="clients"><MatterView params={params} searchParams={searchParams} /></Guard>
       </Suspense>
     </>
   );

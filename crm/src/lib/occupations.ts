@@ -94,3 +94,15 @@ export async function visaProcessing(code: string): Promise<Processing[]> {
   if (!subs.length) return [];
   return rest<Processing[]>(`visa_processing_times?subclass=in.(${subs.join(",")})&select=subclass,stream,p25,p50,p75,p90,p50_days,p90_days,updated&order=subclass,stream`);
 }
+
+export type Course = { code: string; name: string; provider_code: string; provider_names: string | null; level: string | null; duration_weeks: string | null; annual_tuition: string | null; total_cost: string | null };
+
+/** CRICOS course search (Immi Insight's daily CRICOS import). */
+export async function searchCourses(q: string, level?: string) {
+  const term = q.trim().replace(/[^\w\s-]/g, " ").split(/\s+/).filter(Boolean).join(" & ");
+  if (!term) return [] as Course[];
+  const params = new URLSearchParams({ select: "code,name,provider_code,provider_names,level,duration_weeks,annual_tuition,total_cost", expired: "eq.false", limit: "40", order: "annual_tuition.asc.nullslast" });
+  params.set("search", `fts(english).${term}`);
+  if (level) params.set("level", `eq.${level}`);
+  return rest<Course[]>(`edu_courses?${params}`);
+}

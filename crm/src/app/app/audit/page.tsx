@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { ScrollText } from "lucide-react";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { label, Pill, type Tone } from "@/components/app/badges";
 import { PageHeader } from "@/components/app/page-header";
 import { Section } from "@/components/app/section";
@@ -41,7 +42,7 @@ export default function AuditPage() {
     <>
       <PageHeader title="Audit log" description="Who changed what, and when. Kept for every agency record." />
       <Suspense fallback={<TableSkeleton />}>
-        <Log />
+        <Guard cap="team"><Log /></Guard>
       </Suspense>
     </>
   );

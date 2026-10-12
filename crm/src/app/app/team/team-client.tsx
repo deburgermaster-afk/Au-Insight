@@ -4,12 +4,14 @@ import { Loader2, UserPlus } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { label } from "@/components/app/badges";
-import { SelectField, TextField } from "@/components/forms/fields";
+import { TextField } from "@/components/forms/fields";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ActionDialog, useAction } from "@/components/forms/action-dialog";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { changeMemberRole } from "@/lib/actions";
-import { authClient } from "@/lib/auth-client";
+import { positions } from "@/lib/permissions";
+import { cancelInvite, inviteStaff } from "@/lib/team-actions";
 
 const roles = ["admin", "supervisor", "agent", "staff"];
 
@@ -45,48 +47,50 @@ export function RoleSelect({ memberId, role, canEdit }: { memberId: string; role
   );
 }
 
-export function InviteDialog({ agencyId }: { agencyId: string }) {
-  const [open, setOpen] = useState(false);
-  const [pending, start] = useTransition();
+export function InviteDialog() {
+  const [position, setPosition] = useState("migration_agent");
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <ActionDialog
+      trigger={
         <Button size="sm">
           <UserPlus /> Invite
         </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <form
-          className="grid gap-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            start(async () => {
-              const { error } = await authClient.organization.inviteMember({
-                email: String(f.get("email")),
-                role: String(f.get("role") || "agent") as "member",
-                organizationId: agencyId,
-              });
-              if (error) return void toast.error(error.message ?? "Couldn't invite");
-              toast.success("Invitation created");
-              setOpen(false);
-              location.reload();
-            });
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Invite a team member</DialogTitle>
-            <DialogDescription>They'll get their own login and mailbox, with the access their role allows.</DialogDescription>
-          </DialogHeader>
-          <TextField label="Email" name="email" type="email" required />
-          <SelectField label="Role" name="role" defaultValue="agent" options={roles.map((r) => ({ value: r, label: label(r) }))} />
-          <DialogFooter>
-            <Button type="submit" disabled={pending}>
-              {pending ? <Loader2 className="animate-spin" /> : null} Send invite
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+      }
+      title="Invite a team member"
+      description="They get an email to set up their login, mailbox and employee portal. Their position decides what they can see."
+      action={inviteStaff}
+      submitLabel="Send invite"
+      success="Invitation sent"
+    >
+      <TextField label="Email" name="email" type="email" required placeholder="name@agency.com.au" />
+      <div className="grid gap-1.5">
+        <Label>Position</Label>
+        <input type="hidden" name="position" value={position} />
+        <div className="grid gap-1.5">
+          {positions.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setPosition(p.key)}
+              className={`rounded-xl border p-2.5 text-left transition ${position === p.key ? "border-primary bg-primary/5" : "hover:border-foreground/20"}`}
+            >
+              <span className="block text-sm font-medium">{p.label}</span>
+              <span className="block text-xs text-muted-foreground">{p.about}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      {position === "migration_agent" || position === "principal" ? <TextField label="MARN" name="marn" inputMode="numeric" hint="Immigration features unlock only with a current MARN." /> : null}
+    </ActionDialog>
+  );
+}
+
+export function CancelInvite({ id }: { id: string }) {
+  const { pending, run } = useAction();
+  return (
+    <Button size="xs" variant="ghost" disabled={pending} onClick={() => run(() => cancelInvite(id), "Invitation cancelled")}>
+      {pending ? <Loader2 className="animate-spin" /> : null}
+      Cancel
+    </Button>
   );
 }

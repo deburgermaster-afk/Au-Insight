@@ -157,6 +157,12 @@ export const matters = pgTable(
     decisionAt: date("decision_at"),
     outcome: text("outcome"), // granted, refused, withdrawn…
     dueAt: date("due_at"),
+    /** Deadline to respond to a Home Affairs request (s56 / RFI) or for a review application. */
+    rfiDueAt: date("rfi_due_at"),
+    /** OMARA Code s38: Consumer Guide given before any assistance. */
+    consumerGuideAt: date("consumer_guide_at"),
+    /** OMARA Code s42/s51: signed service agreement before fees are taken. */
+    agreementSignedAt: date("agreement_signed_at"),
     feeProfessional: numeric("fee_professional"),
     feeGovernment: numeric("fee_government"),
     pointsClaimed: integer("points_claimed"),
@@ -203,6 +209,7 @@ export const documents = pgTable(
     expiresAt: date("expires_at"),
     uploadedBy: text("uploaded_by"),
     checklistItemId: text("checklist_item_id"),
+    folderId: text("folder_id"),
     source: text("source"), // upload | email | portal
     certified: boolean("certified").default(false).notNull(),
     translated: boolean("translated").default(false).notNull(),
@@ -347,6 +354,173 @@ export const messages = pgTable(
   },
   (t) => [index("messages_mailbox_idx").on(t.agencyId, t.mailbox, t.folder, t.sentAt)],
 );
+
+/** HR record for each staff member: position, registration, employment and pay. */
+/** The position an invitee gets once they accept (Better Auth invitations only carry a role). */
+export const invitePositions = pgTable("invite_positions", {
+  invitationId: text("invitation_id").primaryKey(),
+  agencyId: agency(),
+  position: text("position").notNull(),
+  marn: text("marn"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const staffProfiles = pgTable("staff_profiles", {
+  id: id(),
+  agencyId: agency(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** principal | migration_agent | education_agent | consultant | reception | accounts | hr */
+  position: text("position").default("consultant").notNull(),
+  title: text("title"),
+  phone: text("phone"),
+  managerId: text("manager_id"),
+  marn: text("marn"),
+  marnExpiry: date("marn_expiry"),
+  /** Education agent training, e.g. PIER QEAC number. */
+  qeac: text("qeac"),
+  employment: text("employment").default("full_time").notNull(), // full_time | part_time | casual | contractor
+  startDate: date("start_date"),
+  payType: text("pay_type").default("salary").notNull(), // salary | hourly
+  payRate: numeric("pay_rate"), // annual salary or hourly rate
+  hoursPerWeek: numeric("hours_per_week").default("38").notNull(),
+  superRate: numeric("super_rate").default("12").notNull(),
+  taxFreeThreshold: boolean("tax_free_threshold").default(true).notNull(),
+  superFund: text("super_fund"),
+  bankBsb: text("bank_bsb"),
+  bankAccount: text("bank_account"),
+  annualLeaveHours: numeric("annual_leave_hours").default("0").notNull(),
+  personalLeaveHours: numeric("personal_leave_hours").default("0").notNull(),
+  cpdTarget: integer("cpd_target").default(10).notNull(),
+  ...stamps,
+});
+
+export const leaveRequests = pgTable("leave_requests", {
+  id: id(),
+  agencyId: agency(),
+  userId: text("user_id").notNull(),
+  kind: text("kind").default("annual").notNull(), // annual | personal | unpaid | other
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  hours: numeric("hours").notNull(),
+  status: text("status").default("pending").notNull(), // pending | approved | declined
+  note: text("note"),
+  decidedBy: text("decided_by"),
+  ...stamps,
+});
+
+/** Time worked; billable entries can be linked to a matter. */
+export const timeEntries = pgTable("time_entries", {
+  id: id(),
+  agencyId: agency(),
+  userId: text("user_id").notNull(),
+  date: date("date").notNull(),
+  hours: numeric("hours").notNull(),
+  note: text("note"),
+  matterId: text("matter_id").references(() => matters.id, { onDelete: "set null" }),
+  billable: boolean("billable").default(false).notNull(),
+  payRunId: text("pay_run_id"),
+  ...stamps,
+});
+
+export const payRuns = pgTable("pay_runs", {
+  id: id(),
+  agencyId: agency(),
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  payDate: date("pay_date").notNull(),
+  frequency: text("frequency").default("fortnightly").notNull(), // weekly | fortnightly | monthly
+  status: text("status").default("draft").notNull(), // draft | finalised
+  gross: numeric("gross").default("0").notNull(),
+  tax: numeric("tax").default("0").notNull(),
+  superTotal: numeric("super_total").default("0").notNull(),
+  net: numeric("net").default("0").notNull(),
+  createdBy: text("created_by"),
+  ...stamps,
+});
+
+export const payslips = pgTable("payslips", {
+  id: id(),
+  agencyId: agency(),
+  payRunId: text("pay_run_id")
+    .notNull()
+    .references(() => payRuns.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  hours: numeric("hours").default("0").notNull(),
+  gross: numeric("gross").notNull(),
+  tax: numeric("tax").notNull(),
+  superAmount: numeric("super_amount").notNull(),
+  net: numeric("net").notNull(),
+  annualAccrued: numeric("annual_accrued").default("0").notNull(),
+  personalAccrued: numeric("personal_accrued").default("0").notNull(),
+  lines: jsonb("lines").$type<{ label: string; hours?: number; rate?: number; amount: number }[]>().default([]).notNull(),
+  ...stamps,
+});
+
+/** Continuing professional development, for registered migration agents. */
+export const cpdRecords = pgTable("cpd_records", {
+  id: id(),
+  agencyId: agency(),
+  userId: text("user_id").notNull(),
+  date: date("date").notNull(),
+  activity: text("activity").notNull(),
+  provider: text("provider"),
+  points: numeric("points").notNull(),
+  ...stamps,
+});
+
+/** The agency drive: nested folders, optionally tied to a client, with a minimum role to see them. */
+export const folders = pgTable("folders", {
+  id: id(),
+  agencyId: agency(),
+  parentId: text("parent_id"),
+  name: text("name").notNull(),
+  clientId: text("client_id").references(() => clients.id, { onDelete: "cascade" }),
+  /** Lowest member role that can open it: staff (everyone) … admin. */
+  minRole: text("min_role").default("staff").notNull(),
+  createdBy: text("created_by"),
+  ...stamps,
+});
+
+/** Education providers the agency represents. */
+export const institutions = pgTable("institutions", {
+  id: id(),
+  agencyId: agency(),
+  name: text("name").notNull(),
+  cricos: text("cricos"),
+  state: text("state"),
+  contactName: text("contact_name"),
+  contactEmail: text("contact_email"),
+  commissionRate: numeric("commission_rate"), // % of first-year tuition
+  agreementExpiry: date("agreement_expiry"),
+  ...stamps,
+});
+
+export const studentApplications = pgTable("student_applications", {
+  id: id(),
+  agencyId: agency(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  institutionId: text("institution_id").references(() => institutions.id, { onDelete: "set null" }),
+  course: text("course").notNull(),
+  courseCode: text("course_code"),
+  intake: text("intake"),
+  /** preparing | submitted | offer | conditional | accepted | coe | enrolled | rejected | withdrawn */
+  status: text("status").default("preparing").notNull(),
+  tuitionFee: numeric("tuition_fee"),
+  commissionRate: numeric("commission_rate"),
+  /** not_due | claimable | invoiced | received | ineligible */
+  commissionStatus: text("commission_status").default("not_due").notNull(),
+  /** Already a student in Australia moving providers: no commission for students accepted after 31 March 2026 (ESOS). */
+  onshoreTransfer: boolean("onshore_transfer").default(false).notNull(),
+  acceptedAt: date("accepted_at"),
+  assignedTo: text("assigned_to"),
+  notes: text("notes"),
+  ...stamps,
+});
 
 export type MailAttachment = { name: string; size: number; type: string; key: string };
 

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { ColumnChart, Donut, SplitBar, TrendChart } from "@/components/app/charts";
 import { FadeIn } from "@/components/app/motion";
 import { PageHeader } from "@/components/app/page-header";
@@ -45,7 +46,7 @@ export default function ReportsPage() {
     <>
       <PageHeader title="Reports" description="Revenue, workload mix and where your clients come from." />
       <Suspense fallback={<PageSkeleton />}>
-        <Reports />
+        <Guard cap="reports"><Reports /></Guard>
       </Suspense>
     </>
   );

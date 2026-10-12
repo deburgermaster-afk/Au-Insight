@@ -50,7 +50,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Checklist progress bar",
         "Matter notes and tasks",
       ),
-      ...next("Supervisor sign-off before lodgement", "ImmiAccount lodgement pack export (PDF bundle)", "Points test calculator per matter", "RFI (s56) deadline tracker", "AAT/ART review deadlines", "Matter templates per agency", "Bulk stage changes"),
+      ...live("Points test calculator (189, 190, 491)", "RFI (s56) deadline tracker with dashboard alerts", "Consumer Guide given (Code s38) on every matter", "Signed service agreement (Code s42) blocks invoicing until recorded", "Lodgement and decision steps limited to agents with a current MARN"),
+      ...next("Supervisor sign-off before lodgement", "ImmiAccount lodgement pack export (PDF bundle)", "AAT/ART review deadlines", "Matter templates per agency", "Bulk stage changes"),
     ],
   },
   {
@@ -149,8 +150,45 @@ export const features: { group: string; items: Feature[] }[] = [
         "Pending invitations",
         "Audit log of every change",
       ),
-      ...next("Invite by email", "Multiple offices and branches", "Two-factor authentication", "Single sign-on", "Per-role permission editor"),
+      ...live("Invite by email with position and MARN", "Positions: principal, MARA agent, education agent, consultant, reception, accounts, HR", "Navigation and actions follow each person's position", "MARN expiry warnings"),
+      ...next("Multiple offices and branches", "Two-factor authentication", "Single sign-on", "Per-role permission editor"),
     ],
+  },
+  {
+    group: "Employee portal & HR",
+    items: [
+      ...live(
+        "Employee portal: my work, payslips, leave, timesheet, CPD and details",
+        "Leave requests with manager approval",
+        "Annual and personal leave accrual (NES)",
+        "Timesheets with billable time against matters",
+        "Pay runs: weekly, fortnightly or monthly",
+        "PAYG withholding estimate on 2026–27 rates, Medicare levy and LITO",
+        "Super guarantee at 12%",
+        "Printable payslips with year-to-date totals",
+        "Payslip emails when a pay run is finalised",
+        "CPD log against the yearly target (mandatory ethics topics flagged)",
+      ),
+      ...next("Single Touch Payroll lodgement", "Payday super file export", "Rosters"),
+    ],
+  },
+  {
+    group: "Education agents",
+    items: [
+      ...live(
+        "Student application pipeline: preparing to enrolled",
+        "Search every current CRICOS course, cheapest first",
+        "Open an application straight from a course",
+        "Partner institutions with commission rate and agreement expiry",
+        "Commission tracking: claimable, invoiced, received",
+        "Onshore-transfer commission ban flagged automatically (after 31 March 2026)",
+      ),
+      ...next("Offer letter and CoE upload to the student", "Commission invoices to providers", "Provider portal links"),
+    ],
+  },
+  {
+    group: "Files",
+    items: [...live("Agency drive with nested folders", "Move documents between folders", "Seven-year file retention: only admins can delete"), ...next("Folder sharing with clients", "Version history")],
   },
   {
     group: "Insight",
@@ -163,7 +201,8 @@ export const features: { group: string; items: Feature[] }[] = [
     group: "Workspace",
     items: [
       ...live("⌘K command menu", "Dark mode", "Works on phones, tablets and desktops", "Collapsible sidebar", "Instant page navigation", "Agency profile with MARN and ABN", "Demo agency in one click"),
-      ...next("Client portal", "AI drafting of submissions and cover letters", "AI document check against the checklist", "Mobile app"),
+      ...live("Client upload portal for checklist documents"),
+      ...next("AI drafting of submissions and cover letters", "AI document check against the checklist", "Mobile app"),
     ],
   },
 ];

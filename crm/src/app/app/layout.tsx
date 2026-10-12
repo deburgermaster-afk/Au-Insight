@@ -6,7 +6,7 @@ import { Crumbs } from "@/components/app/crumbs";
 import { UserMenu } from "@/components/app/user-menu";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getNavCounts } from "@/lib/data";
+import { getNavData } from "@/lib/data";
 import { getCtx } from "@/lib/session";
 
 // The chrome is static and prerenders; the agency name, user menu and nav counts read the session,
@@ -33,7 +33,7 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
     <SidebarProvider>
       <AppSidebar
         agency={agency}
-        counts={getNavCounts()}
+        nav={getNavData()}
         user={
           <Suspense fallback={<Skeleton className="h-12 w-full rounded-lg" />}>
             <UserChip />

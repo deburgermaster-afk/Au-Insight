@@ -13,6 +13,7 @@ export function UploadButton({
   clientId,
   matterId,
   checklistItemId,
+  folderId,
   category,
   label = "Upload",
   variant = "outline",
@@ -23,6 +24,7 @@ export function UploadButton({
   clientId?: string | null;
   matterId?: string | null;
   checklistItemId?: string | null;
+  folderId?: string | null;
   category?: string | null;
   label?: string;
   variant?: "outline" | "ghost" | "default" | "secondary";
@@ -37,9 +39,9 @@ export function UploadButton({
       const done = [];
       for (const f of Array.from(files)) {
         setPct(0);
-        done.push(await uploadFile(agencyId, `docs/${clientId ?? "general"}`, f, setPct));
+        done.push(await uploadFile(agencyId, `docs/${clientId ?? folderId ?? "general"}`, f, setPct));
       }
-      const r = await registerDocuments(done, { clientId, matterId, checklistItemId, category });
+      const r = await registerDocuments(done, { clientId, matterId, checklistItemId, category, folderId });
       if (!r.ok) throw new Error(r.error);
       toast.success(`${done.length} file${done.length > 1 ? "s" : ""} uploaded`);
     } catch (e) {

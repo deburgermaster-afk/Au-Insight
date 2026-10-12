@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { PageHeader } from "@/components/app/page-header";
 import { PageSkeleton } from "@/components/app/skeletons";
 import { getAgencyProfile } from "@/lib/data";
@@ -19,7 +20,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader title="Settings & subscription" description="Upgrade, manage your agency details, email and appearance." />
       <Suspense fallback={<PageSkeleton />}>
-        <Form />
+        <Guard cap="team"><Form /></Guard>
       </Suspense>
     </div>
   );

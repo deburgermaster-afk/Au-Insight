@@ -224,3 +224,9 @@
 .mail-prose a { color: var(--chart-4); text-decoration: underline; }
 .mail-prose h1, .mail-prose h2, .mail-prose h3 { font-weight: 600; margin: 0.4em 0; }
 .mail-prose p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted-foreground); float: left; height: 0; pointer-events: none; }
+
+/* Printing a payslip or invoice: just the document. */
+@media print {
+  [data-slot="sidebar"], [data-slot="sidebar-gap"], [data-sidebar="sidebar"], body header, [data-sonner-toaster] { display: none !important; }
+  body, main, [data-slot="sidebar-inset"] { background: #fff !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+}

@@ -2,6 +2,7 @@ import { Download, Eye, FileText } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { Stagger, StaggerItem } from "@/components/app/motion";
 import { PageHeader } from "@/components/app/page-header";
 import { TableSkeleton } from "@/components/app/skeletons";
@@ -85,7 +86,7 @@ export default function DocumentsPage() {
     <>
       <PageHeader title="Documents" description="Every document on file, with certification, translation and expiry." />
       <Suspense fallback={<TableSkeleton />}>
-        <Docs />
+        <Guard cap="files"><Docs /></Guard>
       </Suspense>
     </>
   );

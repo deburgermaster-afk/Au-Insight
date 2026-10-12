@@ -91,7 +91,7 @@ export async function composeMail(input: {
 /** Records uploaded files (already in Blob storage) as client documents. */
 export async function registerDocuments(
   files: MailAttachment[],
-  link: { clientId?: string | null; matterId?: string | null; checklistItemId?: string | null; category?: string | null; source?: string },
+  link: { clientId?: string | null; matterId?: string | null; checklistItemId?: string | null; category?: string | null; source?: string; folderId?: string | null },
 ): Promise<ActionResult> {
   try {
     const ctx = await requireRole("staff");
@@ -104,6 +104,7 @@ export async function registerDocuments(
         clientId: link.clientId ?? null,
         matterId: link.matterId ?? null,
         checklistItemId: link.checklistItemId ?? null,
+        folderId: link.folderId ?? null,
         name: f.name,
         category: link.category ?? null,
         mimeType: f.type,

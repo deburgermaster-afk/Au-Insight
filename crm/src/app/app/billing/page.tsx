@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { CircleDollarSign, HandCoins, Landmark, Receipt } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { invoiceTone, label, Pill } from "@/components/app/badges";
 import { FadeIn, Stagger, StaggerItem } from "@/components/app/motion";
 import { PageHeader } from "@/components/app/page-header";
@@ -139,7 +140,7 @@ export default function BillingPage() {
         actions={<WithPickers render={(p) => <NewInvoiceDialog pickers={p} />} />}
       />
       <Suspense fallback={<PageSkeleton />}>
-        <Billing />
+        <Guard cap="billing"><Billing /></Guard>
       </Suspense>
     </>
   );

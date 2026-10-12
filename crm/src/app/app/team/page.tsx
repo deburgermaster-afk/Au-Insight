@@ -1,16 +1,17 @@
-import { Mail, ShieldCheck } from "lucide-react";
+import { BadgeCheck, CircleAlert, Mail, ShieldCheck } from "lucide-react";
 import { Suspense } from "react";
 import { label, Pill, type Tone } from "@/components/app/badges";
 import { FadeIn, ProgressBar, Stagger, StaggerItem } from "@/components/app/motion";
-import { PageHeader } from "@/components/app/page-header";
+import { HeaderActions } from "@/components/app/header-actions";
 import { Section } from "@/components/app/section";
 import { PageSkeleton } from "@/components/app/skeletons";
 import { initials } from "@/lib/format";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { listTeam } from "@/lib/data";
 import { dmy } from "@/lib/format";
+import { marnCurrent, positionLabel, positions } from "@/lib/permissions";
 import { canAtLeast, getCtx } from "@/lib/session";
-import { InviteDialog, RoleSelect } from "./team-client";
+import { CancelInvite, InviteDialog, RoleSelect } from "./team-client";
 
 export const metadata = { title: "Team" };
 
@@ -31,7 +32,12 @@ async function Team() {
   const max = Math.max(1, ...members.map((m) => m.openMatters));
   const tiers = order.map((r) => ({ role: r, people: members.filter((m) => m.role === r) })).filter((t) => t.people.length);
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-3">
+      {canEdit ? (
+        <HeaderActions>
+          <InviteDialog />
+        </HeaderActions>
+      ) : null}
       <FadeIn>
         <Section title="Organisation">
           <div className="grid gap-3">
@@ -45,7 +51,7 @@ async function Team() {
                       </Avatar>
                       <span className="text-sm font-medium">{m.name}</span>
                       <Pill t={roleTone[m.role]} className="h-5 px-1.5 text-[10px]">
-                        {label(m.role)}
+                        {positionLabel(m.position ?? "consultant")}
                       </Pill>
                     </div>
                   ))}
@@ -56,7 +62,7 @@ async function Team() {
           </div>
         </Section>
       </FadeIn>
-      <Section title={`Members · ${members.length}`} action={canEdit ? <InviteDialog agencyId={ctx.agencyId} /> : null} bodyClassName="p-0 sm:p-0">
+      <Section title={`Members · ${members.length}`} bodyClassName="p-0 sm:p-0">
         <Stagger>
           {members.map((m) => (
             <StaggerItem key={m.id} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 border-b px-4 py-3 last:border-0 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_8rem] sm:px-5">
@@ -70,6 +76,22 @@ async function Team() {
                   </p>
                   <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                     <Mail className="size-3" /> {m.email}
+                  </p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs">
+                    <span>{m.title ?? positionLabel(m.position ?? "consultant")}</span>
+                    {m.position === "principal" || m.position === "migration_agent" ? (
+                      marnCurrent(m.marn, m.marnExpiry) ? (
+                        <span className="inline-flex items-center gap-1 text-sky-500">
+                          <BadgeCheck className="size-3" /> MARN {m.marn}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-rose-500">
+                          <CircleAlert className="size-3" /> {m.marn ? "MARN expired" : "No MARN"}
+                        </span>
+                      )
+                    ) : m.qeac ? (
+                      <span className="text-muted-foreground">QEAC {m.qeac}</span>
+                    ) : null}
                   </p>
                 </div>
               </div>
@@ -87,14 +109,31 @@ async function Team() {
           <div className="border-t bg-muted/30 px-4 py-3 sm:px-5">
             <p className="mb-2 text-xs font-medium text-muted-foreground">Pending invitations</p>
             {invitations.map((i) => (
-              <p key={i.id} className="text-sm">
-                {i.email} · {label(i.role ?? "agent")} · expires {dmy(i.expiresAt)}
-              </p>
+              <div key={i.id} className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate">
+                  {i.email} · {positionLabel(i.position ?? i.role ?? "agent")} · expires {dmy(i.expiresAt)}
+                </span>
+                {canEdit ? <CancelInvite id={i.id} /> : null}
+              </div>
             ))}
           </div>
         ) : null}
       </Section>
-      <Section title="Roles">
+      <Section title="Positions and what they can do">
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {positions.map((p) => (
+            <li key={p.key} className="flex gap-3 rounded-xl border p-3">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+              <div>
+                <p className="text-sm font-medium">{p.label}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{p.about}</p>
+                <p className="mt-1.5 text-xs text-muted-foreground">{members.filter((m) => (m.position ?? "consultant") === p.key).length} on the team</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Section>
+      <Section title="Login levels">
         <ul className="grid gap-3 sm:grid-cols-2">
           {order.map((r) => (
             <li key={r} className="flex gap-3 rounded-xl border p-3">
@@ -113,11 +152,8 @@ async function Team() {
 
 export default function TeamPage() {
   return (
-    <>
-      <PageHeader title="Team" description="Your agency from owner to reception: roles, workload and who reports where." />
-      <Suspense fallback={<PageSkeleton />}>
-        <Team />
-      </Suspense>
-    </>
+    <Suspense fallback={<PageSkeleton />}>
+      <Team />
+    </Suspense>
   );
 }

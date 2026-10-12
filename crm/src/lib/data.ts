@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { cacheLife, cacheTag } from "next/cache";
 import { db, schema as s } from "@/db";
 import { getCtx } from "@/lib/session";
@@ -70,9 +70,24 @@ async function dashboardFor(agencyId: string, userId: string) {
       .orderBy(asc(s.tasks.dueAt))
       .limit(6),
   ]);
+  const [rfis, gaps] = await Promise.all([
+    db
+      .select({ id: s.matters.id, title: s.matters.title, reference: s.matters.reference, due: s.matters.rfiDueAt, first: s.clients.firstName, last: s.clients.lastName })
+      .from(s.matters)
+      .innerJoin(s.clients, eq(s.clients.id, s.matters.clientId))
+      .where(and(eq(s.matters.agencyId, agencyId), isNotNull(s.matters.rfiDueAt), isNull(s.matters.decisionAt), sql`${s.matters.stage} <> 'closed'`))
+      .orderBy(asc(s.matters.rfiDueAt))
+      .limit(6),
+    db
+      .select({ n: count() })
+      .from(s.matters)
+      .where(and(eq(s.matters.agencyId, agencyId), sql`${s.matters.stage} not in ('enquiry','closed')`, or(isNull(s.matters.consumerGuideAt), isNull(s.matters.agreementSignedAt)))),
+  ]);
   const billed = invoices.reduce((a, r) => a + num(r.total), 0);
   const collected = invoices.reduce((a, r) => a + num(r.paid), 0);
   return {
+    rfis,
+    complianceGaps: gaps[0]?.n ?? 0,
     clients: clientCount[0]?.n ?? 0,
     activeMatters: activeMatters[0]?.n ?? 0,
     openTasks: openTasks[0]?.n ?? 0,
@@ -327,12 +342,17 @@ async function teamFor(agencyId: string) {
   tag(agencyId);
   const [members, invitations] = await Promise.all([
     db
-      .select({ id: s.member.id, role: s.member.role, joined: s.member.createdAt, userId: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image })
+      .select({ id: s.member.id, role: s.member.role, joined: s.member.createdAt, userId: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image, position: s.staffProfiles.position, title: s.staffProfiles.title, marn: s.staffProfiles.marn, marnExpiry: s.staffProfiles.marnExpiry, qeac: s.staffProfiles.qeac })
       .from(s.member)
       .innerJoin(s.user, eq(s.user.id, s.member.userId))
+      .leftJoin(s.staffProfiles, and(eq(s.staffProfiles.userId, s.member.userId), eq(s.staffProfiles.agencyId, s.member.organizationId)))
       .where(eq(s.member.organizationId, agencyId))
       .orderBy(asc(s.member.createdAt)),
-    db.select().from(s.invitation).where(and(eq(s.invitation.organizationId, agencyId), eq(s.invitation.status, "pending"))),
+    db
+      .select({ id: s.invitation.id, email: s.invitation.email, role: s.invitation.role, expiresAt: s.invitation.expiresAt, position: s.invitePositions.position })
+      .from(s.invitation)
+      .leftJoin(s.invitePositions, eq(s.invitePositions.invitationId, s.invitation.id))
+      .where(and(eq(s.invitation.organizationId, agencyId), eq(s.invitation.status, "pending"))),
   ]);
   const workload = members.length
     ? await db
@@ -408,10 +428,10 @@ async function reportsFor(agencyId: string) {
   return { byVisa, bySource, revenue: byMonth.map((r) => ({ month: r.month, amount: num(r.amount) })), outcomes };
 }
 
-/** Badge counts for the sidebar. */
-export async function getNavCounts() {
-  const { agencyId, userId } = await getCtx();
-  return navCountsFor(agencyId, userId);
+/** Badge counts and the capabilities that decide which links the sidebar shows. */
+export async function getNavData() {
+  const { agencyId, userId, caps } = await getCtx();
+  return { counts: await navCountsFor(agencyId, userId), caps };
 }
 
 async function navCountsFor(agencyId: string, userId: string) {
@@ -460,4 +480,53 @@ async function mattersOnVisaFor(agencyId: string, code: string) {
     .innerJoin(s.clients, eq(s.clients.id, s.matters.clientId))
     .where(and(eq(s.matters.agencyId, agencyId), eq(s.matters.visaCode, code)))
     .orderBy(desc(s.matters.updatedAt));
+}
+
+/** Files and client folders for the drive (folders themselves are read fresh by the page). */
+export async function getDrive() {
+  const { agencyId } = await getCtx();
+  return driveFor(agencyId);
+}
+
+async function driveFor(agencyId: string) {
+  "use cache";
+  tag(agencyId);
+  const [docs, clients] = await Promise.all([
+    db
+      .select({ d: s.documents, first: s.clients.firstName, last: s.clients.lastName })
+      .from(s.documents)
+      .leftJoin(s.clients, eq(s.clients.id, s.documents.clientId))
+      .where(eq(s.documents.agencyId, agencyId))
+      .orderBy(desc(s.documents.createdAt))
+      .limit(2000),
+    db
+      .select({ id: s.clients.id, name: sql<string>`${s.clients.firstName} || ' ' || ${s.clients.lastName}`, n: sql<number>`(select count(*)::int from ${s.documents} d where d.client_id = ${s.clients.id})` })
+      .from(s.clients)
+      .where(eq(s.clients.agencyId, agencyId))
+      .orderBy(asc(s.clients.firstName)),
+  ]);
+  return { docs: docs.map((r) => ({ ...r.d, clientName: r.first ? `${r.first} ${r.last}` : null })), clients };
+}
+
+/** Study applications and partner institutions, for education agents. */
+export async function getEducation() {
+  const { agencyId } = await getCtx();
+  return educationFor(agencyId);
+}
+
+async function educationFor(agencyId: string) {
+  "use cache";
+  tag(agencyId);
+  const [apps, institutions] = await Promise.all([
+    db
+      .select({ a: s.studentApplications, first: s.clients.firstName, last: s.clients.lastName, inst: s.institutions.name, agent: s.user.name })
+      .from(s.studentApplications)
+      .innerJoin(s.clients, eq(s.clients.id, s.studentApplications.clientId))
+      .leftJoin(s.institutions, eq(s.institutions.id, s.studentApplications.institutionId))
+      .leftJoin(s.user, eq(s.user.id, s.studentApplications.assignedTo))
+      .where(eq(s.studentApplications.agencyId, agencyId))
+      .orderBy(desc(s.studentApplications.updatedAt)),
+    db.select().from(s.institutions).where(eq(s.institutions.agencyId, agencyId)).orderBy(asc(s.institutions.name)),
+  ]);
+  return { apps: apps.map((r) => ({ ...r.a, student: `${r.first} ${r.last}`, institution: r.inst, agent: r.agent })), institutions };
 }

@@ -13,6 +13,7 @@ export const auth = betterAuth({
   plugins: [
     organization({
       creatorRole: "owner",
+      invitationExpiresIn: 60 * 60 * 24 * 7,
       // Agency roles: owner (CEO/principal), admin, supervisor, agent, staff (reception), client.
     }),
     nextCookies(),

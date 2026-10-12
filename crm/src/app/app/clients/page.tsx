@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { PageHeader } from "@/components/app/page-header";
 import { TableSkeleton } from "@/components/app/skeletons";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ export default function ClientsPage() {
         }
       />
       <Suspense fallback={<TableSkeleton />}>
-        <Rows />
+        <Guard cap="clients"><Rows /></Guard>
       </Suspense>
     </>
   );

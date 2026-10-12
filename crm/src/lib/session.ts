@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { db, schema } from "@/db";
 import { auth } from "@/lib/auth";
 
-export type Role = "owner" | "admin" | "supervisor" | "agent" | "staff" | "client";
+import { type Cap, capsFor, marnCurrent, type Position, type Role } from "@/lib/permissions";
+
+export type { Role };
 
 export type Ctx = {
   userId: string;
@@ -16,6 +18,10 @@ export type Ctx = {
   agencyName: string;
   agencySlug: string;
   role: Role;
+  position: Position;
+  caps: Cap[];
+  /** Holds a current MARN (may give immigration assistance). */
+  registered: boolean;
 };
 
 /**
@@ -48,6 +54,22 @@ async function resolveCtx(): Promise<Ctx> {
     .orderBy(asc(schema.member.createdAt));
   const active = memberships.find((m) => m.agencyId === session.session.activeOrganizationId) ?? memberships[0];
   if (!active) redirect("/onboarding");
+  const role = active.role as Role;
+  let [profile] = await db
+    .select()
+    .from(schema.staffProfiles)
+    .where(and(eq(schema.staffProfiles.agencyId, active.agencyId), eq(schema.staffProfiles.userId, session.user.id)));
+  if (!profile) {
+    const position: Position = role === "owner" || role === "admin" ? "principal" : role === "agent" ? "migration_agent" : "consultant";
+    const [agencyProfile] = position === "principal" ? await db.select({ marn: schema.agencyProfile.marn }).from(schema.agencyProfile).where(eq(schema.agencyProfile.agencyId, active.agencyId)) : [];
+    [profile] = await db
+      .insert(schema.staffProfiles)
+      .values({ agencyId: active.agencyId, userId: session.user.id, position, marn: agencyProfile?.marn ?? null, title: position === "principal" ? "Principal" : null })
+      .returning();
+  }
+  const position = profile.position as Position;
+  const registered = (position === "principal" || position === "migration_agent") && marnCurrent(profile.marn, profile.marnExpiry);
+  const caps = capsFor(role, position).filter((c) => c !== "immigration" || registered);
   return {
     userId: session.user.id,
     name: session.user.name,
@@ -56,11 +78,21 @@ async function resolveCtx(): Promise<Ctx> {
     agencyId: active.agencyId,
     agencyName: active.name,
     agencySlug: active.slug,
-    role: active.role as Role,
+    role,
+    position,
+    caps,
+    registered,
   };
 }
 
 const rank: Record<Role, number> = { client: 0, staff: 1, agent: 2, supervisor: 3, admin: 4, owner: 5 };
+
+/** Throws unless the user has a capability. Use in server actions. */
+export async function requireCap(cap: Cap, message?: string): Promise<Ctx> {
+  const ctx = await actionCtx();
+  if (!ctx.caps.includes(cap)) throw new Error(message ?? "Your role doesn't allow that.");
+  return ctx;
+}
 
 /** Throws unless the user's role is at least [min]. Use in server actions. */
 export async function requireRole(min: Role): Promise<Ctx> {

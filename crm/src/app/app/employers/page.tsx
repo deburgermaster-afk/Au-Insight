@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { BadgeCheck, Building2, Mail, Phone } from "lucide-react";
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { ExpiryPill, Pill } from "@/components/app/badges";
 import { Stagger, StaggerItem } from "@/components/app/motion";
 import { PageHeader } from "@/components/app/page-header";
@@ -70,7 +71,7 @@ export default function EmployersPage() {
     <>
       <PageHeader title="Employers" description="Sponsors for 482, 186, 494 and labour agreement matters." actions={<NewEmployerDialog />} />
       <Suspense fallback={<TableSkeleton />}>
-        <Employers />
+        <Guard cap="clients"><Employers /></Guard>
       </Suspense>
     </>
   );

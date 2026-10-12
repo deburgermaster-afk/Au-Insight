@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { Guard } from "@/components/app/guard";
 import { PageHeader } from "@/components/app/page-header";
 import { TableSkeleton } from "@/components/app/skeletons";
 import { WithPickers } from "@/components/app/with-pickers";
@@ -22,7 +23,7 @@ export default function MattersPage() {
         actions={<WithPickers render={(p) => <NewMatterDialog pickers={p} />} />}
       />
       <Suspense fallback={<TableSkeleton />}>
-        <Board />
+        <Guard cap="clients"><Board /></Guard>
       </Suspense>
     </>
   );

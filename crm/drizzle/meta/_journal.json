@@ -22,6 +22,27 @@
       "when": 1791798598943,
       "tag": "0002_portal_items",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791802231149,
+      "tag": "0003_hr_files_education",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791802812538,
+      "tag": "0004_edu_transfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791803079640,
+      "tag": "0005_compliance_invites",
+      "breakpoints": true
     }
   ]
 }
