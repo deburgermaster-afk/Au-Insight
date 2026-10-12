@@ -68,3 +68,23 @@ export async function uploadPortalFile(token: string, agencyId: string, linkId: 
   });
   return { name: f.name, size: f.size, type, key: blob.pathname };
 }
+
+/** The signed-in client portal variant: authorised by the client's session cookie. */
+export async function uploadClientFile(agencyId: string, clientId: string, f: File, onProgress?: (pct: number) => void): Promise<MailAttachment> {
+  const type = f.type || "application/octet-stream";
+  if (f.size <= SMALL) {
+    const form = new FormData();
+    form.set("file", f);
+    form.set("client", "1");
+    return { name: f.name, size: f.size, type, key: await viaServer(form, onProgress) };
+  }
+  const blob = await upload(`agency/${agencyId}/client/${clientId}/${crypto.randomUUID().slice(0, 8)}/${f.name.replace(/[^\w.\- ()]+/g, "_")}`, f, {
+    access: "private",
+    handleUploadUrl: "/api/upload",
+    clientPayload: JSON.stringify({ client: true }),
+    contentType: f.type || undefined,
+    multipart: f.size > 8 * 1024 * 1024,
+    onUploadProgress: (p) => onProgress?.(p.percentage),
+  });
+  return { name: f.name, size: f.size, type, key: blob.pathname };
+}

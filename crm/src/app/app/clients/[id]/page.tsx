@@ -15,6 +15,7 @@ import { WithPickers } from "@/components/app/with-pickers";
 import { ComposeDialog, NewAppointmentDialog, NewInvoiceDialog, NewMatterDialog, NewTaskDialog, RecordPaymentDialog } from "@/components/forms/dialogs";
 import { Button } from "@/components/ui/button";
 import { HeaderActions } from "@/components/app/header-actions";
+import { PortalMenu } from "@/components/portal/staff-actions";
 import { UploadButton } from "@/components/mail/upload-button";
 import { getCtx } from "@/lib/session";
 import { fileUrl } from "@/components/mail/file-icon";
@@ -78,6 +79,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
             }
           />
           <UploadButton agencyId={ctx.agencyId} clientId={c.id} label="Upload" />
+          <PortalMenu clientId={c.id} enabled={c.portalEnabled} hasEmail={Boolean(c.email)} />
           <WithPickers render={(p) => <NewMatterDialog pickers={p} clientId={c.id} />} />
         </HeaderActions>
       </FadeIn>

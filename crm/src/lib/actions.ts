@@ -509,6 +509,10 @@ export async function saveAgencyProfile(form: FormData): Promise<ActionResult> {
       state: blank(form.get("state")),
       invoicePrefix: blank(form.get("invoicePrefix")) ?? "INV",
       gstRegistered: form.get("gstRegistered") === "on",
+      bankName: blank(form.get("bankName")),
+      bankAccountName: blank(form.get("bankAccountName")),
+      bankBsb: blank(form.get("bankBsb")),
+      bankAccount: blank(form.get("bankAccount")),
     };
     await db.insert(s.agencyProfile).values({ agencyId: ctx.agencyId, ...values }).onConflictDoUpdate({ target: s.agencyProfile.agencyId, set: values });
     await audit(ctx, "update", "agency_profile", ctx.agencyId);

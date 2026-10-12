@@ -14,6 +14,10 @@ import { CompareTable, PlanCards } from "@/components/app/plans";
 import { saveAgencyProfile } from "@/lib/actions";
 
 type P = {
+  bankName?: string | null;
+  bankAccountName?: string | null;
+  bankBsb?: string | null;
+  bankAccount?: string | null;
   legalName: string | null;
   abn: string | null;
   marn: string | null;
@@ -86,6 +90,15 @@ export function SettingsForm({ profile, slug, mailDomain }: { profile: P; slug: 
             <label className="flex items-center gap-3 text-sm">
               <Switch name="gstRegistered" defaultChecked={profile?.gstRegistered ?? true} /> Registered for GST (adds 10% to professional fees)
             </label>
+            <p className="text-xs text-muted-foreground">Client trust account: shown on invoices in the client portal, with the invoice number as the payment reference.</p>
+            <Row>
+              <TextField label="Bank" name="bankName" defaultValue={profile?.bankName ?? ""} placeholder="Commonwealth Bank" />
+              <TextField label="Account name" name="bankAccountName" defaultValue={profile?.bankAccountName ?? ""} placeholder="Agency Pty Ltd Client Trust Account" />
+            </Row>
+            <Row>
+              <TextField label="BSB" name="bankBsb" defaultValue={profile?.bankBsb ?? ""} inputMode="numeric" placeholder="062-000" />
+              <TextField label="Account number" name="bankAccount" defaultValue={profile?.bankAccount ?? ""} inputMode="numeric" />
+            </Row>
           </div>
         </Section>
         <div className="flex justify-end">

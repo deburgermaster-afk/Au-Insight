@@ -43,6 +43,13 @@
       "when": 1791803079640,
       "tag": "0005_compliance_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791804974580,
+      "tag": "0006_client_portal",
+      "breakpoints": true
     }
   ]
 }

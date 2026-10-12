@@ -63,6 +63,11 @@ export const agencyProfile = pgTable("agency_profile", {
   brandColor: text("brand_color").default("#6d5efc"),
   gstRegistered: boolean("gst_registered").default(true).notNull(),
   invoicePrefix: text("invoice_prefix").default("INV").notNull(),
+  /** Where clients pay: shown on invoices and in the client portal. */
+  bankName: text("bank_name"),
+  bankAccountName: text("bank_account_name"),
+  bankBsb: text("bank_bsb"),
+  bankAccount: text("bank_account"),
   nextInvoiceNumber: integer("next_invoice_number").default(1001).notNull(),
   ...stamps,
 });
@@ -356,6 +361,21 @@ export const messages = pgTable(
 );
 
 /** HR record for each staff member: position, registration, employment and pay. */
+/** Client portal sign-in: single-use email links ("magic") and the sessions they start. Tokens are stored hashed. */
+export const clientSessions = pgTable("client_sessions", {
+  id: id(),
+  agencyId: agency(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  kind: text("kind").notNull(), // magic | session
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 /** The position an invitee gets once they accept (Better Auth invitations only carry a role). */
 export const invitePositions = pgTable("invite_positions", {
   invitationId: text("invitation_id").primaryKey(),

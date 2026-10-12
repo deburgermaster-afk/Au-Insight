@@ -3,6 +3,7 @@ import { and, eq, gt } from "drizzle-orm";
 import { headers } from "next/headers";
 import { db, schema as s } from "@/db";
 import { auth } from "@/lib/auth";
+import { clientSession } from "@/lib/client-auth";
 
 const MAX = 25 * 1024 * 1024;
 
@@ -15,8 +16,11 @@ export async function POST(req: Request) {
       body,
       request: req,
       onBeforeGenerateToken: async (pathname, payload) => {
-        const p = payload ? (JSON.parse(payload) as { token?: string }) : {};
-        if (p.token) {
+        const p = payload ? (JSON.parse(payload) as { token?: string; client?: boolean }) : {};
+        if (p.client) {
+          const c = await clientSession();
+          if (!c || !pathname.startsWith(`agency/${c.client.agencyId}/client/${c.client.id}/`)) throw new Error("Your session has ended. Sign in again.");
+        } else if (p.token) {
           const [link] = await db.select().from(s.portalLinks).where(and(eq(s.portalLinks.token, p.token), gt(s.portalLinks.expiresAt, new Date())));
           if (!link || !pathname.startsWith(`agency/${link.agencyId}/portal/${link.id}/`)) throw new Error("This upload link has expired.");
         } else {

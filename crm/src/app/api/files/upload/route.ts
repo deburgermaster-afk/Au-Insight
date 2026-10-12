@@ -2,12 +2,13 @@ import { and, eq, gt } from "drizzle-orm";
 import { headers } from "next/headers";
 import { db, schema as s } from "@/db";
 import { auth } from "@/lib/auth";
+import { clientSession } from "@/lib/client-auth";
 import { putFile, safeName } from "@/lib/files";
 
 const MAX = 4 * 1024 * 1024; // the function body limit; larger files upload direct to Blob
 
 // Server-side upload for small files: works on any network that can reach the app itself.
-// Form fields: file, folder (staff) or token (client portal).
+// Form fields: file, folder (staff), token (upload link) or client=1 (signed-in client portal).
 export async function POST(req: Request) {
   const form = await req.formData();
   const file = form.get("file");
@@ -19,6 +20,10 @@ export async function POST(req: Request) {
     const [link] = await db.select().from(s.portalLinks).where(and(eq(s.portalLinks.token, token), gt(s.portalLinks.expiresAt, new Date())));
     if (!link) return Response.json({ error: "This upload link has expired." }, { status: 403 });
     prefix = `agency/${link.agencyId}/portal/${link.id}`;
+  } else if (form.get("client") === "1") {
+    const c = await clientSession();
+    if (!c) return Response.json({ error: "Your session has ended. Sign in again." }, { status: 401 });
+    prefix = `agency/${c.client.agencyId}/client/${c.client.id}/${crypto.randomUUID().slice(0, 8)}`;
   } else {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return Response.json({ error: "Sign in to upload." }, { status: 401 });
