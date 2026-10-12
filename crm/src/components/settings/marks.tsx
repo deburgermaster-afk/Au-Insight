@@ -1,4 +1,4 @@
-import { Globe, Sparkles } from "lucide-react";
+import { Globe, Puzzle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const box = "grid shrink-0 place-items-center rounded-xl font-bold";
@@ -23,6 +23,12 @@ export function Mark({ kind, size = "md", className }: { kind: string; size?: Si
       return (
         <span className={cn(s, "bg-emerald-500/15 text-emerald-500")}>
           <Globe className="size-1/2" />
+        </span>
+      );
+    case "immi":
+      return (
+        <span className={cn(s, "bg-sky-500/15 text-sky-500")}>
+          <Puzzle className="size-1/2" />
         </span>
       );
     case "xkiro":

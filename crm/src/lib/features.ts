@@ -207,6 +207,20 @@ export const features: { group: string; items: Feature[] }[] = [
     ],
   },
   {
+    group: "Lodgement",
+    items: [
+      ...live(
+        "Lodgement pack per matter: every value ImmiAccount asks for, grouped the way the forms ask, with click-to-copy",
+        "Dates in ImmiAccount's DD Mon YYYY format; family members and agent details included",
+        "Documents ordered by the checklist, renamed (01 Passport - Surname Given.pdf) with a suggested ImmiAccount attachment type",
+        "Checks before lodging: missing fields, outstanding checklist items, expiring passport, files over 5 MB or in formats ImmiAccount refuses",
+        "Download the pack as a ZIP with a printable data sheet",
+        "Lodgely for ImmiAccount (Chrome/Edge extension): pick the case in a side panel and fill the page you're on",
+        "The extension signs in with one click and outlines what it filled; it never clicks Next, Submit or Pay",
+      ),
+    ],
+  },
+  {
     group: "Onboarding",
     items: [
       ...live(

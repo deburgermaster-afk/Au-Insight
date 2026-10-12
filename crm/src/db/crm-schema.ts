@@ -753,3 +753,21 @@ export const connectors = pgTable(
   },
   (t) => [uniqueIndex("connectors_agency_kind").on(t.agencyId, t.kind)],
 );
+
+/** "Lodgely for ImmiAccount" browser extension sign-ins: one per browser, stored as a hash, revocable. */
+export const extensionTokens = pgTable(
+  "extension_tokens",
+  {
+    id: id(),
+    agencyId: agency(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    label: text("label"),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("extension_tokens_hash").on(t.tokenHash), index("extension_tokens_user").on(t.agencyId, t.userId)],
+);

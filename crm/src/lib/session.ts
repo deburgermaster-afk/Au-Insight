@@ -113,3 +113,19 @@ export async function memberOf(agencyId: string, userId: string) {
     .where(and(eq(schema.member.organizationId, agencyId), eq(schema.member.userId, userId)));
   return m ?? null;
 }
+
+/** A member's context without a browser session (the ImmiAccount extension uses a bearer token). */
+export async function memberCtx(agencyId: string, userId: string): Promise<Ctx | null> {
+  const [row] = await db
+    .select({ role: schema.member.role, name: schema.organization.name, slug: schema.organization.slug, userName: schema.user.name, email: schema.user.email, image: schema.user.image })
+    .from(schema.member)
+    .innerJoin(schema.organization, eq(schema.organization.id, schema.member.organizationId))
+    .innerJoin(schema.user, eq(schema.user.id, schema.member.userId))
+    .where(and(eq(schema.member.organizationId, agencyId), eq(schema.member.userId, userId)));
+  if (!row) return null;
+  const role = row.role as Role;
+  const [profile] = await db.select().from(schema.staffProfiles).where(and(eq(schema.staffProfiles.agencyId, agencyId), eq(schema.staffProfiles.userId, userId)));
+  const position = (profile?.position ?? (role === "owner" || role === "admin" ? "principal" : role === "agent" ? "migration_agent" : "consultant")) as Position;
+  const registered = (position === "principal" || position === "migration_agent") && marnCurrent(profile?.marn ?? null, profile?.marnExpiry ?? null);
+  return { userId, name: row.userName, email: row.email, image: row.image ?? null, agencyId, agencyName: row.name, agencySlug: row.slug, role, position, caps: capsFor(role, position).filter((c) => c !== "immigration" || registered), registered };
+}

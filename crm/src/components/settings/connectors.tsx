@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { disconnect, syncNow } from "@/lib/connection-actions";
 import { disconnectResend, repairResend } from "@/lib/connector-actions";
+import { ImmiHelperSetup } from "@/components/lodge/immi-helper";
 import { ago } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Mark } from "./marks";
@@ -26,6 +27,8 @@ type Props = {
   domain: { name: string; status: string | null } | null;
   ai: { on: boolean; available: boolean };
   canAdmin: boolean;
+  extensions: { id: string; label: string | null; createdAt: Date; lastUsedAt: Date | null }[];
+  initial?: string;
 };
 
 type Tile = { key: string; name: string; by: string; blurb: string; state: "connected" | "available" | "builtin" | "attention" | "setup"; detail: string };
@@ -87,7 +90,7 @@ function ConnectLink({ href, children, disabled, title }: { href: string; childr
 
 /** Claude-style connectors: a tile per app; open one to see what it can access, then connect with one click. */
 export function Connectors(p: Props) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(p.initial ?? null);
   const [pending, start] = useTransition();
   const router = useRouter();
   const run = (fn: () => Promise<{ ok: boolean; error?: string; id?: string }>, msg: (id?: string) => string) =>
@@ -130,6 +133,14 @@ export function Connectors(p: Props) {
       blurb: "Your website's domain for email, so clients see name@youragency.com.au. Verified automatically once DNS is in place.",
       state: p.domain ? (p.domain.status === "verified" ? "connected" : "setup") : "available",
       detail: p.domain ? `${p.domain.name} · ${(p.domain.status ?? "pending").replace(/_/g, " ")}` : "Not added yet",
+    },
+    {
+      key: "immi",
+      name: "ImmiAccount helper",
+      by: "Just you · Chrome or Edge",
+      blurb: "A browser extension that fills ImmiAccount forms from a case's data sheet. You check each page and click Next yourself.",
+      state: p.extensions.length ? "connected" : "available",
+      detail: p.extensions.length ? `Signed in on ${p.extensions.length} browser${p.extensions.length === 1 ? "" : "s"}` : "Install, then connect from the extension",
     },
     {
       key: "xkiro",
@@ -284,6 +295,8 @@ export function Connectors(p: Props) {
                   </div>
                 </div>
               ) : null}
+
+              {current.key === "immi" ? <ImmiHelperSetup extensions={p.extensions} /> : null}
 
               {current.key === "xkiro" ? (
                 <div className="grid gap-3">

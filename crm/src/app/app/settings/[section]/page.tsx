@@ -16,6 +16,8 @@ import { Mark } from "@/components/settings/marks";
 import { RefreshUsage } from "@/components/settings/refresh-usage";
 import { SettingsShell } from "@/components/settings/shell";
 import { UsageBars } from "@/components/settings/usage-meter";
+import { and, desc, eq, isNull } from "drizzle-orm";
+import { db, schema as s } from "@/db";
 import { getSettings } from "@/lib/data";
 import { dmy } from "@/lib/format";
 import { llmEnabled } from "@/lib/llm";
@@ -95,6 +97,12 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
         domain={p?.mailDomain ? { name: p.mailDomain, status: p.mailDomainStatus } : null}
         ai={{ on: Boolean(p?.aiMailEnabledAt), available: llmEnabled() }}
         canAdmin={admin}
+        extensions={await db
+          .select({ id: s.extensionTokens.id, label: s.extensionTokens.label, createdAt: s.extensionTokens.createdAt, lastUsedAt: s.extensionTokens.lastUsedAt })
+          .from(s.extensionTokens)
+          .where(and(eq(s.extensionTokens.agencyId, ctx.agencyId), eq(s.extensionTokens.userId, ctx.userId), isNull(s.extensionTokens.revokedAt)))
+          .orderBy(desc(s.extensionTokens.createdAt))}
+        initial={typeof sp.open === "string" ? sp.open : undefined}
       />
     );
   }

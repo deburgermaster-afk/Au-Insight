@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Lodgely for ImmiAccount",
+  "short_name": "Lodgely",
+  "version": "1.0.0",
+  "description": "Fill ImmiAccount forms from your Lodgely case file. You review every field and submit yourself.",
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel", "storage", "scripting", "tabs"],
+  "host_permissions": ["https://online.immi.gov.au/*", "__BASE__/*", "http://localhost/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": { "default_title": "Lodgely for ImmiAccount", "default_icon": { "16": "icon-16.png", "48": "icon-48.png", "128": "icon-128.png" } },
+  "icons": { "16": "icon-16.png", "48": "icon-48.png", "128": "icon-128.png" },
+  "externally_connectable": { "matches": ["__BASE__/*", "http://localhost/*"] }
+}

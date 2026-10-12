@@ -1,5 +1,5 @@
 import { connection } from "next/server";
-import { ArrowLeft, Building2, ExternalLink, ListChecks, Mail, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, ExternalLink, ListChecks, Mail, PackageCheck, UserRound } from "lucide-react";
 import { HeaderActions } from "@/components/app/header-actions";
 import { SendChecklist } from "@/components/mail/send-checklist";
 import { UploadButton } from "@/components/mail/upload-button";
@@ -51,6 +51,11 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
         />
         <ComposeDialog to={client.email ?? ""} clientId={client.id} matterId={m.id} subject={`${m.title} · ${m.reference}`} trigger={<Button size="sm" variant="outline"><Mail /> Email</Button>} />
         <UploadButton agencyId={ctx.agencyId} clientId={client.id} matterId={m.id} label="Upload" />
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/app/matters/${m.id}/lodge`}>
+            <PackageCheck /> Lodgement pack
+          </Link>
+        </Button>
         <MatterAiToggle matterId={m.id} tracking={m.aiTracking} clientName={fullName(client)} agencyOn={aiOn} />
       </HeaderActions>
       <FadeIn className="mb-4 grid gap-4 rounded-xl border bg-card p-4 sm:p-5">

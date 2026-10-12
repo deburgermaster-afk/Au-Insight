@@ -28,7 +28,7 @@ export function SignInForm() {
           const { error } = await authClient.signIn.email({ email: String(f.get("email")), password: String(f.get("password")) });
           setBusy(false);
           if (error) return toast.error(error.message ?? "Couldn't sign in");
-          router.push(next.startsWith("/") ? next : "/app");
+          router.push(/^\/(?!\/)/.test(next) ? next : "/app");
         }}
       >
         <div className="space-y-2">
