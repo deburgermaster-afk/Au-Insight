@@ -64,6 +64,13 @@
       "when": 1791841238595,
       "tag": "0008_onboarding_pathways",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791844220568,
+      "tag": "0009_ai_mail",
+      "breakpoints": true
     }
   ]
 }

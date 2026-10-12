@@ -15,13 +15,16 @@ import { cn } from "@/lib/utils";
 import { fileUrl } from "@/components/mail/file-icon";
 import { UploadButton } from "@/components/mail/upload-button";
 import { stages } from "@/lib/visas";
+import { MailAiConsent } from "@/components/mail-ai/consent";
 
-export function StageStepper({ matterId, stage }: { matterId: string; stage: string }) {
+export function StageStepper({ matterId, stage, askAi, clientName }: { matterId: string; stage: string; askAi?: boolean; clientName?: string }) {
   const [current, set] = useOptimistic(stage);
   const [pending, start] = useTransition();
+  const [consent, setConsent] = useState(false);
   const idx = stages.findIndex((s) => s.key === current);
   return (
     <div className="-mx-1 overflow-x-auto px-1 pb-1">
+      {askAi ? <MailAiConsent scope="matter" matterId={matterId} clientName={clientName} open={consent} onOpenChange={setConsent} /> : null}
       <ol className="flex w-max min-w-full items-center gap-1">
         {stages.map((s, i) => {
           const done = i < idx;
@@ -36,6 +39,8 @@ export function StageStepper({ matterId, stage }: { matterId: string; stage: str
                     set(s.key);
                     const r = await moveMatter(matterId, s.key);
                     if (!r.ok) toast.error(r.error);
+                    // First time a case moves forward, ask whether AI should track its emails.
+                    else if (askAi && i > idx) setConsent(true);
                   })
                 }
                 className={cn(

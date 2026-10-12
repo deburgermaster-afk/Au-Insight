@@ -5,6 +5,8 @@ import { PageHeader } from "@/components/app/page-header";
 import { PageSkeleton } from "@/components/app/skeletons";
 import { getAgencyProfile } from "@/lib/data";
 import { getCtx } from "@/lib/session";
+import { AiMailCard } from "@/components/mail-ai/controls";
+import { dmy } from "@/lib/format";
 import { SettingsForm } from "./settings-form";
 
 export const metadata = { title: "Settings" };
@@ -12,7 +14,12 @@ export const metadata = { title: "Settings" };
 async function Form() {
   await connection();
   const [profile, ctx] = await Promise.all([getAgencyProfile(), getCtx()]);
-  return <SettingsForm profile={profile} slug={ctx.agencySlug} mailDomain={process.env.MAIL_FROM_DOMAIN ?? null} />;
+  return (
+    <div className="grid gap-4">
+      <AiMailCard on={Boolean(profile?.aiMailEnabledAt)} by={profile?.aiMailEnabledBy ?? null} at={profile?.aiMailEnabledAt ? dmy(profile.aiMailEnabledAt) : null} available={Boolean(process.env.LLM_API_KEY)} />
+      <SettingsForm profile={profile} slug={ctx.agencySlug} mailDomain={process.env.MAIL_FROM_DOMAIN ?? null} />
+    </div>
+  );
 }
 
 export default function SettingsPage() {

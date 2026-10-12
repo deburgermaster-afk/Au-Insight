@@ -74,6 +74,9 @@ export const agencyProfile = pgTable("agency_profile", {
   teamSize: text("team_size"),
   /** Set when the owner finishes the setup wizard. */
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+  /** AI mail assistant: when an admin turned it on (null = off) and who. */
+  aiMailEnabledAt: timestamp("ai_mail_enabled_at", { withTimezone: true }),
+  aiMailEnabledBy: text("ai_mail_enabled_by"),
   ...stamps,
 });
 
@@ -173,6 +176,10 @@ export const matters = pgTable(
     consumerGuideAt: date("consumer_guide_at"),
     /** OMARA Code s42/s51: signed service agreement before fees are taken. */
     agreementSignedAt: date("agreement_signed_at"),
+    /** AI email tracking for this matter: null = not asked yet, true/false = staff decision. */
+    aiTracking: boolean("ai_tracking"),
+    aiTrackingAt: timestamp("ai_tracking_at", { withTimezone: true }),
+    aiTrackingBy: text("ai_tracking_by"),
     feeProfessional: numeric("fee_professional"),
     feeGovernment: numeric("fee_government"),
     pointsClaimed: integer("points_claimed"),
@@ -646,3 +653,33 @@ export const aiPathways = pgTable("ai_pathways", {
   createdBy: text("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+/** What the AI understood from an email: category, facts and one suggested action for staff to apply. */
+export const mailInsights = pgTable(
+  "mail_insights",
+  {
+    id: id(),
+    agencyId: agency(),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    matterId: text("matter_id").references(() => matters.id, { onDelete: "set null" }),
+    /** grant | refusal | rfi | acknowledgement | health | biometrics | bridging | skills_outcome | invitation | nomination | offer | coe | payment | client_message | other | unrelated */
+    category: text("category").notNull(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull(),
+    facts: jsonb("facts").$type<Record<string, string | null>>().default({}).notNull(),
+    /** set_stage:decision | set_rfi_due | create_task | none */
+    action: text("action").notNull().default("none"),
+    actionLabel: text("action_label"),
+    actionDue: date("action_due"),
+    actionStatus: text("action_status").notNull().default("open"), // open | applied | dismissed
+    actionBy: text("action_by"),
+    confidence: text("confidence").notNull().default("medium"),
+    matchedBy: text("matched_by"), // trn | reference | email | passport | name | ai
+    model: text("model"),
+    ...stamps,
+  },
+  (t) => [index("mail_insights_client_idx").on(t.agencyId, t.clientId, t.createdAt)],
+);

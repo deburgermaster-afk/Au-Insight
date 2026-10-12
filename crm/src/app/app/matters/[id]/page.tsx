@@ -18,7 +18,8 @@ import { PageSkeleton } from "@/components/app/skeletons";
 import { Timeline } from "@/components/app/timeline";
 import { WithPickers } from "@/components/app/with-pickers";
 import { NewTaskDialog } from "@/components/forms/dialogs";
-import { getMatter } from "@/lib/data";
+import { getAgencyProfile, getMatter } from "@/lib/data";
+import { MatterAiToggle } from "@/components/mail-ai/controls";
 import { aud, daysUntil, dmy, fullName, relativeDays } from "@/lib/format";
 import { visaByCode } from "@/lib/visas";
 import { Checklist, ComplianceChecks, MatterDetailsForm, StageStepper } from "./matter-client";
@@ -32,6 +33,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
   const { matter: m, client, employer, checklist, activities, tasks } = data;
   const ctx = await getCtx();
   const visa = visaByCode(m.visaCode);
+  const aiOn = Boolean((await getAgencyProfile())?.aiMailEnabledAt);
   return (
     <>
       <HeaderActions>
@@ -49,6 +51,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
         />
         <ComposeDialog to={client.email ?? ""} clientId={client.id} matterId={m.id} subject={`${m.title} · ${m.reference}`} trigger={<Button size="sm" variant="outline"><Mail /> Email</Button>} />
         <UploadButton agencyId={ctx.agencyId} clientId={client.id} matterId={m.id} label="Upload" />
+        <MatterAiToggle matterId={m.id} tracking={m.aiTracking} clientName={fullName(client)} agencyOn={aiOn} />
       </HeaderActions>
       <FadeIn className="mb-4 grid gap-4 rounded-xl border bg-card p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
@@ -78,7 +81,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
             {!m.consumerGuideAt || !m.agreementSignedAt ? <Pill t="amber">Compliance incomplete</Pill> : null}
           </div>
         </div>
-        <StageStepper matterId={m.id} stage={m.stage} />
+        <StageStepper matterId={m.id} stage={m.stage} askAi={aiOn && m.aiTracking == null} clientName={fullName(client)} />
       </FadeIn>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">

@@ -173,6 +173,22 @@ export const features: { group: string; items: Feature[] }[] = [
     ],
   },
   {
+    group: "AI mail assistant",
+    items: [
+      ...live(
+        "Understands mail from Home Affairs, assessing bodies, state nomination, providers and clients",
+        "Links each email to the right client by TRN, reference, passport, email or name, without sending your client list to AI",
+        "Classifies grants, refusals, RFIs, health, biometrics, skills outcomes, invitations, offers and CoEs",
+        "Pulls out grant numbers, decision dates, deadlines and conditions",
+        "One suggested action per email: record the decision, set the RFI deadline or create a task",
+        "Nothing changes until a person clicks; AI never replies, sends or deletes",
+        "Agency consent with a visual three-step explainer; per-case consent when a case moves forward",
+        "Client Emails tab and alerts on the client file",
+        "Analyse any single email on request",
+      ),
+    ],
+  },
+  {
     group: "Onboarding",
     items: [
       ...live(

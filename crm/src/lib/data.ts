@@ -158,7 +158,17 @@ async function clientFor(agencyId: string, id: string) {
     .leftJoin(s.institutions, eq(s.institutions.id, s.studentApplications.institutionId))
     .where(and(eq(s.studentApplications.agencyId, agencyId), eq(s.studentApplications.clientId, id)))
     .orderBy(desc(s.studentApplications.createdAt));
-  return { client, matters, documents, activities, tasks, dependants, invoices, appointments, pathway: pathway ?? null, studies };
+  const [emails, insights, agencyRow] = await Promise.all([
+    db
+      .select({ id: s.messages.id, folder: s.messages.folder, fromName: s.messages.fromName, fromAddress: s.messages.fromAddress, to: s.messages.toAddresses, subject: s.messages.subject, bodyText: s.messages.bodyText, sentAt: s.messages.sentAt, attachments: s.messages.attachments, matterId: s.messages.matterId, auth: s.messages.auth })
+      .from(s.messages)
+      .where(and(eq(s.messages.agencyId, agencyId), eq(s.messages.clientId, id)))
+      .orderBy(desc(s.messages.sentAt))
+      .limit(100),
+    db.select().from(s.mailInsights).where(and(eq(s.mailInsights.agencyId, agencyId), eq(s.mailInsights.clientId, id))).orderBy(desc(s.mailInsights.createdAt)),
+    db.select({ on: s.agencyProfile.aiMailEnabledAt }).from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, agencyId)),
+  ]);
+  return { client, matters, documents, activities, tasks, dependants, invoices, appointments, pathway: pathway ?? null, studies, emails, insights, aiMailOn: Boolean(agencyRow[0]?.on) };
 }
 
 // ── Matters ───────────────────────────────────────────────────────────────────────────────────
@@ -463,13 +473,14 @@ async function mailFor(agencyId: string) {
   "use cache";
   tag(agencyId);
   const rows = await db
-    .select({ m: s.messages, first: s.clients.firstName, last: s.clients.lastName })
+    .select({ m: s.messages, first: s.clients.firstName, last: s.clients.lastName, insight: s.mailInsights })
     .from(s.messages)
     .leftJoin(s.clients, eq(s.clients.id, s.messages.clientId))
+    .leftJoin(s.mailInsights, eq(s.mailInsights.messageId, s.messages.id))
     .where(eq(s.messages.agencyId, agencyId))
     .orderBy(desc(s.messages.sentAt))
     .limit(500);
-  return rows.map((r) => ({ ...r.m, clientName: r.first ? `${r.first} ${r.last}` : null }));
+  return rows.map((r) => ({ ...r.m, clientName: r.first ? `${r.first} ${r.last}` : null, insight: r.insight }));
 }
 
 /** The agency's matters on one visa, for the visa page. */

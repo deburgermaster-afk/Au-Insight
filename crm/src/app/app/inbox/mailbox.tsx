@@ -1,6 +1,9 @@
 "use client";
 
+import { categoryStyle, InsightCard, type InsightRow } from "@/components/mail-ai/insight";
+
 import {
+  Bot,
   Archive,
   ArrowLeft,
   CheckCheck,
@@ -60,6 +63,7 @@ export type Msg = {
   status: string | null;
   auth: Auth;
   messageId: string | null;
+  insight?: InsightRow | null;
 };
 type Box = { id: string; address: string; name: string; kind: string; mine: boolean };
 
@@ -211,6 +215,12 @@ export function Mailbox({ messages, boxes }: { messages: Msg[]; boxes: Box[] }) 
                       <p className={cn("truncate text-[13px]", !m.read ? "text-foreground" : "text-foreground/80")}>{m.subject}</p>
                       <p className="truncate text-xs text-muted-foreground">{m.bodyText?.slice(0, 140)}</p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 empty:hidden">
+                        {m.insight && m.insight.category !== "unrelated" ? (
+                          <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px]", categoryStyle[m.insight.category]?.tone)}>
+                            <Bot className="size-3" /> {categoryStyle[m.insight.category]?.label ?? m.insight.title}
+                            {m.insight.actionStatus === "open" && m.insight.action !== "none" ? <span className="size-1.5 rounded-full bg-current" /> : null}
+                          </span>
+                        ) : null}
                         {m.attachments.length ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
                             <Paperclip className="size-3" /> {m.attachments.length}
@@ -326,6 +336,11 @@ function Reader({ m, onBack, change }: { m: Msg; onBack: () => void; change: (id
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="px-5 pb-4 pt-5">
           <h2 className="text-lg font-semibold tracking-tight">{m.subject}</h2>
+          {m.insight && m.insight.category !== "unrelated" ? (
+            <div className="mt-3">
+              <InsightCard i={m.insight} />
+            </div>
+          ) : null}
           <div className="mt-4 flex items-start gap-3">
             <SenderLogo address={m.fromAddress} name={m.fromName} auth={out ? null : m.auth} />
             <div className="min-w-0 flex-1">

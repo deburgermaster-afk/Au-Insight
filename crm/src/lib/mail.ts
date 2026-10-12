@@ -206,11 +206,12 @@ function decodeHtml(r: Received) {
 export async function ingestReceived(emailId: string) {
   const r = await resend<Received>(`/emails/receiving/${emailId}`);
   const recipients = [...new Set([...(r.received_for ?? []), ...r.to, ...(r.cc ?? [])].map(addr))];
-  if (!recipients.length) return [];
+  const none = { agencies: [] as string[], messages: [] as string[] };
+  if (!recipients.length) return none;
   const boxes = await db.select().from(s.mailboxes).where(inArray(s.mailboxes.address, recipients));
-  if (!boxes.length) return []; // not ours (another app on the same domain)
+  if (!boxes.length) return none; // not ours (another app on the same domain)
   const already = await db.select({ id: s.messages.id }).from(s.messages).where(eq(s.messages.providerId, r.id)).limit(1);
-  if (already.length) return [];
+  if (already.length) return none;
 
   const auth = r.authentication ?? {};
   const verified = auth.dmarc === "pass" || (auth.dkim === "pass" && auth.spf === "pass");
@@ -221,6 +222,7 @@ export async function ingestReceived(emailId: string) {
   // Attachments: download once, store per agency.
   const list = r.attachments.length ? await resend<{ data: { id: string; download_url: string; content_type: string; size: number; filename?: string }[] }>(`/emails/receiving/${emailId}/attachments`) : { data: [] };
   const done: string[] = [];
+  const inserted: string[] = [];
   for (const agencyId of [...new Set(boxes.map((b) => b.agencyId))]) {
     const box = boxes.find((b) => b.agencyId === agencyId)!;
     const attachments: MailAttachment[] = [];
@@ -239,7 +241,7 @@ export async function ingestReceived(emailId: string) {
     const [parent] = inReplyTo
       ? await db.select({ threadKey: s.messages.threadKey, matterId: s.messages.matterId }).from(s.messages).where(and(eq(s.messages.agencyId, agencyId), eq(s.messages.messageId, inReplyTo))).limit(1)
       : [];
-    await db.insert(s.messages).values({
+    const [row] = await db.insert(s.messages).values({
       agencyId,
       threadKey: parent?.threadKey ?? crypto.randomUUID(),
       folder: "inbox",
@@ -260,13 +262,14 @@ export async function ingestReceived(emailId: string) {
       attachments,
       status: "received",
       auth: { ...auth, verified },
-    });
+    }).returning({ id: s.messages.id });
+    inserted.push(row.id);
     if (client) {
       await db.insert(s.activities).values({ agencyId, clientId: client.id, kind: "email", title: `Email received: ${r.subject || "(no subject)"}`, actorName: display(r.from) ?? from });
     }
     done.push(agencyId);
   }
-  return done;
+  return { agencies: done, messages: inserted };
 }
 
 const statusFor: Record<string, string> = {
