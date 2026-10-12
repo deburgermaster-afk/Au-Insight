@@ -1,5 +1,11 @@
 import { connection } from "next/server";
-import { ArrowLeft, Building2, ExternalLink, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, ExternalLink, ListChecks, Mail, UserRound } from "lucide-react";
+import { HeaderActions } from "@/components/app/header-actions";
+import { SendChecklist } from "@/components/mail/send-checklist";
+import { UploadButton } from "@/components/mail/upload-button";
+import { ComposeDialog } from "@/components/forms/dialogs";
+import { Button } from "@/components/ui/button";
+import { getCtx } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -16,16 +22,34 @@ import { aud, dmy, fullName, relativeDays } from "@/lib/format";
 import { visaByCode } from "@/lib/visas";
 import { Checklist, MatterDetailsForm, StageStepper } from "./matter-client";
 
-async function MatterView({ params }: { params: Promise<{ id: string }> }) {
+async function MatterView({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
+  const sp = await searchParams;
   await connection();
   const data = await getMatter(id);
   if (!data) notFound();
   const { matter: m, client, employer, checklist, activities, tasks } = data;
+  const ctx = await getCtx();
   const visa = visaByCode(m.visaCode);
   return (
     <>
-      <FadeIn className="mb-6 grid gap-4 rounded-2xl border bg-card p-4 shadow-xs sm:p-6">
+      <HeaderActions>
+        <SendChecklist
+          defaultOpen={sp.send === "1"}
+          matterId={m.id}
+          clientName={fullName(client)}
+          clientEmail={client.email}
+          items={checklist}
+          trigger={
+            <Button size="sm" className="rounded-full">
+              <ListChecks /> Send checklist
+            </Button>
+          }
+        />
+        <ComposeDialog to={client.email ?? ""} clientId={client.id} matterId={m.id} subject={`${m.title} · ${m.reference}`} trigger={<Button size="sm" variant="outline"><Mail /> Email</Button>} />
+        <UploadButton agencyId={ctx.agencyId} clientId={client.id} matterId={m.id} label="Upload" />
+      </HeaderActions>
+      <FadeIn className="mb-4 grid gap-4 rounded-xl border bg-card p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <div className="min-w-0 flex-1">
             <p className="font-mono text-xs text-muted-foreground">{m.reference}</p>
@@ -50,8 +74,8 @@ async function MatterView({ params }: { params: Promise<{ id: string }> }) {
         <StageStepper matterId={m.id} stage={m.stage} />
       </FadeIn>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="grid content-start gap-6">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid content-start gap-4">
           <Section
             title="Document checklist"
             action={
@@ -62,7 +86,7 @@ async function MatterView({ params }: { params: Promise<{ id: string }> }) {
               ) : null
             }
           >
-            <Checklist matterId={m.id} items={checklist} />
+            <Checklist matterId={m.id} items={checklist} docs={data.documents} agencyId={ctx.agencyId} clientId={client.id} />
           </Section>
           <Section title="Timeline">
             <div className="grid gap-5">
@@ -71,7 +95,7 @@ async function MatterView({ params }: { params: Promise<{ id: string }> }) {
             </div>
           </Section>
         </div>
-        <div className="grid content-start gap-6">
+        <div className="grid content-start gap-4">
           <Section title="Lodgement">
             <MatterDetailsForm matterId={m.id} m={m} />
           </Section>
@@ -120,14 +144,11 @@ async function MatterView({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-export default function MatterPage({ params }: PageProps<"/app/matters/[id]">) {
+export default function MatterPage({ params, searchParams }: PageProps<"/app/matters/[id]">) {
   return (
     <>
-      <Link href="/app/matters" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Matters
-      </Link>
       <Suspense fallback={<PageSkeleton />}>
-        <MatterView params={params} />
+        <MatterView params={params} searchParams={searchParams} />
       </Suspense>
     </>
   );

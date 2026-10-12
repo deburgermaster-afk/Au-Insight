@@ -44,7 +44,8 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
         <header className="sticky top-0 z-20 flex h-13 items-center gap-2 rounded-t-xl border-b bg-background/85 px-3 backdrop-blur-md sm:px-5">
           <SidebarTrigger className="-ml-1 md:hidden" />
           <Crumbs agency={agency} />
-          <div className="ml-auto flex items-center gap-1.5">
+          <div id="header-actions" className="ml-auto flex min-w-0 items-center gap-1.5 overflow-x-auto [&_button]:shrink-0" />
+          <div className="flex shrink-0 items-center gap-1.5 border-l pl-2">
             <Link href="/app/inbox" aria-label="Inbox" className="grid size-8 place-items-center rounded-lg border bg-card text-muted-foreground transition hover:text-foreground">
               <Mail className="size-4" />
             </Link>
@@ -54,7 +55,7 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
             </Link>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="flex w-full min-w-0 flex-1 flex-col p-3">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

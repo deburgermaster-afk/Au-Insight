@@ -82,3 +82,15 @@ export async function getOccupation(code: string) {
 }
 
 export type OccupationDetail = NonNullable<Awaited<ReturnType<typeof getOccupation>>>;
+
+export type Processing = { subclass: string; stream: string; p25: string | null; p50: string | null; p75: string | null; p90: string | null; p50_days: number | null; p90_days: number | null; updated: string | null };
+
+/** Home Affairs global processing times for a visa (e.g. "820/801" → both subclasses). */
+export async function visaProcessing(code: string): Promise<Processing[]> {
+  "use cache";
+  cacheTag("occupations");
+  cacheLife("hours");
+  const subs = code.split("/").filter((c) => /^\d{3}$/.test(c));
+  if (!subs.length) return [];
+  return rest<Processing[]>(`visa_processing_times?subclass=in.(${subs.join(",")})&select=subclass,stream,p25,p50,p75,p90,p50_days,p90_days,updated&order=subclass,stream`);
+}

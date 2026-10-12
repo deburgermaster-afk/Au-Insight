@@ -214,3 +214,13 @@
     min-width: 0;
   }
 }
+
+/* Composer content: looks like the email the client will receive. */
+.mail-prose { min-height: inherit; line-height: 1.6; }
+.mail-prose p { margin: 0 0 0.6em; }
+.mail-prose ul { list-style: disc; padding-left: 1.4em; margin: 0 0 0.6em; }
+.mail-prose ol { list-style: decimal; padding-left: 1.4em; margin: 0 0 0.6em; }
+.mail-prose blockquote { border-left: 3px solid var(--border); padding-left: 0.8em; color: var(--muted-foreground); margin: 0 0 0.6em; }
+.mail-prose a { color: var(--chart-4); text-decoration: underline; }
+.mail-prose h1, .mail-prose h2, .mail-prose h3 { font-weight: 600; margin: 0.4em 0; }
+.mail-prose p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted-foreground); float: left; height: 0; pointer-events: none; }

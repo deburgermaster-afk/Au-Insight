@@ -13,6 +13,10 @@ import { Timeline } from "@/components/app/timeline";
 import { WithPickers } from "@/components/app/with-pickers";
 import { ComposeDialog, NewAppointmentDialog, NewInvoiceDialog, NewMatterDialog, NewTaskDialog, RecordPaymentDialog } from "@/components/forms/dialogs";
 import { Button } from "@/components/ui/button";
+import { HeaderActions } from "@/components/app/header-actions";
+import { UploadButton } from "@/components/mail/upload-button";
+import { getCtx } from "@/lib/session";
+import { fileUrl } from "@/components/mail/file-icon";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getClient } from "@/lib/data";
 import { aud, daysUntil, dmy, fullName, initials, relativeDays, time } from "@/lib/format";
@@ -41,7 +45,7 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 async function ClientView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   await connection();
-  const data = await getClient(id);
+  const [data, ctx] = await Promise.all([getClient(id), getCtx()]);
   if (!data) notFound();
   const { client: c, matters, documents, activities, tasks, dependants, invoices, appointments } = data;
   const name = fullName(c);
@@ -61,19 +65,20 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
           <h1 className="truncate text-xl font-semibold tracking-tight">{name}</h1>
           <p className="truncate text-[13px] text-muted-foreground">{[c.occupation, c.nationality, c.onshore ? "Onshore" : "Offshore"].filter(Boolean).join(" • ")}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <HeaderActions>
           <ClientStageSelect clientId={c.id} stage={c.stage} />
           <ComposeDialog
             to={c.email ?? ""}
             clientId={c.id}
             trigger={
-              <Button size="icon-sm" variant="outline" aria-label="Email">
-                <Mail />
+              <Button size="sm" variant="outline">
+                <Mail /> Email
               </Button>
             }
           />
+          <UploadButton agencyId={ctx.agencyId} clientId={c.id} label="Upload" />
           <WithPickers render={(p) => <NewMatterDialog pickers={p} clientId={c.id} />} />
-        </div>
+        </HeaderActions>
       </FadeIn>
 
       <FadeIn delay={0.04}>
@@ -163,12 +168,22 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
                           <Row k="Status" v={<span className={status[1]}>{status[0]}</span>} />
                         </div>
                         <div className="mt-3.5 grid grid-cols-2 gap-2">
-                          <Button size="sm" variant="secondary" disabled title="File storage arrives next">
-                            <Eye /> View
-                          </Button>
-                          <Button size="sm" variant="secondary" disabled title="File storage arrives next">
-                            <Download /> Download
-                          </Button>
+                          {d.storageKey ? (
+                            <>
+                              <Button size="sm" variant="secondary" asChild>
+                                <a href={fileUrl(d.storageKey, d.name)} target="_blank" rel="noreferrer">
+                                  <Eye /> View
+                                </a>
+                              </Button>
+                              <Button size="sm" variant="secondary" asChild>
+                                <a href={fileUrl(d.storageKey, d.name, true)}>
+                                  <Download /> Download
+                                </a>
+                              </Button>
+                            </>
+                          ) : (
+                            <p className="col-span-2 rounded-md bg-muted/50 px-2 py-1.5 text-center text-[11px] text-muted-foreground">Recorded without a file</p>
+                          )}
                         </div>
                       </div>
                     );

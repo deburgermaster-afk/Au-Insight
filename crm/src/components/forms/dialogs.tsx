@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { createAppointment, createEmployer, createInvoice, createMatter, createTask, recordPayment, sendMessage } from "@/lib/actions";
+import { Composer } from "@/components/mail/composer";
+import { createAppointment, createEmployer, createInvoice, createMatter, createTask, recordPayment } from "@/lib/actions";
 import { stages, visas } from "@/lib/visas";
 import { ActionDialog } from "./action-dialog";
 import { AreaField, type Option, Row, SelectField, TextField } from "./fields";
@@ -208,13 +209,6 @@ export function RecordPaymentDialog({ invoiceId, outstanding, trigger }: { invoi
   );
 }
 
-export function ComposeDialog({ pickers, to, clientId, trigger }: { pickers?: Pickers; to?: string; clientId?: string; trigger?: ReactNode }) {
-  return (
-    <ActionDialog trigger={trigger ?? plus("Compose")} title="New message" action={sendMessage} submitLabel="Send" success="Message sent" wide>
-      <TextField label="To" name="to" defaultValue={to} required placeholder="client@example.com" />
-      <TextField label="Subject" name="subject" required />
-      <AreaField label="Message" name="body" rows={9} />
-      {clientId ? <input type="hidden" name="clientId" value={clientId} /> : pickers ? <SelectField label="File to client" name="clientId" options={opts(pickers.clients)} /> : null}
-    </ActionDialog>
-  );
+export function ComposeDialog({ to, clientId, matterId, subject, trigger }: { pickers?: Pickers; to?: string; clientId?: string; matterId?: string; subject?: string; trigger?: ReactNode }) {
+  return <Composer to={to} clientId={clientId} matterId={matterId} subject={subject} trigger={trigger ?? plus("Compose")} />;
 }

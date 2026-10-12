@@ -6,6 +6,7 @@ import { Stagger, StaggerItem } from "@/components/app/motion";
 import { PageHeader } from "@/components/app/page-header";
 import { TableSkeleton } from "@/components/app/skeletons";
 import { Button } from "@/components/ui/button";
+import { fileUrl } from "@/components/mail/file-icon";
 import { listDocuments } from "@/lib/data";
 import { daysUntil, dmy } from "@/lib/format";
 
@@ -49,18 +50,29 @@ async function Docs() {
                 }
               />
               <Row k="Type" v={d.category ?? "Document"} />
+              <Row k="Source" v={d.source === "portal" ? "Client portal" : d.source === "email" ? "Email" : "Upload"} />
               <Row k="Uploaded" v={dmy(d.createdAt)} />
               <Row k="Expiry" v={d.expiresAt ? `Valid till ${dmy(d.expiresAt)}` : "N/A"} />
               <Row k="Status" v={<span className={status[1]}>{status[0]}</span>} />
             </div>
             <div className="mt-3.5 grid grid-cols-2 gap-2">
-              <Button size="sm" variant="secondary" disabled title="File storage arrives next">
-                <Eye /> View
-              </Button>
-              <Button size="sm" variant="secondary" disabled title="File storage arrives next">
-                <Download /> Download
-              </Button>
-            </div>
+                          {d.storageKey ? (
+                            <>
+                              <Button size="sm" variant="secondary" asChild>
+                                <a href={fileUrl(d.storageKey, d.name)} target="_blank" rel="noreferrer">
+                                  <Eye /> View
+                                </a>
+                              </Button>
+                              <Button size="sm" variant="secondary" asChild>
+                                <a href={fileUrl(d.storageKey, d.name, true)}>
+                                  <Download /> Download
+                                </a>
+                              </Button>
+                            </>
+                          ) : (
+                            <p className="col-span-2 rounded-md bg-muted/50 px-2 py-1.5 text-center text-[11px] text-muted-foreground">Recorded without a file</p>
+                          )}
+                        </div>
           </StaggerItem>
         );
       })}

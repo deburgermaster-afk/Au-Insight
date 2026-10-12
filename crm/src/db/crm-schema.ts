@@ -202,6 +202,8 @@ export const documents = pgTable(
     storageKey: text("storage_key"),
     expiresAt: date("expires_at"),
     uploadedBy: text("uploaded_by"),
+    checklistItemId: text("checklist_item_id"),
+    source: text("source"), // upload | email | portal
     certified: boolean("certified").default(false).notNull(),
     translated: boolean("translated").default(false).notNull(),
     ...stamps,
@@ -332,11 +334,52 @@ export const messages = pgTable(
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
     matterId: text("matter_id").references(() => matters.id, { onDelete: "set null" }),
     providerId: text("provider_id"),
+    bccAddresses: text("bcc_addresses").array(),
+    attachments: jsonb("attachments").$type<MailAttachment[]>().default([]).notNull(),
+    /** sent → delivered | bounced | failed | complained | delayed; "received" for inbound. */
+    status: text("status"),
+    /** Inbound only: the sender's SPF / DKIM / DMARC results from Authentication-Results. */
+    auth: jsonb("auth").$type<{ spf?: string; dkim?: string; dmarc?: string; verified: boolean }>(),
+    messageId: text("message_id"),
+    inReplyTo: text("in_reply_to"),
     sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
     ...stamps,
   },
   (t) => [index("messages_mailbox_idx").on(t.agencyId, t.mailbox, t.folder, t.sentAt)],
 );
+
+export type MailAttachment = { name: string; size: number; type: string; key: string };
+
+/** A sending and receiving address: one per staff member, plus shared ones (info@…). */
+export const mailboxes = pgTable("mailboxes", {
+  id: id(),
+  agencyId: agency(),
+  address: text("address").notNull().unique(),
+  name: text("name").notNull(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+  kind: text("kind").default("personal").notNull(), // personal | shared
+  signature: text("signature"),
+  ...stamps,
+});
+
+/** A private upload link a client uses to send documents for a matter. */
+export const portalLinks = pgTable("portal_links", {
+  id: id(),
+  agencyId: agency(),
+  token: text("token").notNull().unique(),
+  matterId: text("matter_id")
+    .notNull()
+    .references(() => matters.id, { onDelete: "cascade" }),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  note: text("note"),
+  dueAt: date("due_at"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdBy: text("created_by"),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  ...stamps,
+});
 
 export const templates = pgTable("templates", {
   id: id(),

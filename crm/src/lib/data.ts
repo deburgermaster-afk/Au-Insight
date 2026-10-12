@@ -425,3 +425,39 @@ async function navCountsFor(agencyId: string, userId: string) {
   ]);
   return { "/app/inbox": inbox.n, "/app/tasks": tasks.n, "/app/matters": matters.n, "/app/clients": clients.n } as Record<string, number>;
 }
+
+/** Every message the agency holds (newest 500), for the mailbox. */
+export async function listMail() {
+  const { agencyId } = await getCtx();
+  return mailFor(agencyId);
+}
+
+async function mailFor(agencyId: string) {
+  "use cache";
+  tag(agencyId);
+  const rows = await db
+    .select({ m: s.messages, first: s.clients.firstName, last: s.clients.lastName })
+    .from(s.messages)
+    .leftJoin(s.clients, eq(s.clients.id, s.messages.clientId))
+    .where(eq(s.messages.agencyId, agencyId))
+    .orderBy(desc(s.messages.sentAt))
+    .limit(500);
+  return rows.map((r) => ({ ...r.m, clientName: r.first ? `${r.first} ${r.last}` : null }));
+}
+
+/** The agency's matters on one visa, for the visa page. */
+export async function mattersOnVisa(code: string) {
+  const { agencyId } = await getCtx();
+  return mattersOnVisaFor(agencyId, code);
+}
+
+async function mattersOnVisaFor(agencyId: string, code: string) {
+  "use cache";
+  tag(agencyId);
+  return db
+    .select({ id: s.matters.id, reference: s.matters.reference, stage: s.matters.stage, stream: s.matters.stream, first: s.clients.firstName, last: s.clients.lastName, lodgedAt: s.matters.lodgedAt, outcome: s.matters.outcome })
+    .from(s.matters)
+    .innerJoin(s.clients, eq(s.clients.id, s.matters.clientId))
+    .where(and(eq(s.matters.agencyId, agencyId), eq(s.matters.visaCode, code)))
+    .orderBy(desc(s.matters.updatedAt));
+}

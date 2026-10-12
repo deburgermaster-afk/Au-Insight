@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, Loader2, Plus } from "lucide-react";
+import { Check, ChevronDown, Loader2, Paperclip, Plus } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@/components/ui/input";
 import { addChecklistItem, moveMatter, setChecklistStatus, updateMatter } from "@/lib/actions";
 import { cn } from "@/lib/utils";
+import { fileUrl } from "@/components/mail/file-icon";
+import { UploadButton } from "@/components/mail/upload-button";
 import { stages } from "@/lib/visas";
 
 export function StageStepper({ matterId, stage }: { matterId: string; stage: string }) {
@@ -57,10 +59,11 @@ export function StageStepper({ matterId, stage }: { matterId: string; stage: str
 }
 
 type Item = { id: string; category: string; label: string; required: boolean; status: string; note: string | null };
+type Doc = { id: string; name: string; storageKey: string | null; checklistItemId: string | null; source: string | null };
 const statuses = ["needed", "requested", "received", "approved", "rejected", "waived"];
 const doneish = (s: string) => s === "approved" || s === "received" || s === "waived";
 
-export function Checklist({ matterId, items }: { matterId: string; items: Item[] }) {
+export function Checklist({ matterId, items, docs, agencyId, clientId }: { matterId: string; items: Item[]; docs: Doc[]; agencyId: string; clientId: string }) {
   const [list, update] = useOptimistic(items, (state, { id, status }: { id: string; status: string }) => state.map((i) => (i.id === id ? { ...i, status } : i)));
   const [, start] = useTransition();
   const [adding, startAdd] = useTransition();
@@ -121,10 +124,21 @@ export function Checklist({ matterId, items }: { matterId: string; items: Item[]
                           </motion.span>
                         ) : null}
                       </button>
-                      <span className={cn("min-w-0 flex-1 text-sm", doneish(i.status) && "text-muted-foreground")}>
-                        {i.label}
-                        {!i.required ? <span className="ml-1.5 text-xs text-muted-foreground">(if applicable)</span> : null}
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className={cn("text-sm", doneish(i.status) && "text-muted-foreground")}>
+                          {i.label}
+                          {!i.required ? <span className="ml-1.5 text-xs text-muted-foreground">(if applicable)</span> : null}
+                        </p>
+                        {docs
+                          .filter((d) => d.checklistItemId === i.id && d.storageKey)
+                          .map((d) => (
+                            <a key={d.id} href={fileUrl(d.storageKey!, d.name)} target="_blank" rel="noreferrer" className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-md bg-muted/60 px-1.5 py-0.5 text-[11px] hover:underline">
+                              <Paperclip className="size-3" /> <span className="truncate">{d.name}</span>
+                              {d.source === "portal" ? <span className="text-[var(--chart-1)]">· from client</span> : null}
+                            </a>
+                          ))}
+                      </div>
+                      <UploadButton agencyId={agencyId} clientId={clientId} matterId={matterId} checklistItemId={i.id} category={i.category} size="icon-xs" variant="ghost" label="Upload for this item" />
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button type="button" className="shrink-0">
