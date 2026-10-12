@@ -1,6 +1,6 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
+import { uploadPortalFile } from "@/components/mail/uploader";
 import { Check, CloudUpload, FileText, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
@@ -29,13 +29,8 @@ export function PortalUploads({ token, agencyId, linkId, items: initial }: { tok
     setBusy(itemId ?? "other");
     try {
       for (const f of Array.from(files)) {
-        const blob = await upload(`agency/${agencyId}/portal/${linkId}/${f.name.replace(/[^\w.\- ()]+/g, "_")}`, f, {
-          access: "private",
-          handleUploadUrl: "/api/upload",
-          clientPayload: JSON.stringify({ token }),
-          contentType: f.type || undefined,
-        });
-        const r = await portalAttach(token, itemId, { name: f.name, size: f.size, type: f.type || "application/octet-stream", key: blob.pathname });
+        const file = await uploadPortalFile(token, agencyId, linkId, f);
+        const r = await portalAttach(token, itemId, file);
         if (!r.ok) throw new Error(r.error);
         setItems((list) => list.map((i) => (i.id === itemId ? { ...i, status: "received", files: [...i.files, f.name] } : i)));
       }
