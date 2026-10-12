@@ -13,7 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getEducation, getPickers } from "@/lib/data";
 import { aud, daysUntil, dmy, initials } from "@/lib/format";
-import { AppMenu, appStages, appTone, CommissionMenu, commissionTone, CourseFinder, NewApplication, NewInstitution, stageLabel } from "./students-client";
+import { appStages, appTone, commissionTone, stageLabel } from "@/lib/education";
+import { AppMenu, CommissionMenu, CourseFinder, NewApplication, NewInstitution } from "./students-client";
 
 export const metadata = { title: "Students" };
 

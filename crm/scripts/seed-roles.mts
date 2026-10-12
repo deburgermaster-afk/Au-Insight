@@ -105,6 +105,12 @@ for (const [i, m] of matters.entries()) {
     .where(eq(s.matters.id, m.id));
 }
 
+// Give the MARA agent and consultant a share of the caseload.
+const priya = ids["priya@lodgely.test"];
+for (const [i, m] of matters.entries()) if (i % 3 === 1) await db.update(s.matters).set({ assignedTo: priya }).where(eq(s.matters.id, m.id));
+const tasks = await db.select({ id: s.tasks.id }).from(s.tasks).where(eq(s.tasks.agencyId, agencyId));
+for (const [i, t] of tasks.entries()) if (i % 3 === 0) await db.update(s.tasks).set({ assignedTo: i % 2 ? ids["sofia@lodgely.test"] : priya }).where(eq(s.tasks.id, t.id));
+
 // Education: institutions and student applications.
 await db.delete(s.studentApplications).where(eq(s.studentApplications.agencyId, agencyId));
 await db.delete(s.institutions).where(eq(s.institutions.agencyId, agencyId));

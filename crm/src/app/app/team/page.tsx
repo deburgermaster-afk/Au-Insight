@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { BadgeCheck, CircleAlert, Mail, ShieldCheck } from "lucide-react";
 import { Suspense } from "react";
 import { label, Pill, type Tone } from "@/components/app/badges";
@@ -27,6 +28,7 @@ const roleInfo: Record<string, string> = {
 };
 
 async function Team() {
+  await connection();
   const [{ members, invitations }, ctx] = await Promise.all([listTeam(), getCtx()]);
   const canEdit = canAtLeast(ctx.role, "admin");
   const max = Math.max(1, ...members.map((m) => m.openMatters));

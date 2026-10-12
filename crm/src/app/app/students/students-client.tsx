@@ -2,7 +2,8 @@
 
 import { Building2, GraduationCap, Loader2, MoreHorizontal, Plus, Search } from "lucide-react";
 import { useState, useTransition } from "react";
-import { label, Pill, type Tone } from "@/components/app/badges";
+import { Pill } from "@/components/app/badges";
+import { appStages, stageLabel } from "@/lib/education";
 import { ActionDialog, useAction } from "@/components/forms/action-dialog";
 import { AreaField, Row, SelectField, TextField } from "@/components/forms/fields";
 import { Button } from "@/components/ui/button";
@@ -13,11 +14,6 @@ import { Switch } from "@/components/ui/switch";
 import { createApplication, createInstitution, findCourses, setApplicationStatus, setCommissionStatus } from "@/lib/edu-actions";
 import { aud } from "@/lib/format";
 import type { Course } from "@/lib/occupations";
-
-export const appStages = ["preparing", "submitted", "offer", "conditional", "accepted", "coe", "enrolled"] as const;
-export const appTone: Record<string, Tone> = { preparing: "gray", submitted: "blue", offer: "violet", conditional: "amber", accepted: "pink", coe: "blue", enrolled: "green", rejected: "red", withdrawn: "gray" };
-export const commissionTone: Record<string, Tone> = { not_due: "gray", claimable: "amber", invoiced: "blue", received: "green", ineligible: "red" };
-export const stageLabel = (s: string) => (s === "coe" ? "CoE issued" : label(s));
 
 const levels = ["Certificate III", "Certificate IV", "Diploma", "Advanced Diploma", "Associate Degree", "Bachelor Degree", "Graduate Certificate", "Graduate Diploma", "Masters Degree (Coursework)", "Masters Degree (Research)", "Non AQF Award"];
 
