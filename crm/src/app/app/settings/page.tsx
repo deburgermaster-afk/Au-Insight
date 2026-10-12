@@ -6,6 +6,7 @@ import { PageSkeleton } from "@/components/app/skeletons";
 import { getAgencyProfile } from "@/lib/data";
 import { getCtx } from "@/lib/session";
 import { AiMailCard } from "@/components/mail-ai/controls";
+import { DomainCard } from "@/components/mail/domain-card";
 import { dmy } from "@/lib/format";
 import { SettingsForm } from "./settings-form";
 
@@ -17,6 +18,14 @@ async function Form() {
   return (
     <div className="grid gap-4">
       <AiMailCard on={Boolean(profile?.aiMailEnabledAt)} by={profile?.aiMailEnabledBy ?? null} at={profile?.aiMailEnabledAt ? dmy(profile.aiMailEnabledAt) : null} available={Boolean(process.env.LLM_API_KEY)} />
+      <DomainCard
+        domain={profile?.mailDomain ?? null}
+        status={profile?.mailDomainStatus ?? null}
+        records={profile?.mailDomainRecords ?? null}
+        checkedAt={profile?.mailDomainCheckedAt ? dmy(profile.mailDomainCheckedAt) : null}
+        sharedDomain={process.env.MAIL_FROM_DOMAIN ?? null}
+        canRemove={ctx.role === "owner"}
+      />
       <SettingsForm profile={profile} slug={ctx.agencySlug} mailDomain={process.env.MAIL_FROM_DOMAIN ?? null} />
     </div>
   );

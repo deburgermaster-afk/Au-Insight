@@ -77,6 +77,12 @@ export const agencyProfile = pgTable("agency_profile", {
   /** AI mail assistant: when an admin turned it on (null = off) and who. */
   aiMailEnabledAt: timestamp("ai_mail_enabled_at", { withTimezone: true }),
   aiMailEnabledBy: text("ai_mail_enabled_by"),
+  /** The agency's own email domain in Resend (sending + receiving), once added in Settings. */
+  mailDomain: text("mail_domain"),
+  mailDomainId: text("mail_domain_id"),
+  mailDomainStatus: text("mail_domain_status"), // not_started | pending | verified | failed | partially_verified …
+  mailDomainRecords: jsonb("mail_domain_records").$type<{ record: string; name: string; type: string; value: string; priority?: number; status: string }[]>(),
+  mailDomainCheckedAt: timestamp("mail_domain_checked_at", { withTimezone: true }),
   ...stamps,
 });
 
@@ -683,3 +689,21 @@ export const mailInsights = pgTable(
   },
   (t) => [index("mail_insights_client_idx").on(t.agencyId, t.clientId, t.createdAt)],
 );
+
+/** A staff member's own Gmail or Outlook account, connected with OAuth. Tokens are encrypted at rest. */
+export const mailConnections = pgTable("mail_connections", {
+  id: id(),
+  agencyId: agency(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(), // google | microsoft
+  email: text("email").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  status: text("status").notNull().default("active"), // active | error
+  lastError: text("last_error"),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  ...stamps,
+});

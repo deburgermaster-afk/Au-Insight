@@ -71,6 +71,13 @@
       "when": 1791844220568,
       "tag": "0009_ai_mail",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791845367729,
+      "tag": "0010_mail_domain_connections",
+      "breakpoints": true
     }
   ]
 }

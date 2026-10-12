@@ -90,7 +90,7 @@ const statusTone: Record<string, string> = {
   saved: "text-muted-foreground",
 };
 
-export function Mailbox({ messages, boxes }: { messages: Msg[]; boxes: Box[] }) {
+export function Mailbox({ messages, boxes, accounts }: { messages: Msg[]; boxes: Box[]; accounts?: React.ReactNode }) {
   const [box, setBox] = useState<string>("all");
   const [folder, setFolder] = useState("inbox");
   const [filter, setFilter] = useState<string | null>(null);
@@ -171,9 +171,11 @@ export function Mailbox({ messages, boxes }: { messages: Msg[]; boxes: Box[] }) 
             ))}
           </div>
         </div>
-        <div className="mt-auto rounded-lg border bg-muted/30 p-3 text-[11px] text-muted-foreground">
-          Mail to any of your addresses lands here and is filed to the client automatically.
-        </div>
+        {accounts ?? (
+          <div className="mt-auto rounded-lg border bg-muted/30 p-3 text-[11px] text-muted-foreground">
+            Mail to any of your addresses lands here and is filed to the client automatically.
+          </div>
+        )}
       </aside>
 
       {/* List */}

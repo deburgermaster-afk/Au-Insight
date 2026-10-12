@@ -10,7 +10,7 @@ const API = "https://api.resend.com";
 export const mailDomain = () => process.env.MAIL_FROM_DOMAIN ?? null;
 export const mailEnabled = () => Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM_DOMAIN);
 
-async function resend<T>(path: string, init?: RequestInit): Promise<T> {
+export async function resend<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", ...init?.headers },
@@ -35,18 +35,31 @@ const local = (v: string) =>
 export async function ensureMailboxes(c: { agencyId: string; agencySlug: string; agencyName: string; userId: string; name: string }) {
   const domain = mailDomain();
   if (!domain) return [];
-  const existing = await db.select().from(s.mailboxes).where(eq(s.mailboxes.agencyId, c.agencyId));
+  const [existing, [profile]] = await Promise.all([
+    db.select().from(s.mailboxes).where(eq(s.mailboxes.agencyId, c.agencyId)),
+    db.select({ domain: s.agencyProfile.mailDomain, status: s.agencyProfile.mailDomainStatus }).from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, c.agencyId)),
+  ]);
   const rows: (typeof s.mailboxes.$inferInsert)[] = [];
   if (!existing.some((m) => m.kind === "shared")) rows.push({ agencyId: c.agencyId, address: `${c.agencySlug}@${domain}`, name: c.agencyName, kind: "shared" });
-  if (!existing.some((m) => m.userId === c.userId))
+  if (!existing.some((m) => m.userId === c.userId && m.address.endsWith(`.${c.agencySlug}@${domain}`)))
     rows.push({ agencyId: c.agencyId, address: `${local(c.name.split(" ")[0] ?? "staff")}.${c.agencySlug}@${domain}`, name: c.name, userId: c.userId, kind: "personal" });
+  // Once the agency's own domain is verified: info@ for the team and first-name addresses for staff.
+  const own = profile?.status === "verified" ? profile.domain : null;
+  if (own) {
+    if (!existing.some((m) => m.address === `info@${own}`)) rows.push({ agencyId: c.agencyId, address: `info@${own}`, name: c.agencyName, kind: "shared" });
+    if (!existing.some((m) => m.userId === c.userId && m.address.endsWith(`@${own}`))) {
+      const first = local(c.name.split(" ")[0] ?? "staff");
+      const taken = existing.some((m) => m.address === `${first}@${own}`);
+      rows.push({ agencyId: c.agencyId, address: `${taken ? local(c.name).replace(/-/g, ".") : first}@${own}`, name: c.name, userId: c.userId, kind: "personal" });
+    }
+  }
   if (rows.length) await db.insert(s.mailboxes).values(rows).onConflictDoNothing();
-  if (rows.some((r) => r.kind === "shared")) {
+  if (rows.some((r) => r.address === `${c.agencySlug}@${domain}`)) {
     // Mail stored before mailboxes existed (demo data, early sends) belongs to the shared box.
     await db
       .update(s.messages)
       .set({ mailbox: `${c.agencySlug}@${domain}` })
-      .where(and(eq(s.messages.agencyId, c.agencyId), sql`${s.messages.mailbox} not like ${`%@${domain}`}`));
+      .where(and(eq(s.messages.agencyId, c.agencyId), sql`${s.messages.mailbox} not in (select ${s.mailboxes.address} from ${s.mailboxes} where ${s.mailboxes.agencyId} = ${c.agencyId})`));
   }
   return db.select().from(s.mailboxes).where(eq(s.mailboxes.agencyId, c.agencyId));
 }
@@ -103,11 +116,18 @@ export async function sendMail(opts: {
   let providerId: string | null = null;
   let messageId: string | null = null;
   let status = "saved";
-  if (mailEnabled()) {
+  const { connectionFor, sendViaConnection } = await import("@/lib/mail-connect");
+  const connected = await connectionFor(opts.agencyId, opts.from.address);
+  if (connected) {
+    // A connected Gmail/Outlook address sends from the person's own account.
+    messageId = `<${crypto.randomUUID()}@${opts.from.address.split("@")[1]}>`;
+    providerId = await sendViaConnection(connected, { fromName: opts.from.name, to: opts.to, cc: opts.cc, bcc: opts.bcc, subject: opts.subject, html: emailShell(html, opts.footer), text, attachments: opts.attachments ?? [], messageId, inReplyTo: opts.inReplyTo });
+    status = "sent";
+  } else if (mailEnabled()) {
     const attachments = await Promise.all(
       (opts.attachments ?? []).map(async (a) => ({ filename: a.name, content: (await fileBytes(a.key)).toString("base64"), content_type: a.type })),
     );
-    messageId = `<${crypto.randomUUID()}@${mailDomain()}>`;
+    messageId = `<${crypto.randomUUID()}@${opts.from.address.split("@")[1] ?? mailDomain()}>`;
     const sent = await resend<{ id: string }>("/emails", {
       method: "POST",
       body: JSON.stringify({
