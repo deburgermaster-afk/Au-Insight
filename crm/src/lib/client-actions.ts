@@ -5,7 +5,7 @@ import { updateTag } from "next/cache";
 import { z } from "zod";
 import { db, schema as s } from "@/db";
 import type { ActionResult } from "@/lib/actions";
-import { clientSession, createMagicLink, endClientSession } from "@/lib/client-auth";
+import { clientSession, createMagicLink, createSignInCode, endClientSession, redeemSignInCode, setClientCookie } from "@/lib/client-auth";
 import { agencyTag } from "@/lib/data";
 import { mailEnabled, sendMail } from "@/lib/mail";
 import { requireRole } from "@/lib/session";
@@ -32,15 +32,39 @@ async function mailLink(client: { id: string; agencyId: string; firstName: strin
   return true;
 }
 
-/** Client sign-in: emails a link to every agency portal this address has. Never says whether it exists. */
-export async function requestClientLink(email: string): Promise<ActionResult> {
+/** Client sign-in, step 1: emails a 6-digit code (and a one-tap link). Never says whether the email exists. */
+export async function requestClientCode(email: string): Promise<ActionResult> {
   const e = email.trim().toLowerCase();
   if (!z.string().email().safeParse(e).success) return { ok: false, error: "Enter a valid email." };
-  const rows = await db.select().from(s.clients).where(and(sql`lower(${s.clients.email}) = ${e}`, eq(s.clients.portalEnabled, true)));
-  for (const c of rows.slice(0, 5)) {
-    const url = await createMagicLink(c.id, c.agencyId);
-    await mailLink(c, url, "Here's your secure link to see your case, upload documents and pay invoices.");
-  }
+  const rows = (await db.select().from(s.clients).where(and(sql`lower(${s.clients.email}) = ${e}`, eq(s.clients.portalEnabled, true)))).slice(0, 5);
+  if (!rows.length) return { ok: true };
+  const code = await createSignInCode(rows);
+  if (!code) return { ok: true }; // rate limited: the last code still works
+  const c = rows[0];
+  const url = await createMagicLink(c.id, c.agencyId);
+  const box = await sharedBox(c.agencyId);
+  const [org] = await db.select({ name: s.organization.name }).from(s.organization).where(eq(s.organization.id, c.agencyId));
+  if (!box || !mailEnabled() || e.endsWith(".test")) return { ok: true };
+  await sendMail({
+    agencyId: c.agencyId,
+    from: { address: box.address, name: org?.name ?? box.name },
+    to: [c.email!],
+    subject: `${code} is your ${org?.name ?? "client"} portal code`,
+    html: `<p>Hi ${c.firstName},</p><p>Your sign-in code is:</p>
+<p style="margin:20px 0;font-size:32px;font-weight:700;letter-spacing:10px;font-family:ui-monospace,Menlo,monospace">${code}</p>
+<p>It expires in 10 minutes. Or sign in with one tap:</p>
+<p style="margin:20px 0"><a href="${url}" style="background:#18181b;color:#ffffff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;display:inline-block">Open my portal</a></p>
+<p style="color:#71717a;font-size:13px">Never share this code. ${org?.name ?? "We"} will never ask you for it. If you didn't try to sign in, ignore this email.</p>`,
+    footer: `Sent by ${org?.name ?? "your agent"} via Lodgely`,
+  });
+  return { ok: true };
+}
+
+/** Client sign-in, step 2: checks the code and starts the session. */
+export async function verifyClientCode(email: string, code: string): Promise<ActionResult> {
+  const r = await redeemSignInCode(email, code.trim());
+  if ("error" in r) return { ok: false, error: r.error ?? "Couldn't sign you in." };
+  await setClientCookie(r.session);
   return { ok: true };
 }
 

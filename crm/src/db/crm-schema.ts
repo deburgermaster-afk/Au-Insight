@@ -369,7 +369,9 @@ export const clientSessions = pgTable("client_sessions", {
     .notNull()
     .references(() => clients.id, { onDelete: "cascade" }),
   tokenHash: text("token_hash").notNull().unique(),
-  kind: text("kind").notNull(), // magic | session
+  kind: text("kind").notNull(), // magic | code | session
+  /** Wrong guesses against a sign-in code; the code dies after 5. */
+  attempts: integer("attempts").default(0).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),
   createdBy: text("created_by"),

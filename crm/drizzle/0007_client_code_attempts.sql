@@ -1,0 +1,1 @@
+ALTER TABLE "client_sessions" ADD COLUMN "attempts" integer DEFAULT 0 NOT NULL;

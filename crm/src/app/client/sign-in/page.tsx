@@ -16,7 +16,7 @@ export default function Page() {
         <Suspense>
           <ClientSignIn />
         </Suspense>
-        <p className="mt-6 text-center text-[11px] text-muted-foreground">No password needed. We email you a secure sign-in link.</p>
+        <p className="mt-6 text-center text-[11px] text-muted-foreground">No password needed. We email you a 6-digit code (and a one-tap link).</p>
       </div>
     </div>
   );
