@@ -232,6 +232,21 @@ export const features: { group: string; items: Feature[] }[] = [
     ],
   },
   {
+    group: "Payments & trust",
+    items: [
+      ...live(
+        "Clients pay invoices in the portal by card through Stripe, Square, PayPal or Airwallex (whichever the agency connects)",
+        "Card payments are confirmed with the provider before they're recorded; unfinished checkouts are re-checked daily",
+        "Zeller Pay by Link per invoice; the client uploads the receipt",
+        "Bank transfer with the trust account details and reference; the client uploads a screenshot for accounts to approve",
+        "Payments to check: approve (records the receipt) or reject with a reason the client is emailed",
+        "Payments recorded to the trust or office account, as the agency chooses",
+        "Trust balances by client, move earned fees to office (never below zero), printable trust statements",
+        "Monthly trust reconciliation: bank statement vs cashbook vs client ledgers, with history",
+      ),
+    ],
+  },
+  {
     group: "Onboarding",
     items: [
       ...live(

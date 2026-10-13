@@ -11,6 +11,8 @@ import { DomainCard } from "@/components/mail/domain-card";
 import { AgencyForm } from "@/components/settings/agency-form";
 import { AppearancePicker } from "@/components/settings/appearance";
 import { PracticeRules } from "@/components/settings/practice-rules";
+import { PaymentSettings } from "@/components/settings/payments";
+import { PROVIDERS } from "@/lib/payments/providers";
 import { AgreementTerms } from "@/components/settings/agreement-terms";
 import { DEFAULT_TERMS } from "@/lib/agreement";
 import { ConnectToasts } from "@/components/settings/connect-toasts";
@@ -62,6 +64,20 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
   if (slug === "agency") body = tab === "agreement" ? <AgreementTerms value={p?.agreementTerms ?? DEFAULT_TERMS} template={DEFAULT_TERMS} custom={Boolean(p?.agreementTerms)} canEdit={admin} /> : tab === "practice" ? <PracticeRules requireSignoff={p?.requireSignoff ?? true} isOwner={ctx.role === "owner"} /> : <AgencyForm profile={p} tab={tab} canEdit={admin} />;
 
   if (slug === "appearance") body = <AppearancePicker />;
+
+  if (slug === "payments") {
+    const conns = await db.select({ provider: s.paymentProviders.provider, enabled: s.paymentProviders.enabled, status: s.paymentProviders.status, mode: s.paymentProviders.mode, account: s.paymentProviders.account, lastError: s.paymentProviders.lastError }).from(s.paymentProviders).where(eq(s.paymentProviders.agencyId, ctx.agencyId));
+    body = (
+      <PaymentSettings
+        defs={Object.entries(PROVIDERS).map(([key, d]) => ({ key, ...d }))}
+        conns={conns}
+        bankOn={p?.bankTransferEnabled ?? true}
+        account={p?.paymentsAccount ?? "trust"}
+        bankReady={Boolean(p?.bankBsb && p?.bankAccount)}
+        canEdit={admin}
+      />
+    );
+  }
 
   if (slug === "plans") body = tab === "compare" ? <CompareTable /> : <PlanCards />;
 

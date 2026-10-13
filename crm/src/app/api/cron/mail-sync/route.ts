@@ -1,5 +1,5 @@
 import { revalidateTag } from "next/cache";
-import { eq, isNotNull, ne, and } from "drizzle-orm";
+import { eq, gte, isNotNull, ne, and } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { agencyTag } from "@/lib/data";
 import { syncStale } from "@/lib/mail-connect";
@@ -33,6 +33,16 @@ export async function GET(req: Request) {
       console.error("cron domain", p.agencyId, e);
     }
   }
+  // Card checkouts the client didn't come back from: ask the provider once more.
+  const { confirmAttempt } = await import("@/lib/payments");
+  const open = await db.select().from(s.paymentAttempts).where(and(eq(s.paymentAttempts.status, "pending"), gte(s.paymentAttempts.createdAt, new Date(Date.now() - 3 * 864e5))));
+  let payments = 0;
+  for (const a of open) {
+    if ((await confirmAttempt(a).catch(() => "pending")) === "paid") {
+      payments++;
+      touched.add(a.agencyId);
+    }
+  }
   for (const a of touched) revalidateTag(agencyTag(a), { expire: 0 });
-  return Response.json({ ...r, alerts, domains });
+  return Response.json({ ...r, alerts, domains, payments });
 }

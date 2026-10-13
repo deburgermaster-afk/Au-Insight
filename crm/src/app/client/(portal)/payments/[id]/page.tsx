@@ -1,7 +1,12 @@
-import { ArrowLeft, Landmark } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { Suspense } from "react";
+import { PayOptions } from "@/components/portal/pay-options";
+import { db, schema as s } from "@/db";
+import { PROVIDERS, type ProviderKey } from "@/lib/payments/providers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CopyValue, PrintButton } from "@/components/portal/copy";
+import { PrintButton } from "@/components/portal/copy";
 import { MessageSheet } from "@/components/portal/message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,8 +22,15 @@ export default async function Invoice({ params }: PageProps<"/client/payments/[i
   const d = await portalInvoice(c, id);
   if (!d) notFound();
   const { i } = d;
-  const left = Number(i.total) - Number(i.paid);
+  const left = Math.round((Number(i.total) - Number(i.paid)) * 100) / 100;
   const p = c.profile;
+  const [providers, attempts] = await Promise.all([
+    db.select({ provider: s.paymentProviders.provider, mode: s.paymentProviders.mode, enabled: s.paymentProviders.enabled, status: s.paymentProviders.status }).from(s.paymentProviders).where(eq(s.paymentProviders.agencyId, c.client.agencyId)),
+    db.select({ id: s.paymentAttempts.id, provider: s.paymentAttempts.provider, status: s.paymentAttempts.status, amount: s.paymentAttempts.amount, createdAt: s.paymentAttempts.createdAt, reviewNote: s.paymentAttempts.reviewNote }).from(s.paymentAttempts).where(and(eq(s.paymentAttempts.invoiceId, i.id), eq(s.paymentAttempts.clientId, c.client.id), inArray(s.paymentAttempts.status, ["review", "rejected"]))).orderBy(desc(s.paymentAttempts.createdAt)),
+  ]);
+  const live = providers.filter((x) => x.enabled && x.status === "active");
+  const cards = live.filter((x) => x.provider !== "zeller").map((x) => ({ key: x.provider, name: PROVIDERS[x.provider as ProviderKey]?.name ?? x.provider, test: x.mode === "test" }));
+  const zellerOn = live.some((x) => x.provider === "zeller");
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between print:hidden">
@@ -89,24 +101,21 @@ export default async function Invoice({ params }: PageProps<"/client/payments/[i
         </dl>
       </section>
 
-      {left > 0 ? (
-        <section className="overflow-hidden rounded-xl border bg-card">
-          <p className="flex items-center gap-2 border-b px-3 py-2 text-xs font-medium">
-            <Landmark className="size-3.5" /> Pay by bank transfer
-          </p>
-          {p?.bankBsb && p.bankAccount ? (
-            <div className="divide-y">
-              <CopyValue label="Account name" value={p.bankAccountName ?? p.legalName ?? c.agency.name} />
-              <CopyValue label="BSB" value={p.bankBsb} />
-              <CopyValue label="Account" value={p.bankAccount} />
-              <CopyValue label="Reference" value={i.number} />
-              <CopyValue label="Amount" value={left.toFixed(2)} />
-            </div>
-          ) : (
-            <p className="p-3 text-xs text-muted-foreground">Your agent will send payment details. Use {i.number} as the reference.</p>
-          )}
-          <p className="border-t px-3 py-2 text-[11px] text-muted-foreground">Payments in advance are held in our client trust account until the work is done, as the Code of Conduct requires.</p>
-        </section>
+      {left > 0 || attempts.some((a) => a.status === "review") ? (
+        <Suspense>
+          <PayOptions
+            invoiceId={i.id}
+            number={i.number}
+            left={Math.max(0, left)}
+            agencyId={c.client.agencyId}
+            clientId={c.client.id}
+            cards={left > 0 ? cards : []}
+            zeller={left > 0 && zellerOn ? i.zellerLink : null}
+            bank={p?.bankBsb && p.bankAccount ? { name: p.bankAccountName ?? p.legalName ?? c.agency.name, bsb: p.bankBsb, account: p.bankAccount } : null}
+            bankOn={left > 0 && (p?.bankTransferEnabled ?? true)}
+            attempts={attempts}
+          />
+        </Suspense>
       ) : null}
 
       {d.receipts.length ? (
@@ -131,7 +140,7 @@ export default async function Invoice({ params }: PageProps<"/client/payments/[i
           subject={`Payment for ${i.number}`}
           trigger={
             <Button variant="outline" className="h-10 rounded-full print:hidden">
-              I've paid / ask a question
+              Ask a question
             </Button>
           }
         />

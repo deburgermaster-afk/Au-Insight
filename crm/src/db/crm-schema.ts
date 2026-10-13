@@ -91,6 +91,10 @@ export const agencyProfile = pgTable("agency_profile", {
   requireSignoff: boolean("require_signoff").default(true).notNull(),
   /** The agency's own wording for service agreements (null = Lodgely's template). */
   agreementTerms: text("agreement_terms"),
+  /** Clients can pay by bank transfer and upload proof. */
+  bankTransferEnabled: boolean("bank_transfer_enabled").default(true).notNull(),
+  /** Where online and transfer payments are recorded: trust (money for future work) or office. */
+  paymentsAccount: text("payments_account").default("trust").notNull(),
   ...stamps,
 });
 
@@ -330,6 +334,8 @@ export const invoices = pgTable(
     total: numeric("total").default("0").notNull(),
     paid: numeric("paid").default("0").notNull(),
     notes: text("notes"),
+    /** A Zeller Pay by Link the agency created for this invoice. */
+    zellerLink: text("zeller_link"),
     ...stamps,
   },
   (t) => [index("invoices_agency_idx").on(t.agencyId, t.status)],
@@ -847,3 +853,68 @@ export const serviceAgreements = pgTable(
   },
   (t) => [index("agreements_matter_idx").on(t.agencyId, t.matterId), index("agreements_client_idx").on(t.clientId, t.status)],
 );
+
+/** An agency's card payment account (Stripe, Square, PayPal, Airwallex) or Zeller. Secrets encrypted. */
+export const paymentProviders = pgTable(
+  "payment_providers",
+  {
+    id: id(),
+    agencyId: agency(),
+    provider: text("provider").notNull(), // stripe | square | paypal | airwallex | zeller
+    enabled: boolean("enabled").default(true).notNull(),
+    status: text("status").notNull().default("active"), // active | error
+    mode: text("mode").notNull().default("live"), // live | test
+    account: text("account"),
+    secrets: text("secrets"), // encrypted JSON
+    settings: jsonb("settings").$type<Record<string, string>>(),
+    connectedBy: text("connected_by"),
+    lastError: text("last_error"),
+    ...stamps,
+  },
+  (t) => [uniqueIndex("payment_providers_agency_provider").on(t.agencyId, t.provider)],
+);
+
+/** A client's attempt to pay an invoice in the portal (card checkout, or a transfer/Zeller with proof). */
+export const paymentAttempts = pgTable(
+  "payment_attempts",
+  {
+    id: id(),
+    agencyId: agency(),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(), // stripe | square | paypal | airwallex | zeller | bank
+    amount: numeric("amount").notNull(),
+    status: text("status").notNull().default("pending"), // pending | paid | review | rejected | cancelled | failed
+    externalId: text("external_id"),
+    checkoutUrl: text("checkout_url"),
+    proofKey: text("proof_key"),
+    proofName: text("proof_name"),
+    clientNote: text("client_note"),
+    reviewedBy: text("reviewed_by"),
+    reviewedByName: text("reviewed_by_name"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+    ledgerId: text("ledger_id"),
+    ...stamps,
+  },
+  (t) => [index("payment_attempts_invoice_idx").on(t.agencyId, t.invoiceId), index("payment_attempts_status_idx").on(t.agencyId, t.status)],
+);
+
+/** A monthly trust account reconciliation: bank statement vs trust cashbook vs client ledgers. */
+export const trustReconciliations = pgTable("trust_reconciliations", {
+  id: id(),
+  agencyId: agency(),
+  periodEnd: date("period_end").notNull(),
+  bankBalance: numeric("bank_balance").notNull(),
+  cashbookBalance: numeric("cashbook_balance").notNull(),
+  clientTotal: numeric("client_total").notNull(),
+  difference: numeric("difference").notNull(),
+  notes: text("notes"),
+  reconciledBy: text("reconciled_by"),
+  reconciledByName: text("reconciled_by_name"),
+  ...stamps,
+});
