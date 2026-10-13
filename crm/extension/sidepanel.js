@@ -66,13 +66,16 @@ function fieldsFor(c, person) {
   return c.sections.filter((s) => !s.title.startsWith("Family member") && s.title !== "Registered migration agent").flatMap((s) => s.fields);
 }
 
+const signoffPill = (s) =>
+  ({ approved: `<span class="pill ok">Signed off</span>`, optional: "", pending: `<span class="pill warn">Awaiting sign-off</span>`, stale: `<span class="pill bad">Changed since sign-off</span>`, changes: `<span class="pill bad">Changes requested</span>`, needed: `<span class="pill warn">Needs sign-off</span>` })[s] ?? "";
+
 function caseView() {
   const c = state.current;
   const v = el(`<div class="stack">
     <button class="ghost" id="back" style="justify-self:start">← All cases</button>
     <div class="card stack">
       <div><span class="ref">${esc(c.matter.reference)}</span><h1>${esc(c.client.name)}</h1><small>${esc(c.matter.visaName)}</small></div>
-      ${c.blocking ? `<p><span class="pill bad">${c.blocking} to fix before lodging</span> <a href="${state.auth.base}${c.packUrl}?tab=checks" target="_blank"><small>see list</small></a></p>` : `<p><span class="pill ok">Ready to lodge</span></p>`}
+      <p>${c.blocking ? `<span class="pill bad">${c.blocking} to fix</span> ` : ""}${signoffPill(c.signoff)} <a href="${state.auth.base}${c.packUrl}?tab=${c.blocking ? "checks" : "signoff"}" target="_blank"><small>details</small></a></p>
       <select id="person">${people(c).map((p) => `<option value="${esc(p.key)}" ${p.key === state.person ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select>
       <button class="primary" id="fill">Fill this page</button>
       <label class="toggle"><input type="checkbox" id="overwrite" ${state.overwrite ? "checked" : ""}/> Replace fields that already have a value</label>

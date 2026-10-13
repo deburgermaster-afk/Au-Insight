@@ -27,6 +27,7 @@ input[type=search], select { width: 100%; font: inherit; color: var(--fg); backg
 .copy:hover { background: var(--line); }
 .pill { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 11px; }
 .pill.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+.pill.warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
 .pill.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
 .result { font-size: 12px; }
 .result.ok { color: var(--ok); }

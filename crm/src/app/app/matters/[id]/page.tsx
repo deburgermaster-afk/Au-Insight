@@ -20,6 +20,7 @@ import { WithPickers } from "@/components/app/with-pickers";
 import { NewTaskDialog } from "@/components/forms/dialogs";
 import { getAgencyProfile, getMatter } from "@/lib/data";
 import { MatterAiToggle } from "@/components/mail-ai/controls";
+import { ReviewDeadlineCard } from "@/components/lodge/review-deadline";
 import { aud, daysUntil, dmy, fullName, relativeDays } from "@/lib/format";
 import { visaByCode } from "@/lib/visas";
 import { Checklist, ComplianceChecks, MatterDetailsForm, StageStepper } from "./matter-client";
@@ -83,6 +84,11 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
                 RFI due {daysUntil(m.rfiDueAt) < 0 ? `${-daysUntil(m.rfiDueAt)}d overdue` : daysUntil(m.rfiDueAt) === 0 ? "today" : `in ${daysUntil(m.rfiDueAt)}d`}
               </Pill>
             ) : null}
+            {m.reviewDueAt && !m.reviewLodgedAt ? (
+              <Pill t={daysUntil(m.reviewDueAt) <= 7 ? "red" : "amber"}>
+                ART review due {daysUntil(m.reviewDueAt) < 0 ? `${-daysUntil(m.reviewDueAt)}d ago` : daysUntil(m.reviewDueAt) === 0 ? "today" : `in ${daysUntil(m.reviewDueAt)}d`}
+              </Pill>
+            ) : null}
             {!m.consumerGuideAt || !m.agreementSignedAt ? <Pill t="amber">Compliance incomplete</Pill> : null}
           </div>
         </div>
@@ -117,6 +123,11 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
           <Section title="Lodgement">
             <MatterDetailsForm matterId={m.id} m={m} />
           </Section>
+          {m.outcome === "refused" || m.outcome === "cancelled" || m.reviewDueAt || ["decision", "lodged", "rfi"].includes(m.stage) ? (
+            <Section title="Tribunal review (ART)">
+              <ReviewDeadlineCard matterId={m.id} dueAt={m.reviewDueAt} basis={m.reviewBasis} lodgedAt={m.reviewLodgedAt} outcome={m.outcome} decisionAt={m.decisionAt} onshore={client.onshore} canEdit={ctx.caps.includes("immigration")} />
+            </Section>
+          ) : null}
           <Section title="Fees">
             <dl className="grid gap-2 text-sm">
               <div className="flex justify-between">

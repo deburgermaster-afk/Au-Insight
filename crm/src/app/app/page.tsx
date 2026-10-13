@@ -89,7 +89,7 @@ async function Overview() {
         </StaggerItem>
       </Stagger>
 
-      {d.rfis.length || d.complianceGaps ? (
+      {d.rfis.length || d.complianceGaps || d.reviews.length || d.signoffs.length ? (
         <FadeIn delay={0.03}>
           <div className="grid gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.04] p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
             <span className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-300">
@@ -106,6 +106,23 @@ async function Overview() {
                   </Link>
                 );
               })}
+              {d.reviews.map((m) => {
+                const left = m.due ? daysUntil(m.due) : 0;
+                return (
+                  <Link key={`r${m.id}`} href={`/app/matters/${m.id}`} className="flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs hover:border-foreground/20">
+                    <span className={`size-1.5 rounded-full ${left <= 7 ? "bg-rose-500" : "bg-amber-500"}`} />
+                    ART review · {m.first} {m.last}
+                    <span className="text-muted-foreground">{left < 0 ? `${-left}d overdue` : left === 0 ? "last day today" : `${left}d left`}</span>
+                  </Link>
+                );
+              })}
+              {d.signoffs.map((m) => (
+                <Link key={`s${m.id}`} href={`/app/matters/${m.id}/lodge?tab=signoff`} className="flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs hover:border-foreground/20">
+                  <span className="size-1.5 rounded-full bg-sky-500" />
+                  Sign off · {m.first} {m.last}
+                  <span className="text-muted-foreground">asked by {m.by}</span>
+                </Link>
+              ))}
               {d.complianceGaps ? (
                 <Link href="/app/matters" className="flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs hover:border-foreground/20">
                   <span className="size-1.5 rounded-full bg-amber-500" />

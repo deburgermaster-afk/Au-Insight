@@ -81,6 +81,16 @@ export async function applyInsight(id: string): Promise<ActionResult> {
           .set({ stage: "decision", outcome, decisionAt: /^\d{4}-\d{2}-\d{2}$/.test(facts.decisionDate ?? "") ? facts.decisionDate : today })
           .where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, i.matterId)));
         await db.insert(s.activities).values({ agencyId: ctx.agencyId, clientId: i.clientId, matterId: i.matterId, kind: "stage", title: `Decision recorded: ${outcome ?? "decision"}${facts.grantNumber ? ` (grant ${facts.grantNumber})` : ""}`, actorId: ctx.userId, actorName: ctx.name });
+        // A refusal emailed to someone in Australia: diarise the ART deadline from the email's date.
+        if (outcome === "refused") {
+          const [c] = i.clientId ? await db.select({ onshore: s.clients.onshore }).from(s.clients).where(eq(s.clients.id, i.clientId)) : [];
+          const [msg] = await db.select({ at: s.messages.sentAt, created: s.messages.createdAt }).from(s.messages).where(eq(s.messages.id, i.messageId));
+          if (c?.onshore && msg) {
+            const { saveReviewDeadline } = await import("@/lib/review");
+            const date = new Date(msg.at ?? msg.created).toLocaleDateString("en-CA", { timeZone: "Australia/Sydney" });
+            await saveReviewDeadline(ctx, i.matterId, { decision: "onshore", method: "email", date }, null, true);
+          }
+        }
       } else {
         await db.update(s.matters).set({ stage: "rfi", rfiDueAt: i.actionDue }).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, i.matterId)));
         await db.insert(s.activities).values({ agencyId: ctx.agencyId, clientId: i.clientId, matterId: i.matterId, kind: "stage", title: `Further information requested${i.actionDue ? `, due ${i.actionDue}` : ""}`, actorId: ctx.userId, actorName: ctx.name });

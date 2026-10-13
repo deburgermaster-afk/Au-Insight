@@ -70,7 +70,7 @@ async function dashboardFor(agencyId: string, userId: string) {
       .orderBy(asc(s.tasks.dueAt))
       .limit(6),
   ]);
-  const [rfis, gaps] = await Promise.all([
+  const [rfis, gaps, reviews, signoffs] = await Promise.all([
     db
       .select({ id: s.matters.id, title: s.matters.title, reference: s.matters.reference, due: s.matters.rfiDueAt, first: s.clients.firstName, last: s.clients.lastName })
       .from(s.matters)
@@ -82,11 +82,27 @@ async function dashboardFor(agencyId: string, userId: string) {
       .select({ n: count() })
       .from(s.matters)
       .where(and(eq(s.matters.agencyId, agencyId), sql`${s.matters.stage} not in ('enquiry','closed')`, or(isNull(s.matters.consumerGuideAt), isNull(s.matters.agreementSignedAt)))),
+    db
+      .select({ id: s.matters.id, reference: s.matters.reference, due: s.matters.reviewDueAt, first: s.clients.firstName, last: s.clients.lastName })
+      .from(s.matters)
+      .innerJoin(s.clients, eq(s.clients.id, s.matters.clientId))
+      .where(and(eq(s.matters.agencyId, agencyId), isNotNull(s.matters.reviewDueAt), isNull(s.matters.reviewLodgedAt), sql`${s.matters.reviewDueAt} >= current_date - 7`))
+      .orderBy(asc(s.matters.reviewDueAt))
+      .limit(6),
+    db
+      .select({ id: s.lodgementSignoffs.matterId, by: s.lodgementSignoffs.requestedByName, first: s.clients.firstName, last: s.clients.lastName })
+      .from(s.lodgementSignoffs)
+      .innerJoin(s.matters, eq(s.matters.id, s.lodgementSignoffs.matterId))
+      .innerJoin(s.clients, eq(s.clients.id, s.matters.clientId))
+      .where(and(eq(s.lodgementSignoffs.agencyId, agencyId), eq(s.lodgementSignoffs.reviewerId, userId), eq(s.lodgementSignoffs.status, "pending")))
+      .limit(6),
   ]);
   const billed = invoices.reduce((a, r) => a + num(r.total), 0);
   const collected = invoices.reduce((a, r) => a + num(r.paid), 0);
   return {
     rfis,
+    reviews,
+    signoffs,
     complianceGaps: gaps[0]?.n ?? 0,
     clients: clientCount[0]?.n ?? 0,
     activeMatters: activeMatters[0]?.n ?? 0,

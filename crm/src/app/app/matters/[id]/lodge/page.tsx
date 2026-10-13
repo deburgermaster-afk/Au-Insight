@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, CheckCircle2, Download, ExternalLink, FileText, Printer, Puzzle, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, ExternalLink, FileText, Printer, Puzzle, ShieldCheck, XCircle } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
@@ -8,6 +8,8 @@ import { HeaderActions } from "@/components/app/header-actions";
 import { PageSkeleton } from "@/components/app/skeletons";
 import { CopyValue } from "@/components/lodge/copy-value";
 import { ImmiHelperSetup } from "@/components/lodge/immi-helper";
+import { SignoffPanel } from "@/components/lodge/signoff-panel";
+import { registeredAgents, signoffState } from "@/lib/signoff";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,7 @@ const tabs = [
   { key: "sheet", label: "Data sheet" },
   { key: "documents", label: "Documents" },
   { key: "checks", label: "Before lodging" },
+  { key: "signoff", label: "Sign-off" },
   { key: "extension", label: "Fill ImmiAccount" },
 ];
 
@@ -58,6 +61,7 @@ async function Lodge({ params, searchParams }: PageProps<"/app/matters/[id]/lodg
           .orderBy(desc(s.extensionTokens.createdAt))
       : [];
   const blocking = pack.gaps.filter((g) => g.level === "block");
+  const so = await signoffState(ctx.agencyId, id, pack);
   const fieldsPct = Math.round((pack.score.fields.filled / Math.max(1, pack.score.fields.total)) * 100);
 
   return (
@@ -88,6 +92,12 @@ async function Lodge({ params, searchParams }: PageProps<"/app/matters/[id]/lodg
           <div className="flex flex-wrap items-center gap-5">
             <Ring value={pack.score.checklist} label="Checklist" />
             <Ring value={fieldsPct} label={`${pack.score.fields.filled}/${pack.score.fields.total} fields`} />
+            {so.required || so.latest ? (
+              <Link href={`/app/matters/${id}/lodge?tab=signoff`} className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium", so.current ? "bg-emerald-500/12 text-emerald-500" : so.latest?.status === "pending" ? "bg-sky-500/12 text-sky-500" : "bg-amber-500/12 text-amber-500")}>
+                {so.current ? <CheckCircle2 className="size-4" /> : <ShieldCheck className="size-4" />}
+                {so.current ? "Signed off" : so.stale ? "Changed since sign-off" : so.latest?.status === "pending" ? `With ${so.latest.reviewerName}` : so.latest?.status === "changes" ? "Changes requested" : "Needs sign-off"}
+              </Link>
+            ) : null}
             <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium", blocking.length ? "bg-rose-500/12 text-rose-500" : "bg-emerald-500/12 text-emerald-500")}>
               {blocking.length ? <XCircle className="size-4" /> : <CheckCircle2 className="size-4" />}
               {blocking.length ? `${blocking.length} to fix` : "Ready to lodge"}
@@ -186,6 +196,20 @@ async function Lodge({ params, searchParams }: PageProps<"/app/matters/[id]/lodg
           )}
           <p className="mt-2 text-[12px] text-muted-foreground">Red items stop a clean lodgement; amber ones are worth a look. Lodgely never lodges for you: the registered agent reviews and submits in ImmiAccount.</p>
         </div>
+      ) : null}
+
+      {tab === "signoff" ? (
+        <SignoffPanel
+          matterId={id}
+          me={ctx.userId}
+          required={so.required}
+          current={so.current}
+          stale={so.stale}
+          blocking={blocking.length}
+          history={await db.select().from(s.lodgementSignoffs).where(and(eq(s.lodgementSignoffs.agencyId, ctx.agencyId), eq(s.lodgementSignoffs.matterId, id))).orderBy(desc(s.lodgementSignoffs.createdAt))}
+          agents={await registeredAgents(ctx.agencyId)}
+          defaultReviewer={(await db.select({ sup: s.matters.supervisorId }).from(s.matters).where(eq(s.matters.id, id)))[0]?.sup ?? null}
+        />
       ) : null}
 
       {tab === "extension" ? (

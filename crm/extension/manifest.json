@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Lodgely for ImmiAccount",
   "short_name": "Lodgely",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Fill ImmiAccount forms from your Lodgely case file. You review every field and submit yourself.",
   "minimum_chrome_version": "116",
   "permissions": ["sidePanel", "storage", "scripting", "tabs"],

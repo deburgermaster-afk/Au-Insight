@@ -1,6 +1,7 @@
 import { db, schema as s } from "@/db";
 import { extensionCtx, extHeaders, extJson } from "@/lib/ext-auth";
 import { buildPack } from "@/lib/lodgement";
+import { signoffState } from "@/lib/signoff";
 
 export const OPTIONS = () => new Response(null, { headers: extHeaders });
 
@@ -18,6 +19,7 @@ export async function GET(req: Request, { params }: RouteContext<"/api/ext/matte
     sections: pack.sheet.map((sec) => ({ title: sec.title, fields: sec.fields.filter((f) => f.value).map(({ key, label, value, match, kind }) => ({ key, label, value, match, kind })) })),
     docs: pack.docs.map(({ order, file, evidence }) => ({ order, file, evidence })),
     blocking: pack.gaps.filter((g) => g.level === "block").length,
+    signoff: await signoffState(ctx.agencyId, pack.matter.id, pack).then((so) => (!so.required && !so.latest ? "optional" : so.current ? "approved" : so.stale ? "stale" : (so.latest?.status ?? "needed"))),
     packUrl: `/app/matters/${pack.matter.id}/lodge`,
   });
 }

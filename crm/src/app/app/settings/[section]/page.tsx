@@ -10,6 +10,7 @@ import { AiMailCard } from "@/components/mail-ai/controls";
 import { DomainCard } from "@/components/mail/domain-card";
 import { AgencyForm } from "@/components/settings/agency-form";
 import { AppearancePicker } from "@/components/settings/appearance";
+import { PracticeRules } from "@/components/settings/practice-rules";
 import { ConnectToasts } from "@/components/settings/connect-toasts";
 import { Connectors } from "@/components/settings/connectors";
 import { Mark } from "@/components/settings/marks";
@@ -56,7 +57,7 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
   let body: ReactNode = null;
   let actions: ReactNode = null;
 
-  if (slug === "agency") body = <AgencyForm profile={p} tab={tab} canEdit={admin} />;
+  if (slug === "agency") body = tab === "practice" ? <PracticeRules requireSignoff={p?.requireSignoff ?? true} isOwner={ctx.role === "owner"} /> : <AgencyForm profile={p} tab={tab} canEdit={admin} />;
 
   if (slug === "appearance") body = <AppearancePicker />;
 

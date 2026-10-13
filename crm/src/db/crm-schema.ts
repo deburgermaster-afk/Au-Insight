@@ -87,6 +87,8 @@ export const agencyProfile = pgTable("agency_profile", {
   mailDomainCheckedAt: timestamp("mail_domain_checked_at", { withTimezone: true }),
   mailDomainVia: text("mail_domain_via"), // lodgely (shared account) | resend (the agency's connected account)
   mailUsageAlerts: jsonb("mail_usage_alerts").$type<string[]>(), // limit emails already sent, e.g. "day:2026-10-12:80"
+  /** A second registered agent must sign off a lodgement before the matter can move to Lodged. */
+  requireSignoff: boolean("require_signoff").default(true).notNull(),
   ...stamps,
 });
 
@@ -182,6 +184,10 @@ export const matters = pgTable(
     dueAt: date("due_at"),
     /** Deadline to respond to a Home Affairs request (s56 / RFI) or for a review application. */
     rfiDueAt: date("rfi_due_at"),
+    /** Last day to apply to the Administrative Review Tribunal after a refusal or cancellation. */
+    reviewDueAt: date("review_due_at"),
+    reviewBasis: jsonb("review_basis").$type<ReviewBasis>(),
+    reviewLodgedAt: date("review_lodged_at"),
     /** OMARA Code s38: Consumer Guide given before any assistance. */
     consumerGuideAt: date("consumer_guide_at"),
     /** OMARA Code s42/s51: signed service agreement before fees are taken. */
@@ -770,4 +776,31 @@ export const extensionTokens = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [uniqueIndex("extension_tokens_hash").on(t.tokenHash), index("extension_tokens_user").on(t.agencyId, t.userId)],
+);
+
+export type ReviewBasis = { decision: string; notifiedOn: string; method: string; documentDate: string | null; deemedOn: string; days: number; unit: "days" | "working"; explanation: string[]; override?: boolean };
+
+/** Supervisor sign-off before lodging: who asked, who reviewed, what they saw (fingerprint), and the outcome. */
+export const lodgementSignoffs = pgTable(
+  "lodgement_signoffs",
+  {
+    id: id(),
+    agencyId: agency(),
+    matterId: text("matter_id")
+      .notNull()
+      .references(() => matters.id, { onDelete: "cascade" }),
+    requestedBy: text("requested_by").notNull(),
+    requestedByName: text("requested_by_name").notNull(),
+    reviewerId: text("reviewer_id").notNull(),
+    reviewerName: text("reviewer_name").notNull(),
+    status: text("status").notNull().default("pending"), // pending | approved | changes | withdrawn
+    requestNote: text("request_note"),
+    decisionNote: text("decision_note"),
+    /** Hash of the data sheet and document list when requested / approved, to spot later changes. */
+    fingerprint: text("fingerprint"),
+    blockingAtRequest: integer("blocking_at_request"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    ...stamps,
+  },
+  (t) => [index("signoffs_matter_idx").on(t.agencyId, t.matterId), index("signoffs_reviewer_idx").on(t.agencyId, t.reviewerId, t.status)],
 );

@@ -8,6 +8,7 @@ import { db, schema as s } from "@/db";
 import { agencyTag } from "@/lib/data";
 import { actionCtx, type Ctx, requireCap, requireRole } from "@/lib/session";
 import { visaByCode } from "@/lib/visas";
+import { lodgeBlocked } from "@/lib/signoff";
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -168,6 +169,13 @@ export async function moveMatter(matterId: string, stage: string): Promise<Actio
     const ctx = await requireRole("staff");
     if (["ready", "lodged", "rfi", "decision"].includes(stage) && !ctx.caps.includes("immigration"))
       return { ok: false, error: "Only a registered migration agent with a current MARN can move a matter to lodgement stages." };
+    if (stage === "lodged") {
+      const [cur] = await db.select({ stage: s.matters.stage }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)));
+      if (cur && !["lodged", "rfi", "decision", "closed"].includes(cur.stage)) {
+        const blocked = await lodgeBlocked(ctx.agencyId, matterId);
+        if (blocked) return { ok: false, error: blocked };
+      }
+    }
     const [m] = await db
       .update(s.matters)
       .set({
@@ -188,6 +196,11 @@ export async function moveMatter(matterId: string, stage: string): Promise<Actio
 export async function updateMatter(matterId: string, form: FormData): Promise<ActionResult> {
   try {
     const ctx = await requireCap("immigration", "Only a registered migration agent can record lodgement details.");
+    const [cur] = await db.select({ lodgedAt: s.matters.lodgedAt }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)));
+    if (cur && !cur.lodgedAt && blank(form.get("lodgedAt"))) {
+      const blocked = await lodgeBlocked(ctx.agencyId, matterId);
+      if (blocked) return { ok: false, error: blocked };
+    }
     await db
       .update(s.matters)
       .set({
