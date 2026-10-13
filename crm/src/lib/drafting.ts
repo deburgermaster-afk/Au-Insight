@@ -77,12 +77,12 @@ export async function generateDraft(agencyId: string, matterId: string, kind: Dr
     application: { reference: m.reference, trn: m.trn, visa: visa ? `${visa.name} (subclass ${visa.code})` : m.visaCode, stream: m.stream, requirements: visa?.requirements ?? [], occupation: m.occupation, anzsco: m.anzsco, pointsClaimed: m.pointsClaimed, rfiDue: m.rfiDueAt, notes: m.notes },
     sponsor: employer ? { name: employer.name, abn: employer.abn, industry: employer.industry } : null,
     studies: studies.length ? studies : null,
-    checklist: checklist.map((i) => ({ item: i.label, category: i.category, status: i.status })),
-    documentsOnFile: docs.map((d) => {
+    "document checklist": checklist.map((i) => ({ item: i.label, category: i.category, status: i.status })),
+    "documents on file": docs.map((d) => {
       const ck = checkOf.get(d.id)?.result;
-      return { name: d.name, category: d.category, ...(ck ? { reads: ck.summary, aiConcerns: ck.issues.map((x) => x.text) } : {}) };
+      return { name: d.name, category: d.category, ...(ck ? { "what it is": ck.summary, concerns: ck.issues.map((x) => x.text) } : {}) };
     }),
-    departmentCorrespondence: insights.map((i) => ({ category: i.category, title: i.title, summary: i.summary, facts: i.facts, due: i.actionDue })),
+    "correspondence from the Department": insights.map((i) => ({ category: i.category, title: i.title, summary: i.summary, facts: i.facts, due: i.actionDue })),
   };
   const system = `You draft documents for an Australian registered migration agent. Write in formal Australian English.
 Use ONLY facts in the case file below. Never invent names, dates, numbers, employers, courses or evidence: write [[what to add]] instead.
