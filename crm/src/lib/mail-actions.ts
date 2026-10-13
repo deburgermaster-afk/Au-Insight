@@ -11,6 +11,7 @@ import { agencyTag } from "@/lib/data";
 import { emailShell, ensureMailboxes, mailEnabled, sendMail } from "@/lib/mail";
 import { actionCtx, canAtLeast, requireRole } from "@/lib/session";
 import { visaByCode } from "@/lib/visas";
+import { queueDocChecks } from "@/lib/doc-check";
 
 const fail = (e: unknown): ActionResult => ({ ok: false, error: e instanceof Error ? e.message : String(e) });
 const emails = z.array(z.string().trim().email("One of the addresses isn't valid"));
@@ -98,7 +99,7 @@ export async function registerDocuments(
     const list = z.array(attachment).parse(files);
     if (list.some((f) => !f.key.startsWith(`agency/${ctx.agencyId}/`))) return { ok: false, error: "File not found." };
     if (!list.length) return { ok: true };
-    await db.insert(s.documents).values(
+    const added = await db.insert(s.documents).values(
       list.map((f) => ({
         agencyId: ctx.agencyId,
         clientId: link.clientId ?? null,
@@ -113,7 +114,8 @@ export async function registerDocuments(
         uploadedBy: ctx.name,
         source: link.source ?? "upload",
       })),
-    );
+    ).returning({ id: s.documents.id });
+    if (link.clientId || link.matterId) await queueDocChecks(ctx.agencyId, added.map((x) => x.id));
     if (link.checklistItemId) {
       await db.update(s.checklistItems).set({ status: "received" }).where(and(eq(s.checklistItems.agencyId, ctx.agencyId), eq(s.checklistItems.id, link.checklistItemId)));
     }

@@ -1,5 +1,8 @@
 import { connection } from "next/server";
-import { ArrowLeft, Building2, ExternalLink, ListChecks, Mail, PackageCheck, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, ExternalLink, FileText, ListChecks, Mail, PackageCheck, UserRound } from "lucide-react";
+import { NewDraft } from "@/components/ai/drafts";
+import { DRAFT_KINDS, kindsFor } from "@/lib/drafting";
+import { llmEnabled } from "@/lib/llm";
 import { HeaderActions } from "@/components/app/header-actions";
 import { SendChecklist } from "@/components/mail/send-checklist";
 import { UploadButton } from "@/components/mail/upload-button";
@@ -40,6 +43,15 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
   const aiOn = Boolean((await getAgencyProfile())?.aiMailEnabledAt);
   const [ag] = await db.select().from(sch.serviceAgreements).where(and(eq(sch.serviceAgreements.agencyId, ctx.agencyId), eq(sch.serviceAgreements.matterId, m.id), ne(sch.serviceAgreements.status, "void"))).orderBy(desc(sch.serviceAgreements.createdAt)).limit(1);
   const [agDoc] = ag?.documentId ? await db.select({ key: sch.documents.storageKey, name: sch.documents.name }).from(sch.documents).where(eq(sch.documents.id, ag.documentId)) : [];
+  const [checks, draftRows, [aiP]] = await Promise.all([
+    db.select({ documentId: sch.documentChecks.documentId, status: sch.documentChecks.status, verdict: sch.documentChecks.verdict, result: sch.documentChecks.result, error: sch.documentChecks.error }).from(sch.documentChecks).where(and(eq(sch.documentChecks.agencyId, ctx.agencyId), eq(sch.documentChecks.matterId, m.id))),
+    db.select({ id: sch.drafts.id, title: sch.drafts.title, kind: sch.drafts.kind, updatedAt: sch.drafts.updatedAt }).from(sch.drafts).where(and(eq(sch.drafts.agencyId, ctx.agencyId), eq(sch.drafts.matterId, m.id))).orderBy(desc(sch.drafts.updatedAt)),
+    db.select({ on: sch.agencyProfile.aiDocsEnabledAt }).from(sch.agencyProfile).where(eq(sch.agencyProfile.agencyId, ctx.agencyId)),
+  ]);
+  const aiDocs = Boolean(aiP?.on) && llmEnabled();
+  const checkOf = new Map(checks.map((c) => [c.documentId, c]));
+  const docsWithChecks = data.documents.map((d) => ({ ...d, check: checkOf.get(d.id) ?? null }));
+  const kinds = kindsFor(m.visaCode, m.stage, Boolean(m.rfiDueAt)).map((k) => ({ key: k, ...DRAFT_KINDS[k] }));
   const esign = ag ? { id: ag.id, status: ag.status, createdAt: ag.createdAt, viewedAt: ag.viewedAt, signedAt: ag.signedAt, signerName: ag.signerName, pdf: agDoc?.key ? fileUrl(agDoc.key, agDoc.name) : null } : null;
   return (
     <>
@@ -113,7 +125,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
               ) : null
             }
           >
-            <Checklist matterId={m.id} items={checklist} docs={data.documents} agencyId={ctx.agencyId} clientId={client.id} />
+            <Checklist matterId={m.id} items={checklist} docs={docsWithChecks} agencyId={ctx.agencyId} clientId={client.id} aiDocs={aiDocs} />
           </Section>
           <Section title="Timeline">
             <div className="grid gap-5">
@@ -149,6 +161,25 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
                 <dd className="tabular-nums">{aud(Number(m.feeProfessional ?? 0) + Number(m.feeGovernment ?? 0))}</dd>
               </div>
             </dl>
+          </Section>
+          <Section title="Drafts" action={<NewDraft matterId={m.id} kinds={kinds} enabled={aiDocs} />}>
+            {draftRows.length ? (
+              <ul className="grid gap-2">
+                {draftRows.map((d) => (
+                  <li key={d.id}>
+                    <Link href={`/app/matters/${m.id}/drafts/${d.id}`} className="flex items-start gap-2 rounded-lg px-1 py-0.5 text-sm hover:bg-muted/40">
+                      <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{d.title}</span>
+                        <span className="block text-xs text-muted-foreground" suppressHydrationWarning>{relativeDays(d.updatedAt)}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">{aiDocs ? "Cover letters, submissions and responses, drafted from this file." : "Turn on AI drafting in Settings → AI assistant."}</p>
+            )}
           </Section>
           <Section title="Tasks" action={<WithPickers render={(p) => <NewTaskDialog pickers={p} clientId={client.id} matterId={m.id} />} />}>
             {tasks.length ? (

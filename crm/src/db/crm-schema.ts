@@ -95,6 +95,9 @@ export const agencyProfile = pgTable("agency_profile", {
   bankTransferEnabled: boolean("bank_transfer_enabled").default(true).notNull(),
   /** Where online and transfer payments are recorded: trust (money for future work) or office. */
   paymentsAccount: text("payments_account").default("trust").notNull(),
+  /** AI document checks and drafting switched on (consent recorded). */
+  aiDocsEnabledAt: timestamp("ai_docs_enabled_at", { withTimezone: true }),
+  aiDocsEnabledBy: text("ai_docs_enabled_by"),
   ...stamps,
 });
 
@@ -918,3 +921,63 @@ export const trustReconciliations = pgTable("trust_reconciliations", {
   reconciledByName: text("reconciled_by_name"),
   ...stamps,
 });
+
+export type DocCheck = {
+  documentType: string;
+  matchesItem: "yes" | "no" | "unsure";
+  readable: boolean;
+  nameOnDocument: string | null;
+  nameMatches: "yes" | "no" | "unsure" | "n/a";
+  dateOfBirth: string | null;
+  documentNumber: string | null;
+  issueDate: string | null;
+  expiryDate: string | null;
+  language: string;
+  needsTranslation: boolean;
+  certifiedCopy: "yes" | "no" | "unsure";
+  summary: string;
+  issues: { level: "block" | "warn" | "info"; text: string }[];
+  verdict: "looks_good" | "needs_attention" | "wrong_document";
+};
+
+/** AI read of an uploaded document, compared with its checklist item and the client's record. */
+export const documentChecks = pgTable(
+  "document_checks",
+  {
+    id: id(),
+    agencyId: agency(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    matterId: text("matter_id"),
+    status: text("status").notNull().default("done"), // done | failed | unsupported
+    verdict: text("verdict"),
+    result: jsonb("result").$type<DocCheck>(),
+    error: text("error"),
+    model: text("model"),
+    checkedBy: text("checked_by"),
+    ...stamps,
+  },
+  (t) => [uniqueIndex("document_checks_doc").on(t.documentId), index("document_checks_matter").on(t.agencyId, t.matterId)],
+);
+
+/** AI-drafted documents for a matter (cover letters, statements, responses), edited by staff. */
+export const drafts = pgTable(
+  "drafts",
+  {
+    id: id(),
+    agencyId: agency(),
+    matterId: text("matter_id")
+      .notNull()
+      .references(() => matters.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    checks: jsonb("checks").$type<string[]>(),
+    model: text("model"),
+    createdBy: text("created_by"),
+    createdByName: text("created_by_name"),
+    ...stamps,
+  },
+  (t) => [index("drafts_matter_idx").on(t.agencyId, t.matterId)],
+);

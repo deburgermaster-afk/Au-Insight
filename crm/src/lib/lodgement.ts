@@ -195,6 +195,13 @@ export async function buildPack(agencyId: string, matterId: string) {
   if (!m.consumerGuideAt) gaps.push({ level: "warn", text: "Consumer Guide not marked as given" });
   if (packDocs.length > IMMI_MAX_FILES) gaps.push({ level: "warn", text: `${packDocs.length} documents: ImmiAccount takes up to ${IMMI_MAX_FILES} per applicant` });
   for (const d of packDocs) for (const issue of d.issues) gaps.push({ level: issue === "Expired" ? "warn" : "block", text: `${d.file}: ${issue}` });
+  // AI document checks (advice): wrong documents block, other findings are worth a look.
+  const aiChecks = await db.select().from(s.documentChecks).where(and(eq(s.documentChecks.agencyId, agencyId), eq(s.documentChecks.matterId, matterId)));
+  for (const ck of aiChecks) {
+    const d = packDocs.find((x) => x.id === ck.documentId);
+    if (!d || !ck.result) continue;
+    for (const i of ck.result.issues.filter((x) => x.level !== "info").slice(0, 3)) gaps.push({ level: ck.verdict === "wrong_document" || i.level === "block" ? "block" : "warn", text: `AI check, ${d.file}: ${i.text}` });
+  }
 
   const filled = sheet.flatMap((x) => x.fields).filter((x) => x.value).length;
   const total = sheet.flatMap((x) => x.fields).length;

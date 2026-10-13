@@ -1,5 +1,7 @@
 "use server";
 
+import { queueDocChecks } from "@/lib/doc-check";
+
 import { and, eq, gt } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { z } from "zod";
@@ -20,7 +22,7 @@ export async function portalAttach(token: string, itemId: string | null, input: 
     if (!item) return { ok: false as const, error: "That document isn't on your checklist." };
   }
   const [client] = await db.select({ first: s.clients.firstName, last: s.clients.lastName }).from(s.clients).where(eq(s.clients.id, link.clientId));
-  await db.insert(s.documents).values({
+  const [added] = await db.insert(s.documents).values({
     agencyId: link.agencyId,
     clientId: link.clientId,
     matterId: link.matterId,
@@ -32,7 +34,8 @@ export async function portalAttach(token: string, itemId: string | null, input: 
     storageKey: f.key,
     uploadedBy: client ? `${client.first} ${client.last}` : "Client",
     source: "portal",
-  });
+  }).returning({ id: s.documents.id });
+  await queueDocChecks(link.agencyId, [added.id]);
   if (item && (item.status === "needed" || item.status === "requested" || item.status === "rejected")) {
     await db.update(s.checklistItems).set({ status: "received" }).where(eq(s.checklistItems.id, item.id));
   }

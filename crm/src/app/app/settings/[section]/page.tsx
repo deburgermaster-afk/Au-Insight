@@ -11,6 +11,7 @@ import { DomainCard } from "@/components/mail/domain-card";
 import { AgencyForm } from "@/components/settings/agency-form";
 import { AppearancePicker, ThemeValue } from "@/components/settings/appearance";
 import { Configure } from "@/components/settings/configure";
+import { AiDocsConsent } from "@/components/ai/docs-toggle";
 import { Pill, Summary } from "@/components/settings/summary";
 import { PracticeRules } from "@/components/settings/practice-rules";
 import { PaymentSettings } from "@/components/settings/payments";
@@ -206,7 +207,27 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
 
   if (slug === "ai") {
     body =
-      tab === "pathways" ? (
+      tab === "documents" ? (
+        <Summary
+          className="max-w-4xl"
+          title="Document checks & drafting"
+          status={<Pill tone={p?.aiDocsEnabledAt ? "ok" : "muted"}>{p?.aiDocsEnabledAt ? "On" : "Off"}</Pill>}
+          description="AI reads each upload and compares it with its checklist item and the client's record, and drafts cover letters, submissions and responses from the case file."
+          rows={[
+            { label: "Status", value: p?.aiDocsEnabledAt ? `On since ${dmy(p.aiDocsEnabledAt)}${p.aiDocsEnabledBy ? `, by ${p.aiDocsEnabledBy}` : ""}` : "Off" },
+            { label: "New uploads", value: p?.aiDocsEnabledAt ? "Checked automatically (client portal and staff uploads)" : "Not checked" },
+            { label: "Checks for", value: "Wrong document, readability, name, date of birth, passport number, expiry, translation" },
+            { label: "Drafts", value: "Cover letter, criteria submission, Genuine Student outline, s56 response, employer reference" },
+          ]}
+          action={
+            admin && llmEnabled() ? (
+              <Configure title="AI document checks & drafting" label={p?.aiDocsEnabledAt ? "Change" : "Turn on"} variant={p?.aiDocsEnabledAt ? "outline" : "default"}>
+                <AiDocsConsent on={Boolean(p?.aiDocsEnabledAt)} />
+              </Configure>
+            ) : null
+          }
+        />
+      ) : tab === "pathways" ? (
         <Summary
           className="max-w-4xl"
           title="Suggested pathways"

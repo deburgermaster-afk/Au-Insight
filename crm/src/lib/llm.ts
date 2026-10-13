@@ -9,6 +9,12 @@ const MODELS = (process.env.LLM_MODEL ?? "qwen/qwen3.7-max:free,qwen/qwen3.8-max
   .map((m) => m.trim())
   .filter((m) => m && !m.startsWith("@"));
 
+/** Models that read images (document checks), tried in order. */
+const VISION_MODELS = (process.env.LLM_VISION_MODEL ?? "qwen/qwen3.8-max:free,qwen/qwen3-vl-plus:free,mistralai/mistral-medium-3.5")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
+
 export const llmEnabled = () => Boolean(process.env.LLM_API_KEY);
 
 /** Pulls the first JSON object out of a model reply (tolerates code fences and preamble). */
@@ -28,20 +34,20 @@ function extractJson(text: string) {
  * Asks for a JSON answer matching [schema]. Returns the parsed value and the model that produced
  * it, or null when no model gave a valid answer.
  */
-export async function completeJson<T extends z.ZodType>(schema: T, system: string, user: string, opts: { timeoutMs?: number } = {}): Promise<{ value: z.infer<T>; model: string } | null> {
+export async function completeJson<T extends z.ZodType>(schema: T, system: string, user: string, opts: { timeoutMs?: number; images?: string[]; maxTokens?: number } = {}): Promise<{ value: z.infer<T>; model: string } | null> {
   const key = process.env.LLM_API_KEY;
   if (!key) return null;
   const shape = JSON.stringify(z.toJSONSchema(schema));
   const messages = [
     { role: "system", content: `${system}\n\nReply with one JSON object only, no prose and no code fences, matching this JSON Schema:\n${shape}` },
-    { role: "user", content: user },
+    { role: "user", content: opts.images?.length ? [{ type: "text", text: user }, ...opts.images.map((url) => ({ type: "image_url", image_url: { url } }))] : user },
   ];
-  for (const model of MODELS) {
+  for (const model of opts.images?.length ? VISION_MODELS : MODELS) {
     try {
       const res = await fetch(`${BASE}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: 6000, response_format: { type: "json_object" } }),
+        body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: opts.maxTokens ?? 6000, response_format: { type: "json_object" } }),
         signal: AbortSignal.timeout(opts.timeoutMs ?? 90_000),
       });
       if (!res.ok) {

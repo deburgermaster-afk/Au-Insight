@@ -8,6 +8,7 @@ import type { ActionResult } from "@/lib/actions";
 import { clientSession, createMagicLink, createSignInCode, endClientSession, redeemSignInCode, setClientCookie } from "@/lib/client-auth";
 import { agencyTag } from "@/lib/data";
 import { mailEnabled, sendMail } from "@/lib/mail";
+import { queueDocChecks } from "@/lib/doc-check";
 import { requireRole } from "@/lib/session";
 
 const sharedBox = async (agencyId: string) => {
@@ -121,7 +122,8 @@ export async function clientAttach(matterId: string | null, itemId: string | nul
     }
   }
   const who = `${c.client.firstName} ${c.client.lastName}`;
-  await db.insert(s.documents).values({ agencyId, clientId, matterId, checklistItemId: item?.id ?? null, name: f.name, category: item?.category ?? "Client upload", mimeType: f.type, sizeBytes: f.size, storageKey: f.key, uploadedBy: who, source: "portal" });
+  const [added] = await db.insert(s.documents).values({ agencyId, clientId, matterId, checklistItemId: item?.id ?? null, name: f.name, category: item?.category ?? "Client upload", mimeType: f.type, sizeBytes: f.size, storageKey: f.key, uploadedBy: who, source: "portal" }).returning({ id: s.documents.id });
+  await queueDocChecks(agencyId, [added.id]);
   if (item && ["needed", "requested", "rejected"].includes(item.status)) await db.update(s.checklistItems).set({ status: "received" }).where(eq(s.checklistItems.id, item.id));
   await db.insert(s.activities).values({ agencyId, clientId, matterId, kind: "document", title: `Uploaded ${item ? item.label : f.name}`, body: f.name, actorName: who });
   updateTag(agencyTag(agencyId));

@@ -232,6 +232,22 @@ export const features: { group: string; items: Feature[] }[] = [
     ],
   },
   {
+    group: "AI document checks & drafting",
+    items: [
+      ...live(
+        "Every upload read by AI (photos, PDFs, scanned PDFs) and compared with its checklist item",
+        "Flags wrong documents, unreadable copies, expired documents, passports expiring within 6 months",
+        "Compares name, date of birth and passport number with the client record",
+        "Spots documents that need an English translation",
+        "Verdict on the checklist (looks good / check / wrong document) with details and re-check",
+        "Findings feed the lodgement pack's Before lodging list",
+        "AI drafts from the case file: cover letter, criteria submission, Genuine Student outline, s56 response, employer reference",
+        "Drafts use [[placeholders]] instead of inventing facts, with a list of things to verify; edit, copy or download for Word",
+        "Off until an admin agrees to what is shared (Settings → AI assistant)",
+      ),
+    ],
+  },
+  {
     group: "Payments & trust",
     items: [
       ...live(
