@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { saveAgencyProfile } from "@/lib/actions";
 import { cn } from "@/lib/utils";
+import { useConfigure } from "./configure";
 
 type P = {
   bankName?: string | null;
@@ -31,15 +32,19 @@ type P = {
 /** One form for the whole profile; the header tab only chooses which part is visible, so saving never blanks the other. */
 export function AgencyForm({ profile, tab, canEdit }: { profile: P; tab: string; canEdit: boolean }) {
   const [pending, start] = useTransition();
+  const popup = useConfigure();
   return (
     <form
-      className="grid max-w-3xl gap-6"
+      className="grid gap-6"
       onSubmit={(e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
         start(async () => {
           const r = await saveAgencyProfile(f);
-          if (r.ok) toast.success("Saved");
+          if (r.ok) {
+            toast.success("Saved");
+            popup?.close();
+          }
           else toast.error(r.error);
         });
       }}

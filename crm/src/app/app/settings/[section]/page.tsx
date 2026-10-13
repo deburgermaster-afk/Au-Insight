@@ -9,12 +9,14 @@ import { PageSkeleton } from "@/components/app/skeletons";
 import { AiMailCard } from "@/components/mail-ai/controls";
 import { DomainCard } from "@/components/mail/domain-card";
 import { AgencyForm } from "@/components/settings/agency-form";
-import { AppearancePicker } from "@/components/settings/appearance";
+import { AppearancePicker, ThemeValue } from "@/components/settings/appearance";
+import { Configure } from "@/components/settings/configure";
+import { Pill, Summary } from "@/components/settings/summary";
 import { PracticeRules } from "@/components/settings/practice-rules";
 import { PaymentSettings } from "@/components/settings/payments";
 import { PROVIDERS } from "@/lib/payments/providers";
 import { AgreementTerms } from "@/components/settings/agreement-terms";
-import { DEFAULT_TERMS } from "@/lib/agreement";
+import { DEFAULT_TERMS, parseTerms } from "@/lib/agreement";
 import { ConnectToasts } from "@/components/settings/connect-toasts";
 import { Connectors } from "@/components/settings/connectors";
 import { Mark } from "@/components/settings/marks";
@@ -61,41 +63,161 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
   let body: ReactNode = null;
   let actions: ReactNode = null;
 
-  if (slug === "agency") body = tab === "agreement" ? <AgreementTerms value={p?.agreementTerms ?? DEFAULT_TERMS} template={DEFAULT_TERMS} custom={Boolean(p?.agreementTerms)} canEdit={admin} /> : tab === "practice" ? <PracticeRules requireSignoff={p?.requireSignoff ?? true} isOwner={ctx.role === "owner"} /> : <AgencyForm profile={p} tab={tab} canEdit={admin} />;
+  if (slug === "agency") {
+    const v = (x: string | null | undefined) => x || "Not set";
+    const miss = (x: string | null | undefined) => !x;
+    const edit = (title: string, which: string, label = "Edit") =>
+      admin ? (
+        <Configure title={title} label={label} size="lg">
+          <AgencyForm profile={p} tab={which} canEdit />
+        </Configure>
+      ) : null;
+    if (tab === "agreement") {
+      const sections = parseTerms(p?.agreementTerms || DEFAULT_TERMS, { agency: "", client: "", visa: "" });
+      body = (
+        <Summary
+          className="max-w-4xl"
+          title="Service agreement terms"
+          status={<Pill tone={p?.agreementTerms ? "info" : "muted"}>{p?.agreementTerms ? "Your own wording" : "Lodgely template"}</Pill>}
+          description="The wording clients read and sign in the portal. Parties, the agent's MARN and the fee estimate are added from each matter."
+          action={
+            admin ? (
+              <Configure title="Agreement terms" description="Start a heading with ##. {agency}, {client} and {visa} are filled in. Changes apply to agreements sent from now on." label="Edit terms" size="xl">
+                <AgreementTerms value={p?.agreementTerms ?? DEFAULT_TERMS} template={DEFAULT_TERMS} custom={Boolean(p?.agreementTerms)} canEdit={admin} />
+              </Configure>
+            ) : null
+          }
+        >
+          <ol className="grid gap-1.5 text-[13px] sm:grid-cols-2">
+            {sections.map((sec, i) => (
+              <li key={sec.heading} className="flex gap-2">
+                <span className="w-5 shrink-0 text-right text-muted-foreground tabular-nums">{i + 1}.</span>
+                <span className="truncate">{sec.heading}</span>
+              </li>
+            ))}
+          </ol>
+        </Summary>
+      );
+    } else if (tab === "practice")
+      body = (
+        <Summary
+          className="max-w-4xl"
+          title="Sign-off before lodging"
+          status={<Pill tone={(p?.requireSignoff ?? true) ? "ok" : "muted"}>{(p?.requireSignoff ?? true) ? "Required" : "Optional"}</Pill>}
+          description={(p?.requireSignoff ?? true) ? "A second registered agent approves the lodgement pack before a matter can be marked Lodged." : "Agents can lodge without a second agent's approval. Sign-off can still be requested."}
+          action={
+            ctx.role === "owner" ? (
+              <Configure title="Practice rules" label="Change">
+                <PracticeRules requireSignoff={p?.requireSignoff ?? true} isOwner />
+              </Configure>
+            ) : null
+          }
+        />
+      );
+    else if (tab === "invoicing")
+      body = (
+        <div className="grid max-w-4xl gap-4">
+          <Summary
+            title="Invoicing"
+            rows={[
+              { label: "Invoice numbers", value: `${p?.invoicePrefix ?? "INV"}-${p?.nextInvoiceNumber ?? 1001} next` },
+              { label: "GST", value: (p?.gstRegistered ?? true) ? "Registered: 10% added to professional fees" : "Not registered" },
+            ]}
+            action={edit("Invoicing & trust account", "invoicing")}
+          />
+          <Summary
+            title="Client trust account"
+            status={p?.bankBsb && p?.bankAccount ? <Pill tone="ok">Set</Pill> : <Pill tone="warn">Missing</Pill>}
+            description="Shown on invoices and in the portal for bank transfers, with the invoice number as reference."
+            rows={[
+              { label: "Bank", value: v(p?.bankName), missing: miss(p?.bankName) },
+              { label: "Account name", value: v(p?.bankAccountName), missing: miss(p?.bankAccountName) },
+              { label: "BSB", value: v(p?.bankBsb), missing: miss(p?.bankBsb) },
+              { label: "Account number", value: p?.bankAccount ? `•••• ${p.bankAccount.replace(/\s/g, "").slice(-3)}` : "Not set", missing: miss(p?.bankAccount) },
+            ]}
+            action={edit("Invoicing & trust account", "invoicing")}
+          />
+        </div>
+      );
+    else
+      body = (
+        <Summary
+          className="max-w-4xl"
+          title="Agency details"
+          description="On invoices, agreements, the client portal and emails."
+          rows={[
+            { label: "Legal name", value: v(p?.legalName), missing: miss(p?.legalName) },
+            { label: "ABN", value: v(p?.abn), missing: miss(p?.abn) },
+            { label: "Principal's MARN", value: v(p?.marn), missing: miss(p?.marn) },
+            { label: "Phone", value: v(p?.phone), missing: miss(p?.phone) },
+            { label: "Email", value: v(p?.email), missing: miss(p?.email) },
+            { label: "Website", value: v(p?.website), missing: miss(p?.website) },
+            { label: "Address", value: v([p?.address, p?.state].filter(Boolean).join(", ")), missing: miss(p?.address) },
+          ]}
+          action={edit("Agency details", "details")}
+        />
+      );
+  }
 
-  if (slug === "appearance") body = <AppearancePicker />;
+  if (slug === "appearance")
+    body = (
+      <Summary
+        className="max-w-4xl"
+        title="Theme"
+        description="Just for you, on this device."
+        rows={[{ label: "Appearance", value: <ThemeValue /> }]}
+        action={
+          <Configure title="Appearance" label="Change" size="lg">
+            <AppearancePicker />
+          </Configure>
+        }
+      />
+    );
 
   if (slug === "payments") {
     const conns = await db.select({ provider: s.paymentProviders.provider, enabled: s.paymentProviders.enabled, status: s.paymentProviders.status, mode: s.paymentProviders.mode, account: s.paymentProviders.account, lastError: s.paymentProviders.lastError }).from(s.paymentProviders).where(eq(s.paymentProviders.agencyId, ctx.agencyId));
+    const bankOn = p?.bankTransferEnabled ?? true;
+    const bankReady = Boolean(p?.bankBsb && p?.bankAccount);
+    const offered = conns.filter((c) => c.enabled && c.status === "active").length + (bankOn ? 1 : 0);
     body = (
-      <PaymentSettings
-        defs={Object.entries(PROVIDERS).map(([key, d]) => ({ key, ...d }))}
-        conns={conns}
-        bankOn={p?.bankTransferEnabled ?? true}
-        account={p?.paymentsAccount ?? "trust"}
-        bankReady={Boolean(p?.bankBsb && p?.bankAccount)}
-        canEdit={admin}
+      <Summary
+        className="max-w-4xl"
+        title="How clients can pay"
+        status={<Pill tone={offered ? "ok" : "warn"}>{offered ? `${offered} method${offered === 1 ? "" : "s"} on` : "None on"}</Pill>}
+        description="Clients choose from these when they pay an invoice in the portal."
+        rows={[
+          ...Object.entries(PROVIDERS).map(([key, d]) => {
+            const c = conns.find((x) => x.provider === key);
+            return { label: d.name, value: c ? (c.status !== "active" ? "Needs attention" : c.enabled ? `On${c.mode === "test" ? " (test mode)" : ""}${c.account ? ` · ${c.account}` : ""}` : "Connected, switched off") : "Not connected" };
+          }),
+          { label: "Bank transfer", value: bankOn ? (bankReady ? "On · client uploads a screenshot" : "On, but trust account details are missing") : "Off", missing: bankOn && !bankReady },
+          { label: "Payments recorded to", value: (p?.paymentsAccount ?? "trust") === "office" ? "Office account" : "Trust account" },
+        ]}
+        action={
+          admin ? (
+            <Configure title="Payments" description="Connect card providers, switch methods on or off, and choose where payments are recorded." size="xl">
+              <PaymentSettings defs={Object.entries(PROVIDERS).map(([key, d]) => ({ key, ...d }))} conns={conns} bankOn={bankOn} account={p?.paymentsAccount ?? "trust"} bankReady={bankReady} canEdit={admin} />
+            </Configure>
+          ) : null
+        }
       />
     );
   }
 
-  if (slug === "plans") body = tab === "compare" ? <CompareTable /> : <PlanCards />;
-
   if (slug === "ai") {
     body =
       tab === "pathways" ? (
-        <div className="grid max-w-3xl gap-4">
-          <Panel title="Suggested pathways">
-            <div className="grid gap-3 text-sm text-muted-foreground">
-              <p>On each student’s file, Lodgely suggests routes to permanent residence: first from what worked for similar students at your agency, otherwise the fastest pathway from their current visa and course, including secondary courses.</p>
-              <p className="flex items-center gap-2">
-                <Sparkles className="size-4 text-fuchsia-500" />
-                {llmEnabled() ? "AI suggestions are on for everyone with access to clients." : "The AI service isn't configured, so suggestions use Lodgely's built-in rules."}
-              </p>
-              <p>Suggestions are decision support for a registered migration agent. Always check current visa settings before advising.</p>
-            </div>
-          </Panel>
-        </div>
+        <Summary
+          className="max-w-4xl"
+          title="Suggested pathways"
+          status={<Pill tone={llmEnabled() ? "ok" : "muted"}>{llmEnabled() ? "AI on" : "Rules only"}</Pill>}
+          description="On each student's file: routes to permanent residence, from what worked for similar students at your agency, otherwise the fastest pathway from their current visa and course."
+          rows={[
+            { label: "Suggestions come from", value: llmEnabled() ? "Lodgely AI, checked against built-in rules" : "Lodgely's built-in rules" },
+            { label: "Who sees them", value: "Everyone with access to clients" },
+            { label: "Status", value: "Decision support only: a registered agent checks current visa settings before advising" },
+          ]}
+        />
       ) : (
         <div className="grid max-w-3xl gap-4">
           <AiMailCard on={Boolean(p?.aiMailEnabledAt)} by={p?.aiMailEnabledBy ?? null} at={p?.aiMailEnabledAt ? dmy(p.aiMailEnabledAt) : null} available={llmEnabled()} />
@@ -130,23 +252,43 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
     const usage = await usageFor(ctx.agencyId);
     const own = p?.mailDomainStatus === "verified" ? p.mailDomain : null;
     const via = usage.source === "resend" ? `your Resend account${usage.account ? ` (${usage.account})` : ""}` : "Lodgely's shared sending";
-    if (tab === "domain")
+    if (tab === "domain") {
+      const records = p?.mailDomainRecords ?? [];
+      const ok = records.filter((r) => r.status === "verified").length;
+      const verified = p?.mailDomainStatus === "verified";
       body = (
-        <div className="max-w-5xl">
-          <DomainCard
-            domain={p?.mailDomain ?? null}
-            status={p?.mailDomainStatus ?? null}
-            records={p?.mailDomainRecords ?? null}
-            checkedAt={p?.mailDomainCheckedAt ? dmy(p.mailDomainCheckedAt) : null}
-            sharedDomain={sharedDomain}
-            canRemove={ctx.role === "owner"}
-            canEdit={admin}
-            via={p?.mailDomainVia ?? null}
-            suggested={host(p?.website) ?? host(p?.email)}
-            resendConnected={Boolean(st.resend)}
-          />
-        </div>
+        <Summary
+          className="max-w-4xl"
+          title="Email domain"
+          status={p?.mailDomain ? <Pill tone={verified ? "ok" : "warn"}>{(p.mailDomainStatus ?? "pending").replace(/_/g, " ")}</Pill> : <Pill>Not set up</Pill>}
+          description={verified ? `The team sends and receives as name@${p?.mailDomain}.` : p?.mailDomain ? "Waiting for the DNS records. Lodgely keeps checking." : `Mail uses the shared ${sharedDomain ?? "Lodgely"} domain until you add yours.`}
+          rows={[
+            { label: "Domain", value: p?.mailDomain ?? "None", missing: !p?.mailDomain },
+            { label: "Sending account", value: p?.mailDomainVia === "resend" ? "Your Resend account" : p?.mailDomain ? "Lodgely" : "—" },
+            { label: "DNS records", value: records.length ? `${ok} of ${records.length} verified` : "—", missing: records.length > 0 && ok < records.length },
+            { label: "Last checked", value: p?.mailDomainCheckedAt ? dmy(p.mailDomainCheckedAt) : "—" },
+          ]}
+          action={
+            admin ? (
+              <Configure title="Email domain" label={p?.mailDomain ? "Manage domain" : "Set up domain"} size="xl">
+                <DomainCard
+                  domain={p?.mailDomain ?? null}
+                  status={p?.mailDomainStatus ?? null}
+                  records={p?.mailDomainRecords ?? null}
+                  checkedAt={p?.mailDomainCheckedAt ? dmy(p.mailDomainCheckedAt) : null}
+                  sharedDomain={sharedDomain}
+                  canRemove={ctx.role === "owner"}
+                  canEdit={admin}
+                  via={p?.mailDomainVia ?? null}
+                  suggested={host(p?.website) ?? host(p?.email)}
+                  resendConnected={Boolean(st.resend)}
+                />
+              </Configure>
+            ) : null
+          }
+        />
       );
+    }
     else if (tab === "usage") {
       actions = <RefreshUsage />;
       body = (

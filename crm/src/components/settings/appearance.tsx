@@ -4,6 +4,7 @@ import { Check, Moon, Sun, SunMoon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
+import { useConfigure } from "./configure";
 
 const options = [
   { value: "light", label: "Light", icon: Sun, preview: "bg-white border-zinc-200", bar: "bg-zinc-200" },
@@ -13,6 +14,7 @@ const options = [
 
 export function AppearancePicker() {
   const { theme, setTheme } = useTheme();
+  const popup = useConfigure();
   // The theme is only known in the browser.
   const ready = useSyncExternalStore(
     () => () => {},
@@ -20,11 +22,11 @@ export function AppearancePicker() {
     () => false,
   );
   return (
-    <div className="grid max-w-3xl gap-3 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-3">
       {options.map((o) => {
         const on = ready && theme === o.value;
         return (
-          <button key={o.value} type="button" onClick={() => setTheme(o.value)} className={cn("grid gap-3 rounded-2xl border bg-card p-3 text-left transition hover:bg-muted/40", on && "ring-2 ring-foreground")} aria-pressed={on}>
+          <button key={o.value} type="button" onClick={() => (setTheme(o.value), popup?.close())} className={cn("grid gap-3 rounded-2xl border bg-card p-3 text-left transition hover:bg-muted/40", on && "ring-2 ring-foreground")} aria-pressed={on}>
             <div className={cn("grid h-24 content-start gap-1.5 rounded-xl border p-3", o.preview)}>
               <div className={cn("h-2 w-1/2 rounded-full", o.bar)} />
               <div className={cn("h-2 w-3/4 rounded-full", o.bar)} />
@@ -39,4 +41,15 @@ export function AppearancePicker() {
       })}
     </div>
   );
+}
+
+/** The current theme, for the summary (only known in the browser). */
+export function ThemeValue() {
+  const { theme } = useTheme();
+  const ready = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+  return <>{ready ? (options.find((o) => o.value === theme)?.label ?? "Match device") : "…"}</>;
 }

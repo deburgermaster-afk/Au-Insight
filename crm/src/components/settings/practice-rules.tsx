@@ -11,7 +11,7 @@ export function PracticeRules({ requireSignoff, isOwner }: { requireSignoff: boo
   const [pending, start] = useTransition();
   const router = useRouter();
   return (
-    <div className="grid max-w-3xl gap-3">
+    <div className="grid gap-3">
       <label className="flex items-start gap-3 rounded-2xl border bg-card p-4">
         <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-sky-500/12 text-sky-500">
           <ShieldCheck className="size-5" />

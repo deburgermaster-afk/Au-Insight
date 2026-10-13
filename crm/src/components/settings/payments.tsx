@@ -76,7 +76,7 @@ export function PaymentSettings({ defs, conns, bankOn, account, bankReady, canEd
       router.refresh();
     });
   return (
-    <div className="grid max-w-5xl gap-5">
+    <div className="grid gap-5">
       <section className="grid gap-3">
         <h2 className="text-sm font-medium">Card payments</h2>
         <p className="-mt-2 text-[13px] text-muted-foreground">Connect any you use. Clients choose from the ones switched on when they pay an invoice in the portal. Card payments are confirmed with the provider before they&apos;re recorded.</p>
