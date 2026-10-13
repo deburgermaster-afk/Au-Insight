@@ -205,10 +205,10 @@ async function Hr({ searchParams }: { searchParams: Promise<{ tab?: string }> })
                     <TableBody>
                       {r.slips.map((p) => (
                         <TableRow key={p.id}>
-                          <TableCell className="pl-4">
+                          <TableCell className="max-w-80 pl-4 whitespace-normal">
                             <p className="font-medium">{p.name}</p>
                             {p.notes?.length ? (
-                              <p className="flex items-start gap-1 text-[11px] text-amber-500">
+                              <p className="flex items-start gap-1 text-[11px] leading-snug text-amber-500">
                                 <CircleAlert className="mt-px size-3 shrink-0" /> {p.notes.join(" ")}
                               </p>
                             ) : null}
