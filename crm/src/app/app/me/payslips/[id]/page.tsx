@@ -6,16 +6,19 @@ import { aud, dmy } from "@/lib/format";
 import { getPayslip } from "@/lib/hr-data";
 import { PrintButton } from "./print";
 
-async function Slip({ params }: { params: Promise<{ id: string }> }) {
-  const d = await getPayslip((await params).id);
-  if (!d) notFound();
-  const { p, run, profile, agency } = d;
-  const Row = ({ k, v, strong }: { k: string; v: string; strong?: boolean }) => (
+function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
+  return (
     <div className={`flex justify-between py-1.5 ${strong ? "border-t pt-2.5 font-semibold" : ""}`}>
       <span className={strong ? "" : "text-zinc-500"}>{k}</span>
       <span className="tabular-nums">{v}</span>
     </div>
   );
+}
+
+async function Slip({ params }: { params: Promise<{ id: string }> }) {
+  const d = await getPayslip((await params).id);
+  if (!d) notFound();
+  const { p, run, profile, agency } = d;
   return (
     <>
       <HeaderActions>
@@ -48,19 +51,33 @@ async function Slip({ params }: { params: Promise<{ id: string }> }) {
           <div>
             <p className="text-xs uppercase tracking-wider text-zinc-400">Paid to</p>
             <p className="mt-1">BSB {profile?.bankBsb ?? "—"} · Account {profile?.bankAccount ? `•••${profile.bankAccount.slice(-3)}` : "—"}</p>
-            <p className="text-zinc-500">Super: {profile?.superFund ?? "Fund not set"}</p>
+            <p className="text-zinc-500">Super: {profile?.superType === "default" ? "Agency default fund" : (profile?.superFund ?? "Fund not set")}{profile?.superMember ? ` · member ${profile.superMember}` : ""}</p>
           </div>
         </section>
         <section className="grid gap-6 sm:grid-cols-2">
           <div className="rounded-xl border p-4">
             <p className="mb-2 font-medium">This pay</p>
-            {p.lines.map((l) => (
-              <Row key={l.label} k={`${l.label}${l.hours ? ` · ${l.hours} h × ${aud(l.rate, 2)}` : ""}`} v={aud(l.amount, 2)} />
-            ))}
+            {p.lines
+              .filter((l) => l.kind !== "note" && l.kind !== "sacrifice_super" && l.kind !== "sacrifice_other" && l.kind !== "deduction")
+              .map((l, i) => (
+                <Row key={i} k={`${l.label}${l.code ? ` (${l.code})` : ""}${l.hours ? ` · ${l.hours} h × ${aud(l.rate, 2)}` : ""}`} v={aud(l.amount, 2)} />
+              ))}
             <Row k="Gross pay" v={aud(p.gross, 2)} strong />
-            <Row k="PAYG tax withheld" v={`− ${aud(p.tax, 2)}`} />
+            {p.lines
+              .filter((l) => l.kind === "sacrifice_super" || l.kind === "sacrifice_other")
+              .map((l, i) => (
+                <Row key={`s${i}`} k={l.label} v={`− ${aud(Math.abs(l.amount), 2)}`} />
+              ))}
+            <Row k={`PAYG tax withheld${Number(p.stsl) ? ` (incl. ${aud(p.stsl)} study loan)` : ""}`} v={`− ${aud(p.tax, 2)}`} />
+            {p.lines
+              .filter((l) => l.kind === "deduction")
+              .map((l, i) => (
+                <Row key={`d${i}`} k={l.label} v={`− ${aud(Math.abs(l.amount), 2)}`} />
+              ))}
             <Row k="Net pay" v={aud(p.net, 2)} strong />
-            <Row k={`Superannuation (${profile?.superRate ?? 12}%)`} v={aud(p.superAmount, 2)} />
+            <Row k={`Super guarantee (${profile?.superRate ?? 12}%)`} v={aud(p.superAmount, 2)} />
+            {p.superDue ? <p className="text-[11px] text-zinc-500">Paid to your fund by {dmy(p.superDue)}</p> : null}
+            {p.taxScale ? <p className="mt-2 text-[11px] text-zinc-500">Tax scale: {p.taxScale}</p> : null}
           </div>
           <div className="rounded-xl border p-4">
             <p className="mb-2 font-medium">Year to date</p>
@@ -74,7 +91,7 @@ async function Slip({ params }: { params: Promise<{ id: string }> }) {
           </div>
         </section>
         <p className="mt-6 text-[11px] text-zinc-400">
-          Tax is estimated from 2026–27 resident rates, the low income tax offset and the Medicare levy; confirm against the ATO's PAYG withholding tables. Super must be paid to the fund within 7 days of payday.
+          Tax withheld using the ATO&rsquo;s 2026–27 withholding formulas (Schedule 1{Number(p.stsl) ? " and Schedule 8" : ""}). Super is paid to your fund within 7 days of payday (Payday Super). This pay is reported to the ATO through Single Touch Payroll.
         </p>
       </article>
     </>

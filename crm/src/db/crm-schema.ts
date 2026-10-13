@@ -456,6 +456,54 @@ export const staffProfiles = pgTable("staff_profiles", {
   cpdTarget: integer("cpd_target").default(10).notNull(),
   emergencyName: text("emergency_name"),
   emergencyPhone: text("emergency_phone"),
+  emergencyRelation: text("emergency_relation"),
+  // Legal identity and contact, as reported to the ATO through Single Touch Payroll.
+  givenName: text("given_name"),
+  middleName: text("middle_name"),
+  familyName: text("family_name"),
+  dob: date("dob"),
+  gender: text("gender"), // female | male | other | unspecified
+  personalEmail: text("personal_email"),
+  addressLine1: text("address_line1"),
+  addressLine2: text("address_line2"),
+  suburb: text("suburb"),
+  addressState: text("address_state"),
+  postcode: text("postcode"),
+  country: text("country").default("AU"),
+  // TFN declaration. The TFN is encrypted at rest and only shown masked.
+  tfnEnc: text("tfn_enc"),
+  /** provided | pending (applied for) | under18 | pensioner | none */
+  tfnStatus: text("tfn_status").default("none").notNull(),
+  residency: text("residency").default("resident").notNull(), // resident | foreign | whm
+  stsl: boolean("stsl").default(false).notNull(),
+  medicareExemption: text("medicare_exemption").default("none").notNull(), // none | half | full
+  extraWithholding: numeric("extra_withholding"),
+  tfnDeclaredAt: timestamp("tfn_declared_at", { withTimezone: true }),
+  // Employment details for STP and awards.
+  incomeType: text("income_type").default("SAW").notNull(), // SAW | WHM | FEI | CHP | IAA | SWP | JPD | VOL | LAB | OSP
+  homeCountry: text("home_country"), // WHM and foreign employment: ISO country
+  payFrequency: text("pay_frequency"), // weekly | fortnightly | monthly; null = agency default
+  endDate: date("end_date"),
+  cessationType: text("cessation_type"), // V | I | D | R | F | C | T
+  awardCode: text("award_code"), // e.g. MA000002
+  awardName: text("award_name"),
+  classification: text("classification"),
+  classificationRate: numeric("classification_rate"), // award minimum hourly rate
+  payrollId: text("payroll_id"),
+  // Super choice.
+  superType: text("super_type").default("default").notNull(), // apra | smsf | stapled | default
+  superUsi: text("super_usi"),
+  superAbn: text("super_abn"),
+  superMember: text("super_member"),
+  smsfEsa: text("smsf_esa"),
+  smsfBsb: text("smsf_bsb"),
+  smsfAccount: text("smsf_account"),
+  smsfAccountName: text("smsf_account_name"),
+  salarySacrificeSuper: numeric("salary_sacrifice_super"), // per pay, before tax
+  extraSuperRate: numeric("extra_super_rate"), // employer contributions above SG, % of earnings
+  superChoiceAt: timestamp("super_choice_at", { withTimezone: true }),
+  bankAccountName: text("bank_account_name"),
+  externalIds: jsonb("external_ids").$type<Record<string, string>>(),
   /** Code of Conduct, privacy and confidentiality acknowledged in the welcome wizard. */
   policiesAcceptedAt: timestamp("policies_accepted_at", { withTimezone: true }),
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
@@ -521,9 +569,172 @@ export const payslips = pgTable("payslips", {
   net: numeric("net").notNull(),
   annualAccrued: numeric("annual_accrued").default("0").notNull(),
   personalAccrued: numeric("personal_accrued").default("0").notNull(),
-  lines: jsonb("lines").$type<{ label: string; hours?: number; rate?: number; amount: number }[]>().default([]).notNull(),
+  lines: jsonb("lines").$type<PayLine[]>().default([]).notNull(),
+  /** Lines staff added to this payslip by hand (overtime, allowances, bonuses, deductions). */
+  extras: jsonb("extras").$type<PayLine[]>().default([]).notNull(),
+  stsl: numeric("stsl").default("0").notNull(),
+  qualifying: numeric("qualifying").default("0").notNull(),
+  salarySacrifice: numeric("salary_sacrifice").default("0").notNull(),
+  deductions: numeric("deductions").default("0").notNull(),
+  taxScale: text("tax_scale"),
+  taxTreatment: text("tax_treatment"),
+  superDue: date("super_due"),
+  notes: jsonb("notes").$type<string[]>().default([]).notNull(),
   ...stamps,
 });
+
+/** One line on a payslip, tagged with how Single Touch Payroll reports it. */
+export type PayLine = {
+  label: string;
+  kind: "ordinary" | "casual_loading" | "overtime" | "allowance" | "bonus" | "leave" | "sacrifice_super" | "sacrifice_other" | "deduction" | "lump_sum" | "note";
+  hours?: number;
+  rate?: number;
+  amount: number;
+  /** STP Phase 2 code: allowance (CD, AD, LD, MD, RD, TD, KN, QN, OD), leave (O, C, U, P, W, A), deduction (F, W, G, D), lump sum (A, B, D, E, W). */
+  code?: string;
+  /** Counts as ordinary time earnings for super. */
+  ote?: boolean;
+};
+
+/** Payroll set-up for the agency: who reports to the ATO, when staff are paid, where super goes. */
+export const payrollSettings = pgTable("payroll_settings", {
+  agencyId: agency().primaryKey(),
+  branch: text("branch").default("001").notNull(),
+  /** Business management software ID: identifies this payroll to the ATO. */
+  bmsId: text("bms_id")
+    .default(sql`gen_random_uuid()::text`)
+    .notNull(),
+  contactName: text("contact_name"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  addressLine1: text("address_line1"),
+  suburb: text("suburb"),
+  addressState: text("address_state"),
+  postcode: text("postcode"),
+  frequency: text("frequency").default("fortnightly").notNull(),
+  /** First day of the next pay period; periods roll forward from here. */
+  periodStart: date("period_start"),
+  /** Days after the period ends that staff are paid. */
+  payLagDays: integer("pay_lag_days").default(2).notNull(),
+  defaultFundName: text("default_fund_name"),
+  defaultFundUsi: text("default_fund_usi"),
+  defaultFundAbn: text("default_fund_abn"),
+  clearingHouse: text("clearing_house"), // beam | quicksuper | clicksuper | superchoice | fund | other
+  whmRegistered: boolean("whm_registered").default(false).notNull(),
+  awardCode: text("award_code"),
+  awardName: text("award_name"),
+  /** How STP reports leave the agency: file (upload to a registered STP solution) | employment_hero | xero */
+  stpVia: text("stp_via").default("file").notNull(),
+  stpDeclarationName: text("stp_declaration_name"),
+  // Account wages are paid from, for the ABA bank file.
+  payBankCode: text("pay_bank_code"), // CBA, WBC, NAB, ANZ, ...
+  payBsb: text("pay_bsb"),
+  payAccount: text("pay_account"),
+  payAccountName: text("pay_account_name"),
+  apcaId: text("apca_id"), // direct entry user ID from the bank
+  expenseAccount: text("expense_account").default("Wages and salaries").notNull(),
+  superExpenseAccount: text("super_expense_account").default("Superannuation").notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  ...stamps,
+});
+
+/** Payday Super: one contribution per employee per pay, due at the fund within 7 days. */
+export const superContributions = pgTable(
+  "super_contributions",
+  {
+    id: id(),
+    agencyId: agency(),
+    payRunId: text("pay_run_id")
+      .notNull()
+      .references(() => payRuns.id, { onDelete: "cascade" }),
+    payslipId: text("payslip_id").notNull(),
+    userId: text("user_id").notNull(),
+    name: text("name").notNull(),
+    fund: jsonb("fund").$type<{ type: string; name: string | null; usi: string | null; abn: string | null; member: string | null; esa?: string | null; bsb?: string | null; account?: string | null }>().notNull(),
+    sg: numeric("sg").notNull(),
+    sacrifice: numeric("sacrifice").default("0").notNull(),
+    extra: numeric("extra").default("0").notNull(),
+    payDate: date("pay_date").notNull(),
+    dueDate: date("due_date").notNull(),
+    status: text("status").default("due").notNull(), // due | sent | paid
+    reference: text("reference"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    ...stamps,
+  },
+  (t) => [index("super_contrib_agency_idx").on(t.agencyId, t.status)],
+);
+
+/** Single Touch Payroll reports: pay events, update events and end-of-year finalisation. */
+export const stpEvents = pgTable(
+  "stp_events",
+  {
+    id: id(),
+    agencyId: agency(),
+    kind: text("kind").notNull(), // pay | update | finalisation
+    payRunId: text("pay_run_id"),
+    financialYear: text("financial_year").notNull(),
+    submissionId: text("submission_id")
+      .default(sql`gen_random_uuid()::text`)
+      .notNull(),
+    status: text("status").default("ready").notNull(), // ready | needs_fixing | lodged | accepted | rejected
+    via: text("via"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    problems: jsonb("problems").$type<{ who: string; text: string }[]>().default([]).notNull(),
+    payees: integer("payees").default(0).notNull(),
+    gross: numeric("gross").default("0").notNull(),
+    tax: numeric("tax").default("0").notNull(),
+    receipt: text("receipt"),
+    response: text("response"),
+    lodgedAt: timestamp("lodged_at", { withTimezone: true }),
+    lodgedBy: text("lodged_by"),
+    ...stamps,
+  },
+  (t) => [index("stp_events_agency_idx").on(t.agencyId, t.createdAt)],
+);
+
+/** Employment contract templates: built in, drafted by AI from a description, or imported from a file. */
+export const contractTemplates = pgTable("contract_templates", {
+  id: id(),
+  agencyId: agency(),
+  name: text("name").notNull(),
+  employment: text("employment").default("full_time").notNull(),
+  body: text("body").notNull(),
+  source: text("source").default("manual").notNull(), // builtin | ai_description | ai_import | manual
+  analysis: jsonb("analysis").$type<ContractReview>(),
+  createdBy: text("created_by"),
+  ...stamps,
+});
+
+export type ContractReview = {
+  summary: string;
+  issues: { level: "block" | "warn" | "info"; text: string }[];
+  missing: string[];
+};
+
+/** A contract issued to one staff member, signed in their Me portal. */
+export const employmentContracts = pgTable(
+  "employment_contracts",
+  {
+    id: id(),
+    agencyId: agency(),
+    userId: text("user_id").notNull(),
+    templateId: text("template_id"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    status: text("status").default("draft").notNull(), // draft | sent | signed | void
+    hash: text("hash"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    signedAt: timestamp("signed_at", { withTimezone: true }),
+    signedName: text("signed_name"),
+    signedIp: text("signed_ip"),
+    signedAgent: text("signed_agent"),
+    pdfKey: text("pdf_key"),
+    createdBy: text("created_by"),
+    createdByName: text("created_by_name"),
+    ...stamps,
+  },
+  (t) => [index("employment_contracts_user_idx").on(t.agencyId, t.userId)],
+);
 
 /** Continuing professional development, for registered migration agents. */
 export const cpdRecords = pgTable("cpd_records", {
@@ -752,7 +963,7 @@ export const connectors = pgTable(
   {
     id: id(),
     agencyId: agency(),
-    kind: text("kind").notNull(), // resend
+    kind: text("kind").notNull(), // resend | fwc | abr | employment_hero | xero
     status: text("status").notNull().default("active"), // active | error
     account: text("account"),
     scope: text("scope"),

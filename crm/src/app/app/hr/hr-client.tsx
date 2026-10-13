@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { ActionDialog } from "@/components/forms/action-dialog";
 import { Row, SelectField, TextField } from "@/components/forms/fields";
 import { Button } from "@/components/ui/button";
-import { createPayRun, decideLeave, deletePayRun, finalisePayRun, saveStaff } from "@/lib/hr-actions";
+import { decideLeave, saveStaff } from "@/lib/hr-actions";
+import { createPayRun, deletePayRun, finalisePayRun } from "@/lib/payroll-actions";
 import { positions } from "@/lib/permissions";
 
 type Profile = {

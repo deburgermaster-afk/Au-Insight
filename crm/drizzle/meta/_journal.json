@@ -127,6 +127,20 @@
       "when": 1791887113079,
       "tag": "0017_duplicate_dismissals",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791889219644,
+      "tag": "0018_payroll_stp_contracts",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791889547443,
+      "tag": "0019_payroll_bank",
+      "breakpoints": true
     }
   ]
 }

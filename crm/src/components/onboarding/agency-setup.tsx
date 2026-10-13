@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CheckCircle2, CreditCard, Flag, Mail, Palette, PartyPopper, Plus, Rocket, Sparkles, Trash2, Users, Wand2 } from "lucide-react";
+import { Building2, CheckCircle2, CreditCard, Flag, HandCoins, Mail, Palette, PartyPopper, Plus, Rocket, Sparkles, Trash2, Users, Wand2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { finishSetup, inviteTeam, saveSetupStep } from "@/lib/onboarding-actions";
+import { savePayrollSettings } from "@/lib/payroll-actions";
 import { positions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { Field, inputCls, StepFooter, StepTitle, WizardShell, type WizardStep } from "./shell";
@@ -18,6 +19,7 @@ const steps: WizardStep[] = [
   { key: "services", title: "Services", hint: "What you help clients with", icon: Flag },
   { key: "brand", title: "Brand & mail", hint: "Colour and mailboxes", icon: Palette },
   { key: "payments", title: "Payments", hint: "Client trust account", icon: CreditCard },
+  { key: "payroll", title: "Payroll", hint: "Pay calendar, STP and super", icon: HandCoins },
   { key: "team", title: "Your team", hint: "Invite staff", icon: Users },
   { key: "launch", title: "Launch", hint: "Demo data or a clean start", icon: Rocket },
 ];
@@ -77,6 +79,7 @@ export function AgencySetup({ org, firstName, profile, mailboxes, marnExpiry }: 
     bankAccount: profile?.bankAccount ?? "",
     gstRegistered: profile?.gstRegistered ?? true,
   });
+  const [pay, setPay] = useState({ frequency: "fortnightly", periodStart: "", contactName: firstName, stpDeclarationName: "", defaultFundName: "", defaultFundUsi: "", awardCode: "MA000002", awardName: "Clerks—Private Sector Award 2020" });
   const [team, setTeam] = useState([{ email: "", position: "migration_agent" }]);
   const [invited, setInvited] = useState(0);
   const [done, setDone] = useState(false);
@@ -311,7 +314,7 @@ export function AgencySetup({ org, firstName, profile, mailboxes, marnExpiry }: 
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[11px] text-white/40">Using your own domain? Add it in Settings once it's verified.</p>
+          <p className="mt-3 text-[11px] text-white/40">Using your own domain? Add it in Settings once it&rsquo;s verified.</p>
           <StepFooter onBack={back} pending={pending} />
         </form>
       ) : null}
@@ -342,6 +345,59 @@ export function AgencySetup({ org, firstName, profile, mailboxes, marnExpiry }: 
           <label className="mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm text-white/80">
             <Switch checked={p.gstRegistered} onCheckedChange={(v) => setP((x) => ({ ...x, gstRegistered: v }))} /> Registered for GST (adds 10% to professional fees)
           </label>
+          <StepFooter onBack={back} pending={pending} onSkip={next} />
+        </form>
+      ) : null}
+
+      {key === "payroll" ? (
+        <form
+          className="flex flex-1 flex-col"
+          onSubmit={(e) => {
+            e.preventDefault();
+            start(async () => {
+              const f = new FormData();
+              for (const [k, v] of Object.entries(pay)) if (v) f.set(k, v);
+              f.set("contactEmail", p.email);
+              f.set("contactPhone", p.phone);
+              const r = await savePayrollSettings(f);
+              if (!r.ok) return void toast.error(r.error);
+              next();
+            });
+          }}
+        >
+          <StepTitle title="Paying your team" sub="Tax is worked out from the ATO's 2026–27 formulas, super at 12% within 7 days of payday, and every pay is reported through Single Touch Payroll. Staff add their own TFN, super and bank details." />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="How often you pay">
+              <select value={pay.frequency} onChange={(e) => setPay((x) => ({ ...x, frequency: e.target.value }))} className={inputCls}>
+                <option value="weekly">Weekly</option>
+                <option value="fortnightly">Fortnightly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </Field>
+            <Field label="Next pay period starts">
+              <Input type="date" value={pay.periodStart} onChange={(e) => setPay((x) => ({ ...x, periodStart: e.target.value }))} className={inputCls} />
+            </Field>
+            <Field label="STP contact">
+              <Input value={pay.contactName} onChange={(e) => setPay((x) => ({ ...x, contactName: e.target.value }))} className={inputCls} />
+            </Field>
+            <Field label="Who signs off STP reports">
+              <Input value={pay.stpDeclarationName} onChange={(e) => setPay((x) => ({ ...x, stpDeclarationName: e.target.value }))} className={inputCls} placeholder="Full name" />
+            </Field>
+            <Field label="Default super fund">
+              <Input value={pay.defaultFundName} onChange={(e) => setPay((x) => ({ ...x, defaultFundName: e.target.value }))} className={inputCls} placeholder="e.g. AustralianSuper" />
+            </Field>
+            <Field label="Fund USI">
+              <Input value={pay.defaultFundUsi} onChange={(e) => setPay((x) => ({ ...x, defaultFundUsi: e.target.value.toUpperCase() }))} className={inputCls} placeholder="STA0100AU" />
+            </Field>
+            <Field label="Award most staff are under">
+              <select value={pay.awardCode} onChange={(e) => setPay((x) => ({ ...x, awardCode: e.target.value, awardName: e.target.selectedOptions[0].text }))} className={inputCls}>
+                <option value="MA000002">Clerks—Private Sector Award 2020</option>
+                <option value="MA000116">Legal Services Award 2020</option>
+                <option value="MA000077">Educational Services (Post-Secondary Education) Award 2020</option>
+                <option value="">Award-free or enterprise agreement</option>
+              </select>
+            </Field>
+          </div>
           <StepFooter onBack={back} pending={pending} onSkip={next} />
         </form>
       ) : null}

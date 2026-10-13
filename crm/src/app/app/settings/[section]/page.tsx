@@ -15,6 +15,11 @@ import { AiDocsConsent } from "@/components/ai/docs-toggle";
 import { Pill, Summary } from "@/components/settings/summary";
 import { PracticeRules } from "@/components/settings/practice-rules";
 import { PaymentSettings } from "@/components/settings/payments";
+import { BankFileForm, CalendarForm, EmployerForm, PayrollIntegrations, SuperSettingsForm } from "@/components/settings/payroll-forms";
+import { nextPeriod } from "@/lib/payroll";
+import { getPayroll } from "@/lib/payroll-data";
+import { RULES, validAbn } from "@/lib/payg";
+import { xeroReady } from "@/lib/payroll-integrations";
 import { PROVIDERS } from "@/lib/payments/providers";
 import { AgreementTerms } from "@/components/settings/agreement-terms";
 import { DEFAULT_TERMS, parseTerms } from "@/lib/agreement";
@@ -203,6 +208,86 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
         }
       />
     );
+  }
+
+  if (slug === "payroll") {
+    const { settings: ps, connectors: pc } = await getPayroll();
+    const canEdit = ctx.caps.includes("payroll");
+    const plainS = JSON.parse(JSON.stringify(ps)) as Record<string, string | number | boolean | null>;
+    const cfg = (title: string, node: ReactNode, label = "Configure") =>
+      canEdit ? (
+        <Configure title={title} label={label} size="lg">
+          {node}
+        </Configure>
+      ) : null;
+    const nextRun = ps.periodStart ? nextPeriod(ps.periodStart, ps.frequency as "weekly", ps.payLagDays) : null;
+    body =
+      tab === "calendar" ? (
+        <Summary
+          className="max-w-4xl"
+          title="Pay calendar"
+          description="How often staff are paid. New pay runs suggest the next period automatically."
+          action={cfg("Pay calendar", <CalendarForm s={plainS} />)}
+          rows={[
+            { label: "Frequency", value: ps.frequency.replace(/^\w/, (c) => c.toUpperCase()) },
+            { label: "Next period", value: nextRun ? `${dmy(nextRun.periodStart)} – ${dmy(nextRun.periodEnd)}` : "Not set", missing: !nextRun },
+            { label: "Next pay day", value: nextRun ? dmy(nextRun.payDate) : "—" },
+            { label: "Super due at funds", value: nextRun ? `by ${dmy(new Date(new Date(nextRun.payDate).getTime() + RULES.superDueDays * 864e5))} (Payday Super)` : `${RULES.superDueDays} days after each payday` },
+            { label: "Default award", value: ps.awardName ?? ps.awardCode ?? "Not set" },
+            { label: "Tax tables", value: `ATO ${RULES.year} (Schedule 1 and 8)` },
+          ]}
+        />
+      ) : tab === "super" ? (
+        <Summary
+          className="max-w-4xl"
+          title="Super"
+          description={`Super guarantee is ${RULES.sgRate}% of qualifying earnings, up to the $${RULES.maxContributionBase.toLocaleString("en-AU")} maximum contribution base, paid within ${RULES.superDueDays} days of payday.`}
+          status={ps.defaultFundUsi ? <Pill tone="ok">Default fund set</Pill> : <Pill tone="warn">No default fund</Pill>}
+          action={cfg("Super", <SuperSettingsForm s={plainS} />)}
+          rows={[
+            { label: "Default fund", value: ps.defaultFundName ?? "Not set", missing: !ps.defaultFundName },
+            { label: "USI", value: ps.defaultFundUsi ?? "—" },
+            { label: "Fund ABN", value: ps.defaultFundAbn ? `${ps.defaultFundAbn}${validAbn(ps.defaultFundAbn) ? "" : " (fails ABN check)"}` : "—" },
+            { label: "Clearing house", value: ({ beam: "Beam", quicksuper: "QuickSuper", clicksuper: "ClickSuper", superchoice: "SuperChoice", fund: "Fund's employer portal", other: "Other SuperStream clearing house" } as Record<string, string>)[ps.clearingHouse ?? ""] ?? "Not set" },
+          ]}
+        />
+      ) : tab === "bank" ? (
+        <Summary
+          className="max-w-4xl"
+          title="Bank file and accounts"
+          description="Pay everyone in one upload (ABA file), and the accounts the payroll journal posts to."
+          status={ps.payBsb && ps.apcaId ? <Pill tone="ok">Bank file ready</Pill> : <Pill tone="muted">Bank file not set up</Pill>}
+          action={cfg("Bank and accounts", <BankFileForm s={plainS} />)}
+          rows={[
+            { label: "Wages paid from", value: ps.payBsb ? `${ps.payAccountName ?? ""} · ${ps.payBsb} •••${(ps.payAccount ?? "").slice(-3)}` : "Not set" },
+            { label: "Bank and user ID", value: ps.payBankCode ? `${ps.payBankCode} · ${ps.apcaId ?? "no user ID"}` : "—" },
+            { label: "Wages expense", value: ps.expenseAccount },
+            { label: "Super expense", value: ps.superExpenseAccount },
+          ]}
+        />
+      ) : tab === "integrations" ? (
+        <div className="grid max-w-5xl gap-3">
+          <PayrollIntegrations conns={pc.map((c) => ({ kind: c.kind, status: c.status, account: c.account, lastError: c.lastError, connectedByName: c.connectedByName }))} xeroReady={xeroReady()} platform={{ fwc: Boolean(process.env.FWC_API_KEY), abr: Boolean(process.env.ABR_GUID) }} canEdit={canEdit} />
+        </div>
+      ) : (
+        <Summary
+          className="max-w-4xl"
+          title="Employer and Single Touch Payroll"
+          description="Who reports pay to the ATO, and how reports get there."
+          status={ps.contactName && ps.stpDeclarationName && ps.postcode && p?.abn ? <Pill tone="ok">Ready for STP</Pill> : <Pill tone="warn">Needs details</Pill>}
+          action={cfg("Employer and STP", <EmployerForm s={plainS} />, ps.completedAt ? "Edit" : "Set up")}
+          rows={[
+            { label: "Legal name and ABN", value: p?.abn ? `${p.legalName ?? ctx.agencyName} · ${p.abn}${validAbn(p.abn) ? "" : " (fails ABN check)"}` : "Add the ABN in Agency profile", missing: !p?.abn || !validAbn(p.abn) },
+            { label: "Branch", value: ps.branch },
+            { label: "STP contact", value: ps.contactName ? `${ps.contactName}${ps.contactEmail ? ` · ${ps.contactEmail}` : ""}${ps.contactPhone ? ` · ${ps.contactPhone}` : ""}` : "Not set", missing: !ps.contactName },
+            { label: "Business address", value: ps.addressLine1 ? `${ps.addressLine1}, ${ps.suburb ?? ""} ${ps.addressState ?? ""} ${ps.postcode ?? ""}` : "Not set", missing: !ps.postcode },
+            { label: "Declarer", value: ps.stpDeclarationName ?? "Not set", missing: !ps.stpDeclarationName },
+            { label: "Reports lodged via", value: ({ file: "Registered STP solution (export)", employment_hero: "Employment Hero Payroll", xero: "Xero Payroll" } as Record<string, string>)[ps.stpVia] },
+            { label: "Working holiday makers", value: ps.whmRegistered ? "Registered WHM employer (15%)" : "Not registered" },
+            { label: "Software ID (BMS)", value: ps.bmsId.slice(0, 8) },
+          ]}
+        />
+      );
   }
 
   if (slug === "ai") {

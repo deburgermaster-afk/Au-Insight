@@ -15,22 +15,27 @@ import { aud, daysUntil, dmy, initials, relativeDays } from "@/lib/format";
 import { getMe } from "@/lib/hr-data";
 import { marnCurrent, positions } from "@/lib/permissions";
 import { getCtx } from "@/lib/session";
-import { CpdDialog, LeaveDialog, MyDetails, TimeDialog } from "./me-forms";
+import { EmployeeSelfSections } from "@/components/payroll/employee-sections";
+import { getMyPayroll } from "@/lib/payroll-data";
+import { CpdDialog, LeaveDialog, TimeDialog } from "./me-forms";
 
 export const metadata = { title: "Me" };
+
+const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 
 const leaveTone = { pending: "amber", approved: "green", declined: "red" } as const;
 
 async function Me() {
   await connection();
-  const [ctx, me, matters] = await Promise.all([getCtx(), getMe(), listMatters().catch(() => [])]);
+  const [ctx, me, matters, mine] = await Promise.all([getCtx(), getMe(), listMatters().catch(() => []), getMyPayroll()]);
+  const toSign = mine.contracts.filter((c) => c.status === "sent");
   const p = me.profile;
   const pos = positions.find((x) => x.key === ctx.position);
   const mara = ctx.position === "principal" || ctx.position === "migration_agent";
   const marnDays = p?.marnExpiry ? daysUntil(p.marnExpiry) : null;
   const yearStart = `${new Date().getFullYear() - (new Date().getMonth() < 6 ? 1 : 0)}-07-01`;
   const cpdYear = me.cpd.filter((c) => c.date >= yearStart).reduce((a, c) => a + Number(c.points), 0);
-  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  const weekAgo = daysAgo(7);
   const weekHours = me.time.filter((t) => t.date >= weekAgo).reduce((a, t) => a + Number(t.hours), 0);
   const open = me.tasks.filter((t) => t.status !== "done");
   return (
@@ -57,11 +62,25 @@ async function Me() {
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/12 px-3 py-2 text-xs text-rose-600 dark:text-rose-300">
-              <CircleAlert className="size-4" /> {p?.marn ? "MARN expired" : "No MARN on file"}: you can't lodge until it's current
+              <CircleAlert className="size-4" /> {p?.marn ? "MARN expired" : "No MARN on file"}: you can&rsquo;t lodge until it&rsquo;s current
             </span>
           )
         ) : null}
       </FadeIn>
+      {toSign.length || !p?.tfnDeclaredAt || !p?.superChoiceAt ? (
+        <div className="grid gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-[13px]">
+          {toSign.map((c) => (
+            <Link key={c.id} href={`/app/me/contracts/${c.id}`} className="flex items-center gap-2 hover:underline">
+              <FileText className="size-4 text-amber-500" /> Your contract is ready to sign: {c.title}
+            </Link>
+          ))}
+          {!p?.tfnDeclaredAt || !p?.superChoiceAt ? (
+            <p className="flex items-center gap-2">
+              <CircleAlert className="size-4 text-amber-500" /> To be paid correctly, complete your {[!p?.tfnDeclaredAt && "TFN declaration", !p?.superChoiceAt && "super choice"].filter(Boolean).join(" and ")} under Payroll details.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <Section title="At a glance">
         <FactStrip
           items={[
@@ -87,7 +106,8 @@ async function Me() {
             <Clock /> Timesheet
           </TabsTrigger>
           {mara ? <TabsTrigger value="cpd">CPD</TabsTrigger> : null}
-          <TabsTrigger value="details">My details</TabsTrigger>
+          <TabsTrigger value="details">Payroll details</TabsTrigger>
+          <TabsTrigger value="contracts">Contracts {toSign.length ? `· ${toSign.length} to sign` : ""}</TabsTrigger>
         </TabsList>
         <TabsContent value="work">
           <Section title={`Tasks assigned to me · ${open.length} open`} bodyClassName="p-0">
@@ -178,7 +198,7 @@ async function Me() {
                     <ProgressBar value={(v as number) / (max as number)} />
                   </div>
                 ))}
-                <p className="text-xs text-muted-foreground">Accrues with each pay run: 4 weeks' annual and 10 days' personal leave a year for full-time staff.</p>
+                <p className="text-xs text-muted-foreground">Accrues with each pay run: 4 weeks&rsquo; annual and 10 days&rsquo; personal leave a year for full-time staff.</p>
               </div>
             </Section>
           </div>
@@ -246,8 +266,22 @@ async function Me() {
           </TabsContent>
         ) : null}
         <TabsContent value="details">
-          <Section title="Pay and contact details">
-            <MyDetails p={p} />
+          <EmployeeSelfSections p={p} tfnLast3={mine.tfnLast3} settings={mine.settings} show={["personal", "tax", "super", "bank"]} />
+        </TabsContent>
+        <TabsContent value="contracts">
+          <Section bodyClassName="p-0">
+            <ul>
+              {mine.contracts.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm last:border-0">
+                  <FileText className="size-4 text-muted-foreground" />
+                  <Link href={`/app/me/contracts/${c.id}`} className="min-w-0 flex-1 truncate font-medium hover:underline">
+                    {c.title}
+                  </Link>
+                  {c.status === "sent" ? <Pill t="amber">Ready to sign</Pill> : <Pill t="green">Signed {dmy(c.signedAt)}</Pill>}
+                </li>
+              ))}
+              {!mine.contracts.length ? <li className="p-8 text-center text-sm text-muted-foreground">No contracts yet.</li> : null}
+            </ul>
           </Section>
         </TabsContent>
       </Tabs>

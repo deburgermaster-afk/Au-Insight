@@ -1,12 +1,10 @@
 "use server";
 
-import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { db, schema as s } from "@/db";
 import type { ActionResult } from "@/lib/actions";
 import { agencyTag } from "@/lib/data";
-import { ensureMailboxes, mailEnabled, sendMail } from "@/lib/mail";
-import { calcPay, type Frequency } from "@/lib/payroll";
 import type { Position } from "@/lib/permissions";
 import { actionCtx, requireCap } from "@/lib/session";
 
@@ -128,123 +126,6 @@ export async function addCpd(f: FormData): Promise<ActionResult> {
     const points = Number(v(f, "points"));
     if (!activity || !(points > 0)) return { ok: false, error: "Describe the activity and its points." };
     await db.insert(s.cpdRecords).values({ agencyId: ctx.agencyId, userId: ctx.userId, date: v(f, "date") ?? new Date().toISOString().slice(0, 10), activity, provider: v(f, "provider"), points: String(points) });
-    updateTag(agencyTag(ctx.agencyId));
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
-}
-
-/** Drafts a pay run: one payslip per employee with a pay rate, from salary or logged hours. */
-export async function createPayRun(f: FormData): Promise<ActionResult> {
-  try {
-    const ctx = await requireCap("payroll", "Only HR or admins can run payroll.");
-    const periodStart = v(f, "periodStart");
-    const periodEnd = v(f, "periodEnd");
-    const payDate = v(f, "payDate") ?? periodEnd;
-    const frequency = (v(f, "frequency") ?? "fortnightly") as Frequency;
-    if (!periodStart || !periodEnd || !payDate) return { ok: false, error: "Set the pay period." };
-    const staff = await db
-      .select({ profile: s.staffProfiles, name: s.user.name })
-      .from(s.staffProfiles)
-      .innerJoin(s.user, eq(s.user.id, s.staffProfiles.userId))
-      .where(and(eq(s.staffProfiles.agencyId, ctx.agencyId), sql`${s.staffProfiles.payRate} is not null`));
-    if (!staff.length) return { ok: false, error: "Add a pay rate to at least one staff member first (HR → Staff)." };
-    const time = await db
-      .select({ userId: s.timeEntries.userId, hours: sql<string>`sum(${s.timeEntries.hours})` })
-      .from(s.timeEntries)
-      .where(and(eq(s.timeEntries.agencyId, ctx.agencyId), gte(s.timeEntries.date, periodStart), lte(s.timeEntries.date, periodEnd), isNull(s.timeEntries.payRunId)))
-      .groupBy(s.timeEntries.userId);
-    const [run] = await db.insert(s.payRuns).values({ agencyId: ctx.agencyId, periodStart, periodEnd, payDate, frequency, createdBy: ctx.name }).returning();
-    let gross = 0;
-    let tax = 0;
-    let sup = 0;
-    let net = 0;
-    for (const { profile: p, name } of staff) {
-      const logged = time.find((t) => t.userId === p.userId);
-      const pay = calcPay({
-        employment: p.employment,
-        payType: p.payType,
-        payRate: Number(p.payRate),
-        hoursPerWeek: Number(p.hoursPerWeek),
-        superRate: Number(p.superRate),
-        taxFreeThreshold: p.taxFreeThreshold,
-        frequency,
-        loggedHours: logged ? Number(logged.hours) : null,
-      });
-      await db.insert(s.payslips).values({
-        agencyId: ctx.agencyId,
-        payRunId: run.id,
-        userId: p.userId,
-        name,
-        hours: String(pay.hours),
-        gross: String(pay.gross),
-        tax: String(pay.tax),
-        superAmount: String(pay.super),
-        net: String(pay.net),
-        annualAccrued: String(pay.annual),
-        personalAccrued: String(pay.personal),
-        lines: pay.lines,
-      });
-      gross += pay.gross;
-      tax += pay.tax;
-      sup += pay.super;
-      net += pay.net;
-    }
-    await db.update(s.payRuns).set({ gross: gross.toFixed(2), tax: tax.toFixed(2), superTotal: sup.toFixed(2), net: net.toFixed(2) }).where(eq(s.payRuns.id, run.id));
-    updateTag(agencyTag(ctx.agencyId));
-    return { ok: true, id: run.id };
-  } catch (e) {
-    return fail(e);
-  }
-}
-
-/** Locks a pay run, accrues leave and tells each employee their payslip is ready. */
-export async function finalisePayRun(id: string): Promise<ActionResult> {
-  try {
-    const ctx = await requireCap("payroll", "Only HR or admins can run payroll.");
-    const [run] = await db.select().from(s.payRuns).where(and(eq(s.payRuns.agencyId, ctx.agencyId), eq(s.payRuns.id, id)));
-    if (!run || run.status !== "draft") return { ok: false, error: "This pay run is already finalised." };
-    const slips = await db.select().from(s.payslips).where(eq(s.payslips.payRunId, id));
-    for (const p of slips) {
-      await db
-        .update(s.staffProfiles)
-        .set({ annualLeaveHours: sql`${s.staffProfiles.annualLeaveHours} + ${p.annualAccrued}`, personalLeaveHours: sql`${s.staffProfiles.personalLeaveHours} + ${p.personalAccrued}` })
-        .where(and(eq(s.staffProfiles.agencyId, ctx.agencyId), eq(s.staffProfiles.userId, p.userId)));
-    }
-    await db
-      .update(s.timeEntries)
-      .set({ payRunId: id })
-      .where(and(eq(s.timeEntries.agencyId, ctx.agencyId), gte(s.timeEntries.date, run.periodStart), lte(s.timeEntries.date, run.periodEnd), isNull(s.timeEntries.payRunId)));
-    await db.update(s.payRuns).set({ status: "finalised" }).where(eq(s.payRuns.id, id));
-    await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "update", entity: "pay_run", entityId: id, detail: { finalised: true } });
-    if (mailEnabled() && slips.length) {
-      const users = await db.select({ id: s.user.id, email: s.user.email }).from(s.user).where(inArray(s.user.id, slips.map((p) => p.userId)));
-      const box = (await ensureMailboxes(ctx)).find((b) => b.kind === "shared");
-      const base = process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
-      for (const p of slips) {
-        const to = users.find((u) => u.id === p.userId)?.email;
-        if (!box || !to || to.endsWith(".test")) continue;
-        await sendMail({
-          agencyId: ctx.agencyId,
-          from: { address: box.address, name: ctx.agencyName },
-          to: [to],
-          subject: `Your payslip for ${run.periodStart} to ${run.periodEnd}`,
-          html: `<p>Hi ${p.name.split(" ")[0]},</p><p>Your payslip for the period ${run.periodStart} to ${run.periodEnd} is ready. Net pay of <strong>$${Number(p.net).toFixed(2)}</strong> will be paid on ${run.payDate}.</p><p><a href="${base}/app/me/payslips/${p.id}">View your payslip</a></p>`,
-        });
-      }
-    }
-    updateTag(agencyTag(ctx.agencyId));
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
-}
-
-export async function deletePayRun(id: string): Promise<ActionResult> {
-  try {
-    const ctx = await requireCap("payroll");
-    await db.delete(s.payRuns).where(and(eq(s.payRuns.agencyId, ctx.agencyId), eq(s.payRuns.id, id), eq(s.payRuns.status, "draft")));
     updateTag(agencyTag(ctx.agencyId));
     return { ok: true };
   } catch (e) {
