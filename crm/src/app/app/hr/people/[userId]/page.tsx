@@ -1,4 +1,5 @@
-import { BadgeCheck, CircleAlert, CircleCheck } from "lucide-react";
+import { ArrowRightLeft, BadgeCheck, CircleAlert, CircleCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
@@ -36,6 +37,11 @@ async function Employee({ params }: { params: Promise<{ userId: string }> }) {
   return (
     <div className="grid gap-4">
       <HeaderActions>
+        <Button size="sm" variant="outline" asChild>
+          <Link href={`/app/team/handover?from=${userId}`}>
+            <ArrowRightLeft /> Hand over work
+          </Link>
+        </Button>
         <IssueContract userId={userId} templates={payroll.templates.map((t) => ({ id: t.id, name: t.name }))} />
       </HeaderActions>
       <section className="flex flex-wrap items-center gap-4 rounded-2xl border bg-card p-4">

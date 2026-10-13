@@ -20,6 +20,10 @@ import { nextPeriod } from "@/lib/payroll";
 import { getPayroll } from "@/lib/payroll-data";
 import { RULES, validAbn } from "@/lib/payg";
 import { xeroReady } from "@/lib/payroll-integrations";
+import { AssignmentEditor, ChecklistEditor, FeesEditor, ListsEditor } from "@/components/settings/workflow";
+import { getEditOptions } from "@/lib/edit-data";
+import { listOf } from "@/lib/workflow";
+import { visas as allVisas } from "@/lib/visas";
 import { PROVIDERS } from "@/lib/payments/providers";
 import { AgreementTerms } from "@/components/settings/agreement-terms";
 import { DEFAULT_TERMS, parseTerms } from "@/lib/agreement";
@@ -208,6 +212,71 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
         }
       />
     );
+  }
+
+  if (slug === "workflow") {
+    const w = p?.workflow ?? {};
+    const opts = await getEditOptions();
+    const cfg = (title: string, node: React.ReactNode, size: "lg" | "xl" = "xl") =>
+      admin ? (
+        <Configure title={title} size={size}>
+          {node}
+        </Configure>
+      ) : null;
+    const custom = Object.keys(w.checklists ?? {});
+    const priced = Object.entries(w.fees ?? {});
+    const who = (id: string) => opts.staff.find((x) => x.value === id)?.label ?? "someone who left";
+    body =
+      tab === "fees" ? (
+        <Summary
+          className="max-w-4xl"
+          title="Fee schedule"
+          description="Filled in when a case opens and the fee is left blank. Staff can still change it per case."
+          status={<Pill tone={priced.length ? "ok" : "muted"}>{priced.length ? `${priced.length} visas priced` : "Not set"}</Pill>}
+          action={cfg("Fee schedule", <FeesEditor workflow={w} />)}
+          rows={priced.slice(0, 10).map(([code, f]) => ({ label: `${code} · ${allVisas.find((v) => v.code === code)?.name ?? ""}`, value: `${f.professional != null ? `$${f.professional.toLocaleString("en-AU")} professional` : "—"}${f.government != null ? ` · $${f.government.toLocaleString("en-AU")} government` : ""}` }))}
+        />
+      ) : tab === "assignment" ? (
+        <Summary
+          className="max-w-4xl"
+          title="Who new cases go to"
+          description="Used when a case is opened without choosing a case officer."
+          status={<Pill tone={w.assignment ? "ok" : "muted"}>{w.assignment ? "On" : "Off: whoever opens it"}</Pill>}
+          action={cfg("Assignment", <AssignmentEditor workflow={w} staff={opts.staff} />, "lg")}
+          rows={
+            w.assignment
+              ? [
+                  ...w.assignment.rules.map((r) => ({ label: `Visa ${r.match}`, value: who(r.userId) })),
+                  { label: "Otherwise", value: { creator: "Whoever opens the case", round_robin: "Take turns", least_busy: "Fewest open cases" }[w.assignment.fallback] },
+                  ...(w.assignment.fallback !== "creator" ? [{ label: "In the rotation", value: w.assignment.pool.map(who).join(", ") || "Nobody" }] : []),
+                ]
+              : []
+          }
+        />
+      ) : tab === "lists" ? (
+        <Summary
+          className="max-w-4xl"
+          title="Lists"
+          description="What staff pick from on client, case and document forms."
+          action={cfg("Lists", <ListsEditor workflow={w} />)}
+          rows={[
+            { label: "Client sources", value: listOf(w, "sources").join(", ") },
+            { label: "Tags", value: listOf(w, "tags").join(", ") },
+            { label: "Document categories", value: listOf(w, "documentCategories").join(", ") },
+            { label: "Outcomes", value: listOf(w, "outcomes").join(", ") },
+            { label: "Case references", value: `${w.referencePrefix || "LDG"}-${new Date().getFullYear()}-0001` },
+          ]}
+        />
+      ) : (
+        <Summary
+          className="max-w-4xl"
+          title="Document checklists"
+          description="The checklist each new case starts with. Lodgely's checklists are used for any visa you haven't customised."
+          status={<Pill tone={custom.length ? "ok" : "muted"}>{custom.length ? `${custom.length} customised` : "Using Lodgely's"}</Pill>}
+          action={cfg("Document checklists", <ChecklistEditor workflow={w} initialVisa={custom[0]} />)}
+          rows={custom.map((code) => ({ label: `${code} · ${allVisas.find((v) => v.code === code)?.name ?? ""}`, value: `${w.checklists![code].length} documents` }))}
+        />
+      );
   }
 
   if (slug === "payroll") {

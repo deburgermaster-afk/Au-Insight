@@ -21,7 +21,7 @@ import { PageSkeleton } from "@/components/app/skeletons";
 import { Timeline } from "@/components/app/timeline";
 import { WithPickers } from "@/components/app/with-pickers";
 import { NewTaskDialog } from "@/components/forms/dialogs";
-import { getAgencyProfile, getMatter } from "@/lib/data";
+import { getAgencyProfile, getMatter, getPickers } from "@/lib/data";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { db, schema as sch } from "@/db";
 import { fileUrl } from "@/components/mail/file-icon";
@@ -30,6 +30,11 @@ import { ReviewDeadlineCard } from "@/components/lodge/review-deadline";
 import { aud, daysUntil, dmy, fullName, relativeDays } from "@/lib/format";
 import { visaByCode } from "@/lib/visas";
 import { Checklist, ComplianceChecks, MatterDetailsForm, StageStepper } from "./matter-client";
+import { ManageCase } from "@/components/edit/case-manage";
+import { EditRecord } from "@/components/edit/edit-record";
+import { RecordHistory } from "@/components/edit/record-history";
+import { getEditOptions } from "@/lib/edit-data";
+import { plainValues } from "@/lib/record-specs";
 
 async function MatterView({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
@@ -51,6 +56,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
   const aiDocs = Boolean(aiP?.on) && llmEnabled();
   const checkOf = new Map(checks.map((c) => [c.documentId, c]));
   const docsWithChecks = data.documents.map((d) => ({ ...d, check: checkOf.get(d.id) ?? null }));
+  const [editOptions, pickers] = await Promise.all([getEditOptions(), getPickers()]);
   const kinds = kindsFor(m.visaCode, m.stage, Boolean(m.rfiDueAt)).map((k) => ({ key: k, ...DRAFT_KINDS[k] }));
   const esign = ag ? { id: ag.id, status: ag.status, createdAt: ag.createdAt, viewedAt: ag.viewedAt, signedAt: ag.signedAt, signerName: ag.signerName, pdf: agDoc?.key ? fileUrl(agDoc.key, agDoc.name) : null } : null;
   return (
@@ -76,6 +82,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
           </Link>
         </Button>
         <MatterAiToggle matterId={m.id} tracking={m.aiTracking} clientName={fullName(client)} agencyOn={aiOn} />
+        <ManageCase matter={{ id: m.id, reference: m.reference, clientId: m.clientId, visaCode: m.visaCode, stream: m.stream, stage: m.stage, assignedTo: m.assignedTo, supervisorId: m.supervisorId, title: m.title }} values={plainValues(m)} options={editOptions} caps={ctx.caps} clients={pickers.clients} staff={editOptions.staff} />
       </HeaderActions>
       <FadeIn className="mb-4 grid gap-4 rounded-xl border bg-card p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
@@ -125,7 +132,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
               ) : null
             }
           >
-            <Checklist matterId={m.id} items={checklist} docs={docsWithChecks} agencyId={ctx.agencyId} clientId={client.id} aiDocs={aiDocs} />
+            <Checklist matterId={m.id} items={checklist} docs={docsWithChecks} agencyId={ctx.agencyId} clientId={client.id} aiDocs={aiDocs} editOptions={editOptions} caps={ctx.caps} />
           </Section>
           <Section title="Timeline">
             <div className="grid gap-5">
@@ -188,12 +195,16 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
                   <li key={t.id} className="flex items-center gap-2">
                     <TaskCheck id={t.id} done={t.status === "done"} title={t.title} className="flex-1" />
                     <span className="shrink-0 text-xs text-muted-foreground">{relativeDays(t.dueAt)}</span>
+                    <EditRecord entity="task" id={t.id} values={plainValues({ ...t, dueAt: t.dueAt ? new Date(t.dueAt).toISOString().slice(0, 10) : null })} options={editOptions} caps={ctx.caps} canDelete />
                   </li>
                 ))}
               </ul>
             ) : (
               <p className="text-sm text-muted-foreground">No tasks.</p>
             )}
+          </Section>
+          <Section title="Change history">
+            <RecordHistory entity="matter" id={m.id} />
           </Section>
           {visa ? (
             <Section title={`About subclass ${visa.code}`}>

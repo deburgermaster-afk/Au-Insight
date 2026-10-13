@@ -178,6 +178,30 @@ export const features: { group: string; items: Feature[] }[] = [
     ],
   },
   {
+    group: "Flexibility: edit, transfer and hand over",
+    items: [
+      ...live(
+        "Edit any record: clients, cases, tasks, appointments, invoices, documents, family members, applications, providers, employers",
+        "Every change kept with who, when, and before → after",
+        "Change history on each client and case",
+        "Hand a case to another agent, with its open tasks and upcoming appointments",
+        "Registered agent rules: lodged cases always keep a registered agent or supervisor",
+        "Move a case to another client (wrong client or new main applicant)",
+        "Change a case's visa or stream: checklist merged, received documents kept",
+        "Duplicate a case for a family member or the next visa",
+        "Hand a client to a new case officer, with their open cases",
+        "Course and provider transfers linked to the old enrolment",
+        "Release letter tracking (ESOS Standard 7), lower AQF level and onshore commission warnings",
+        "CoE number, course dates and AQF level on applications",
+        "Handover centre: permanent handover, cover while away (returns automatically), or swap",
+        "Preview every item before it moves, and send any item to someone else",
+        "Edit, reorder and remove checklist items on a case",
+        "Edit or void unpaid invoices",
+        "Your own checklists per visa, fee schedule, auto-assignment rules and pick lists",
+      ),
+    ],
+  },
+  {
     group: "Payroll, STP & super",
     items: [
       ...live(

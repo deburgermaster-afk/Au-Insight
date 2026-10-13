@@ -98,8 +98,18 @@ export const agencyProfile = pgTable("agency_profile", {
   /** AI document checks and drafting switched on (consent recorded). */
   aiDocsEnabledAt: timestamp("ai_docs_enabled_at", { withTimezone: true }),
   aiDocsEnabledBy: text("ai_docs_enabled_by"),
+  /** Agency's own checklists, fees, assignment rules and pick lists (Settings → Workflow). */
+  workflow: jsonb("workflow").$type<WorkflowConfig>(),
   ...stamps,
 });
+
+export type WorkflowConfig = {
+  checklists?: Record<string, { category: string; label: string; required: boolean }[]>;
+  fees?: Record<string, { professional: number | null; government: number | null }>;
+  assignment?: { rules: { match: string; userId: string }[]; fallback: "creator" | "round_robin" | "least_busy"; pool: string[]; cursor?: number };
+  lists?: { sources?: string[]; tags?: string[]; documentCategories?: string[]; outcomes?: string[] };
+  referencePrefix?: string;
+};
 
 export const clients = pgTable(
   "clients",
@@ -796,8 +806,43 @@ export const studentApplications = pgTable("student_applications", {
   acceptedAt: date("accepted_at"),
   assignedTo: text("assigned_to"),
   notes: text("notes"),
+  /** Course or provider change: the application this one replaced, and why. */
+  transferredFromId: text("transferred_from_id"),
+  transferReason: text("transfer_reason"),
+  /** Release from the current provider (ESOS Standard 7, first 6 months): not_needed | needed | requested | granted | refused */
+  releaseLetter: text("release_letter").default("not_needed").notNull(),
+  coeNumber: text("coe_number"),
+  coeIssuedAt: date("coe_issued_at"),
+  courseStart: date("course_start"),
+  courseEnd: date("course_end"),
+  /** Australian Qualifications Framework level, 1–10 (ELICOS and foundation are 0). */
+  aqfLevel: integer("aqf_level"),
   ...stamps,
 });
+
+/** Work moved between staff: permanent handovers, temporary cover (with a return date) and swaps. */
+export const handovers = pgTable(
+  "handovers",
+  {
+    id: id(),
+    agencyId: agency(),
+    mode: text("mode").notNull(), // permanent | cover | swap
+    fromUserId: text("from_user_id").notNull(),
+    toUserId: text("to_user_id"), // null when items go to several people
+    reason: text("reason"),
+    note: text("note"),
+    returnOn: date("return_on"),
+    status: text("status").default("active").notNull(), // active | returned | done
+    items: jsonb("items").$type<HandoverItem[]>().default([]).notNull(),
+    createdBy: text("created_by"),
+    createdByName: text("created_by_name"),
+    returnedAt: timestamp("returned_at", { withTimezone: true }),
+    ...stamps,
+  },
+  (t) => [index("handovers_agency_idx").on(t.agencyId, t.status)],
+);
+
+export type HandoverItem = { entity: "matter" | "client" | "task" | "appointment" | "application"; id: string; field: "assignedTo" | "supervisorId" | "staffId"; from: string | null; to: string | null; label: string };
 
 export type MailAttachment = { name: string; size: number; type: string; key: string };
 

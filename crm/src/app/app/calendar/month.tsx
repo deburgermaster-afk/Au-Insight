@@ -7,8 +7,10 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { EditRecord } from "@/components/edit/edit-record";
+import type { EditOptions } from "@/lib/edit-data";
 
-type A = { id: string; title: string; kind: string; startsAt: Date; endsAt: Date; location: string | null; clientName: string | null; staff: string | null };
+type A = { id: string; title: string; kind: string; startsAt: Date; endsAt: Date; location: string | null; clientName: string | null; staff: string | null; staffId: string | null; fee: string | null; notes: string | null };
 
 const kindTone: Record<string, string> = {
   consultation: "bg-primary/15 text-primary",
@@ -21,13 +23,13 @@ const kindTone: Record<string, string> = {
 const noop = () => () => {};
 
 // The grid depends on "today" in the viewer's time zone, so it renders in the browser only.
-export function MonthCalendar({ items }: { items: A[] }) {
+export function MonthCalendar({ items, options, caps }: { items: A[]; options: EditOptions; caps: string[] }) {
   const client = useSyncExternalStore(noop, () => true, () => false);
   if (!client) return <Skeleton className="h-[32rem] rounded-2xl" />;
-  return <Month items={items} />;
+  return <Month items={items} options={options} caps={caps} />;
 }
 
-function Month({ items }: { items: A[] }) {
+function Month({ items, options, caps }: { items: A[]; options: EditOptions; caps: string[] }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [dir, setDir] = useState(0);
   const [picked, setPicked] = useState<Date>(() => new Date());
@@ -127,6 +129,7 @@ function Month({ items }: { items: A[] }) {
                     <span className="ml-auto text-xs tabular-nums text-muted-foreground">
                       {format(new Date(a.startsAt), "h:mm a")} – {format(new Date(a.endsAt), "h:mm a")}
                     </span>
+                    <EditRecord entity="appointment" id={a.id} values={{ title: a.title, kind: a.kind, staffId: a.staffId, startsAt: new Date(a.startsAt).toISOString(), endsAt: new Date(a.endsAt).toISOString(), location: a.location, fee: a.fee, notes: a.notes }} options={options} caps={caps} canDelete />
                   </div>
                   <p className="mt-2 text-sm font-medium">{a.title}</p>
                   <p className="text-xs text-muted-foreground">

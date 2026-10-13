@@ -23,6 +23,12 @@ import { getCtx } from "@/lib/session";
 import { fileUrl } from "@/components/mail/file-icon";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getClient } from "@/lib/data";
+import { ManageClient } from "@/components/edit/case-manage";
+import { EditRecord } from "@/components/edit/edit-record";
+import { EditInvoice } from "@/components/edit/invoice-edit";
+import { RecordHistory } from "@/components/edit/record-history";
+import { getEditOptions } from "@/lib/edit-data";
+import { plainValues } from "@/lib/record-specs";
 import { aud, daysUntil, dmy, fullName, initials, relativeDays, time } from "@/lib/format";
 import { stages, visaByCode } from "@/lib/visas";
 
@@ -49,7 +55,7 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 async function ClientView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   await connection();
-  const [data, ctx] = await Promise.all([getClient(id), getCtx()]);
+  const [data, ctx, editOptions] = await Promise.all([getClient(id), getCtx(), getEditOptions()]);
   if (!data) notFound();
   const { client: c, matters, documents, activities, tasks, dependants, invoices, appointments, pathway, studies, emails, insights, aiMailOn } = data;
   const openInsights = insights.filter((i) => i.actionStatus === "open" && i.category !== "unrelated");
@@ -72,6 +78,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
         </div>
         <HeaderActions>
           <ClientStageSelect clientId={c.id} stage={c.stage} />
+          <ManageClient client={{ id: c.id, name, assignedTo: c.assignedTo }} values={plainValues(c)} options={editOptions} caps={ctx.caps} staff={editOptions.staff} />
           <ComposeDialog
             to={c.email ?? ""}
             clientId={c.id}
@@ -176,7 +183,8 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
                       <div key={d.id} className="flex flex-col rounded-xl border bg-muted/20 p-3.5">
                         <p className="flex items-center gap-2 text-sm font-medium">
                           <FileText className="size-4 shrink-0 text-muted-foreground" />
-                          <span className="truncate">{d.name}</span>
+                          <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                          <EditRecord entity="document" id={d.id} values={plainValues(d)} options={editOptions} caps={ctx.caps} />
                         </p>
                         <div className="mt-3 grid gap-1.5">
                           <Row k="Type" v={d.category ?? "Document"} />
@@ -256,6 +264,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
                               {owing > 0.005 && i.status !== "void" ? (
                                 <RecordPaymentDialog invoiceId={i.id} outstanding={owing} trigger={<Button size="xs" variant="outline">Record payment</Button>} />
                               ) : null}
+                              {Number(i.paid) === 0 && i.status !== "void" && ctx.caps.includes("billing") ? <EditInvoice id={i.id} number={i.number} items={i.items} dueAt={i.dueAt} notes={i.notes} /> : null}
                             </td>
                           </tr>
                         );
@@ -288,6 +297,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
                         <li key={t.id} className="flex items-center gap-3">
                           <TaskCheck id={t.id} done={t.status === "done"} title={t.title} className="flex-1" />
                           <Pill t={priorityTone[t.priority]}>{relativeDays(t.dueAt)}</Pill>
+                          <EditRecord entity="task" id={t.id} values={plainValues({ ...t, dueAt: t.dueAt ? new Date(t.dueAt).toISOString().slice(0, 10) : null })} options={editOptions} caps={ctx.caps} canDelete />
                         </li>
                       ))}
                     </ul>
@@ -310,6 +320,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
                           <span className="text-xs text-muted-foreground">
                             {dmy(a.startsAt)} {time(a.startsAt)}
                           </span>
+                          <EditRecord entity="appointment" id={a.id} values={plainValues(a)} options={editOptions} caps={ctx.caps} canDelete />
                         </li>
                       ))}
                     </ul>
@@ -340,7 +351,13 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
                     </div>
                   ) : null}
                 </div>
-                <Timeline items={activities} empty="No activity yet. Add the first note." />
+                <div className="grid content-start gap-4">
+                  <Timeline items={activities} empty="No activity yet. Add the first note." />
+                  <div className="rounded-xl border p-4">
+                    <p className="mb-3 text-sm font-medium">Change history</p>
+                    <RecordHistory entity="client" id={c.id} />
+                  </div>
+                </div>
               </div>
             </TabsContent>
 
@@ -348,19 +365,23 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
               <ClientEmails emails={emails} insights={insights} aiOn={aiMailOn} />
             </TabsContent>
 
-            <TabsContent value="family">
+            <TabsContent value="family" className="grid gap-3">
+              <div className="flex justify-end">
+                <EditRecord entity="dependant" parentId={c.id} options={editOptions} caps={ctx.caps} trigger={<Button size="sm" variant="outline"><Plus /> Add family member</Button>} />
+              </div>
               {dependants.length ? (
                 <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {dependants.map((d) => (
                     <li key={d.id} className="flex items-center gap-3 rounded-xl border bg-muted/20 p-3">
                       <UsersRound className="size-4 text-muted-foreground" />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{d.fullName}</p>
                         <p className="text-xs text-muted-foreground">
                           {label(d.relationship)}
                           {d.dateOfBirth ? ` · born ${dmy(d.dateOfBirth)}` : ""}
                         </p>
                       </div>
+                      <EditRecord entity="dependant" id={d.id} values={plainValues(d)} options={editOptions} caps={ctx.caps} canDelete />
                     </li>
                   ))}
                 </ul>

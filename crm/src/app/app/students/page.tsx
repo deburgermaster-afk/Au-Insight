@@ -15,6 +15,11 @@ import { getEducation, getPickers } from "@/lib/data";
 import { aud, daysUntil, dmy, initials } from "@/lib/format";
 import { appStages, appTone, commissionTone, stageLabel } from "@/lib/education";
 import { AppMenu, CommissionMenu, CourseFinder, NewApplication, NewInstitution } from "./students-client";
+import { ReleaseLetter, TransferCourse } from "@/components/edit/course-transfer";
+import { EditRecord } from "@/components/edit/edit-record";
+import { getEditOptions } from "@/lib/edit-data";
+import { plainValues } from "@/lib/record-specs";
+import { getCtx } from "@/lib/session";
 
 export const metadata = { title: "Students" };
 
@@ -22,7 +27,8 @@ const commissionOf = (a: { tuitionFee: string | null; commissionRate: string | n
 
 async function Students() {
   await connection();
-  const [{ apps, institutions }, pickers] = await Promise.all([getEducation(), getPickers()]);
+  const [{ apps, institutions }, pickers, editOptions, ctx] = await Promise.all([getEducation(), getPickers(), getEditOptions(), getCtx()]);
+  const byId = new Map(apps.map((a) => [a.id, a]));
   const insts = institutions.map((i) => ({ id: i.id, name: i.name }));
   const live = apps.filter((a) => !["rejected", "withdrawn"].includes(a.status));
   const sum = (st: string) => apps.filter((a) => a.commissionStatus === st).reduce((t, a) => t + commissionOf(a), 0);
@@ -76,12 +82,23 @@ async function Students() {
                             </Link>
                             <p className="line-clamp-2 text-xs text-muted-foreground">{a.course}</p>
                           </div>
+                          <EditRecord entity="application" id={a.id} values={plainValues(a)} options={editOptions} caps={ctx.caps} title={`Edit ${a.student}'s application`} />
                           <AppMenu id={a.id} status={a.status} commission={a.commissionStatus} />
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                           <span className="truncate">{a.institution ?? "No institution"}</span>
                           {a.intake ? <span>· {a.intake}</span> : null}
                           {a.onshoreTransfer ? <Pill t="amber">Onshore transfer</Pill> : null}
+                          {a.coeNumber ? <span>· CoE {a.coeNumber}</span> : null}
+                        </div>
+                        {a.transferredFromId ? (
+                          <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                            From {byId.get(a.transferredFromId)?.course ?? "an earlier course"}
+                            {byId.get(a.transferredFromId)?.institution ? ` (${byId.get(a.transferredFromId)?.institution})` : ""} <ReleaseLetter id={a.id} status={a.releaseLetter} />
+                          </p>
+                        ) : null}
+                        <div className="mt-2 flex justify-end">
+                          <TransferCourse app={{ id: a.id, course: a.course, institutionId: a.institutionId, institution: a.institution, status: a.status, aqfLevel: a.aqfLevel, courseStart: a.courseStart, student: a.student, onshore: a.onshore }} institutions={insts} />
                         </div>
                       </div>
                     ))}
@@ -143,7 +160,7 @@ async function Students() {
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
             <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
             <p>
-              ESOS: providers can't pay commission for onshore students who change provider once they've been accepted after 31 March 2026. {ineligible.length ? `${ineligible.length} application${ineligible.length > 1 ? "s are" : " is"} flagged ineligible.` : ""} Commission becomes claimable at enrolment; record
+              ESOS: providers can&rsquo;t pay commission for onshore students who change provider once they&rsquo;ve been accepted after 31 March 2026. {ineligible.length ? `${ineligible.length} application${ineligible.length > 1 ? "s are" : " is"} flagged ineligible.` : ""} Commission becomes claimable at enrolment; record
               what you receive so it can be reported to the provider.
             </p>
           </div>
@@ -163,7 +180,10 @@ async function Students() {
                         {i.state ? ` · ${i.state}` : ""}
                       </p>
                     </div>
-                    {i.commissionRate ? <Pill t="green">{Number(i.commissionRate)}%</Pill> : null}
+                    <span className="flex items-center gap-1">
+                      {i.commissionRate ? <Pill t="green">{Number(i.commissionRate)}%</Pill> : null}
+                      <EditRecord entity="institution" id={i.id} values={plainValues(i)} options={editOptions} caps={ctx.caps} canDelete={ctx.caps.includes("team")} />
+                    </span>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                     <div>

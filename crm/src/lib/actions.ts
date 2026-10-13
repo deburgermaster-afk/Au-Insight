@@ -9,6 +9,8 @@ import { agencyTag } from "@/lib/data";
 import { actionCtx, type Ctx, requireCap, requireRole } from "@/lib/session";
 import { visaByCode } from "@/lib/visas";
 import { lodgeBlocked } from "@/lib/signoff";
+import { checklistFor, feesFor } from "@/lib/workflow";
+import { pickAssignee, workflowFor } from "@/lib/workflow-server";
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -129,8 +131,11 @@ export async function createMatter(form: FormData): Promise<ActionResult> {
     const visaCode = blank(form.get("visaCode"));
     if (!clientId || !visaCode) return { ok: false, error: "Choose a client and a visa." };
     const visa = visaByCode(visaCode);
+    const wf = await workflowFor(ctx.agencyId);
     const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(s.matters).where(eq(s.matters.agencyId, ctx.agencyId));
-    const reference = `LDG-${new Date().getFullYear()}-${String(n + 1).padStart(4, "0")}`;
+    const reference = `${wf.referencePrefix || "LDG"}-${new Date().getFullYear()}-${String(n + 1).padStart(4, "0")}`;
+    const assignee = blank(form.get("assignedTo")) ?? (await pickAssignee(ctx.agencyId, visaCode, ctx.userId)).userId;
+    const fees = feesFor(wf, visaCode);
     const [row] = await db
       .insert(s.matters)
       .values({
@@ -142,17 +147,16 @@ export async function createMatter(form: FormData): Promise<ActionResult> {
         stream: blank(form.get("stream")),
         stage: (blank(form.get("stage")) ?? "engaged") as typeof s.matters.$inferInsert.stage,
         priority: (blank(form.get("priority")) ?? "normal") as typeof s.matters.$inferInsert.priority,
-        assignedTo: blank(form.get("assignedTo")) ?? ctx.userId,
+        assignedTo: assignee,
         employerId: blank(form.get("employerId")),
         dueAt: blank(form.get("dueAt")),
-        feeProfessional: blank(form.get("feeProfessional")),
-        feeGovernment: blank(form.get("feeGovernment")),
+        feeProfessional: blank(form.get("feeProfessional")) ?? (fees?.professional != null ? String(fees.professional) : null),
+        feeGovernment: blank(form.get("feeGovernment")) ?? (fees?.government != null ? String(fees.government) : null),
       })
       .returning({ id: s.matters.id });
-    if (visa?.checklist.length) {
-      await db.insert(s.checklistItems).values(
-        visa.checklist.map((c, i) => ({ agencyId: ctx.agencyId, matterId: row.id, category: c.category, label: c.label, required: c.required !== false, sort: i })),
-      );
+    const list = checklistFor(wf, visaCode).items;
+    if (list.length) {
+      await db.insert(s.checklistItems).values(list.map((c, i) => ({ agencyId: ctx.agencyId, matterId: row.id, category: c.category, label: c.label, required: c.required, sort: i })));
     }
     await db.update(s.clients).set({ stage: "active" }).where(and(eq(s.clients.id, clientId), eq(s.clients.agencyId, ctx.agencyId), sql`${s.clients.stage} in ('lead','prospect')`));
     await log(ctx, { clientId, matterId: row.id, kind: "system", title: `Matter ${reference} opened`, body: visa ? `${visa.name} (${visa.code})` : visaCode });

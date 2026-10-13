@@ -1,3 +1,6 @@
+import { ArrowRightLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { connection } from "next/server";
 import { BadgeCheck, CircleAlert, Mail, ShieldCheck } from "lucide-react";
 import { Suspense } from "react";
@@ -37,6 +40,11 @@ async function Team() {
     <div className="grid gap-3">
       {canEdit ? (
         <HeaderActions>
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/app/team/handover">
+              <ArrowRightLeft /> Handover & swaps
+            </Link>
+          </Button>
           <InviteDialog />
         </HeaderActions>
       ) : null}

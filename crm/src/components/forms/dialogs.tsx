@@ -36,7 +36,7 @@ export function NewMatterDialog({ pickers, clientId, trigger }: { pickers: Picke
     <ActionDialog
       trigger={trigger ?? plus("New matter")}
       title="Open a matter"
-      description="The document checklist is created from the visa library and can be edited per matter."
+      description="The checklist, fees and case officer come from your workflow settings when you leave them blank. Everything can be edited later."
       action={createMatter}
       submitLabel="Open matter"
       success="Matter opened"
@@ -69,13 +69,13 @@ export function NewMatterDialog({ pickers, clientId, trigger }: { pickers: Picke
         <SelectField label="Priority" name="priority" defaultValue="normal" options={priorityOpts} />
       </Row>
       <Row>
-        <SelectField label="Case officer" name="assignedTo" options={opts(pickers.staff)} placeholder="Me" />
+        <SelectField label="Case officer" name="assignedTo" options={opts(pickers.staff)} placeholder="Automatic (assignment rules)" />
         <TextField label="Target lodgement" name="dueAt" type="date" />
       </Row>
       {visa && ["482", "186", "494", "407", "SBS"].includes(visa.code) ? <SelectField label="Sponsor" name="employerId" options={opts(pickers.employers)} /> : null}
       <Row>
-        <TextField label="Professional fee (AUD)" name="feeProfessional" type="number" min={0} step="0.01" placeholder="3,300" />
-        <TextField label="Government charge (AUD)" name="feeGovernment" type="number" min={0} step="0.01" placeholder="4,910" />
+        <TextField label="Professional fee (AUD)" name="feeProfessional" type="number" min={0} step="0.01" placeholder="From fee schedule" />
+        <TextField label="Government charge (AUD)" name="feeGovernment" type="number" min={0} step="0.01" placeholder="From fee schedule" />
       </Row>
     </ActionDialog>
   );

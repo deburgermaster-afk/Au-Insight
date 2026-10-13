@@ -1,5 +1,8 @@
 "use client";
 
+import { EditRecord } from "@/components/edit/edit-record";
+import type { EditOptions } from "@/lib/edit-data";
+
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useOptimistic, useState, useTransition } from "react";
@@ -11,6 +14,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { setTaskStatus } from "@/lib/actions";
 import { relativeDays } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+const halfDayAgo = () => Date.now() - 864e5 / 2;
 
 type T = {
   id: string;
@@ -34,7 +39,7 @@ const columns = [
   { key: "done", label: "Done", tone: "bg-emerald-500" },
 ];
 
-export function TaskBoard({ tasks, me }: { tasks: T[]; me: string }) {
+export function TaskBoard({ tasks, me, options, caps }: { tasks: T[]; me: string; options: EditOptions; caps: string[] }) {
   const [scope, setScope] = useState("all");
   const [list, update] = useOptimistic(tasks, (s, { id, status }: { id: string; status: string }) => s.map((t) => (t.id === id ? { ...t, status } : t)));
   const [, start] = useTransition();
@@ -45,7 +50,7 @@ export function TaskBoard({ tasks, me }: { tasks: T[]; me: string }) {
       const r = await setTaskStatus(id, status);
       if (!r.ok) toast.error(r.error);
     });
-  const overdue = (t: T) => t.status !== "done" && t.dueAt && new Date(t.dueAt).getTime() < Date.now() - 864e5 / 2;
+  const overdue = (t: T) => t.status !== "done" && t.dueAt && new Date(t.dueAt).getTime() < halfDayAgo();
 
   return (
     <div className="grid gap-4">
@@ -84,6 +89,7 @@ export function TaskBoard({ tasks, me }: { tasks: T[]; me: string }) {
                         {t.dueAt ? relativeDays(t.dueAt) : label(t.priority)}
                       </Pill>
                       <span className="truncate text-[11px] text-muted-foreground">{t.assignee}</span>
+                      <EditRecord entity="task" id={t.id} values={{ title: t.title, description: t.description, dueAt: t.dueAt ? new Date(t.dueAt).toISOString().slice(0, 10) : null, priority: t.priority, status: t.status, assignedTo: t.assignedTo }} options={options} caps={caps} canDelete />
                       <DropdownMenu>
                         <DropdownMenuTrigger className="ml-auto rounded px-1.5 text-[11px] text-muted-foreground hover:bg-muted">Move</DropdownMenuTrigger>
                         <DropdownMenuContent align="end">

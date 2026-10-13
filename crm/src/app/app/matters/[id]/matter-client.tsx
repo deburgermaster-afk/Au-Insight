@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, FileSignature, Loader2, Paperclip, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, FileSignature, Loader2, Paperclip, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { sendAgreement, voidAgreement } from "@/lib/agreement-actions";
 import { ago } from "@/lib/format";
@@ -11,7 +11,10 @@ import { checklistTone, label, Pill } from "@/components/app/badges";
 import { ProgressBar } from "@/components/app/motion";
 import { AreaField, Row, TextField } from "@/components/forms/fields";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { EditRecord } from "@/components/edit/edit-record";
+import type { EditOptions } from "@/lib/edit-data";
+import { moveChecklistItem } from "@/lib/record-actions";
 import { Input } from "@/components/ui/input";
 import { addChecklistItem, moveMatter, setChecklistStatus, setCompliance, updateMatter } from "@/lib/actions";
 import { cn } from "@/lib/utils";
@@ -72,7 +75,7 @@ type Doc = { id: string; name: string; storageKey: string | null; checklistItemI
 const statuses = ["needed", "requested", "received", "approved", "rejected", "waived"];
 const doneish = (s: string) => s === "approved" || s === "received" || s === "waived";
 
-export function Checklist({ matterId, items, docs, agencyId, clientId, aiDocs = false }: { matterId: string; items: Item[]; docs: Doc[]; agencyId: string; clientId: string; aiDocs?: boolean }) {
+export function Checklist({ matterId, items, docs, agencyId, clientId, aiDocs = false, editOptions, caps = [] }: { matterId: string; items: Item[]; docs: Doc[]; agencyId: string; clientId: string; aiDocs?: boolean; editOptions?: EditOptions; caps?: string[] }) {
   const [list, update] = useOptimistic(items, (state, { id, status }: { id: string; status: string }) => state.map((i) => (i.id === id ? { ...i, status } : i)));
   const [, start] = useTransition();
   const [adding, startAdd] = useTransition();
@@ -165,8 +168,16 @@ export function Checklist({ matterId, items, docs, agencyId, clientId, aiDocs = 
                               {label(s)}
                             </DropdownMenuItem>
                           ))}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => start(async () => void (await moveChecklistItem(i.id, "up")))}>
+                            <ArrowUp /> Move up
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => start(async () => void (await moveChecklistItem(i.id, "down")))}>
+                            <ArrowDown /> Move down
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      {editOptions ? <EditRecord entity="checklist" id={i.id} values={{ label: i.label, category: i.category, required: i.required, note: i.note ?? null }} options={editOptions} caps={caps} canDelete /> : null}
                     </li>
                   ))}
                 </motion.ul>

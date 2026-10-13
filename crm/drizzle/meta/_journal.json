@@ -141,6 +141,13 @@
       "when": 1791889547443,
       "tag": "0019_payroll_bank",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791894781551,
+      "tag": "0020_flexibility",
+      "breakpoints": true
     }
   ]
 }

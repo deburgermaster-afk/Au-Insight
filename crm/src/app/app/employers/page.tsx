@@ -9,12 +9,16 @@ import { TableSkeleton } from "@/components/app/skeletons";
 import { NewEmployerDialog } from "@/components/forms/dialogs";
 import { listEmployers } from "@/lib/data";
 import { daysUntil } from "@/lib/format";
+import { EditRecord } from "@/components/edit/edit-record";
+import { getEditOptions } from "@/lib/edit-data";
+import { plainValues } from "@/lib/record-specs";
+import { getCtx } from "@/lib/session";
 
 export const metadata = { title: "Employers" };
 
 async function Employers() {
   await connection();
-  const rows = await listEmployers();
+  const [rows, options, ctx] = await Promise.all([listEmployers(), getEditOptions(), getCtx()]);
   if (!rows.length) return <p className="rounded-2xl border p-10 text-center text-sm text-muted-foreground">No sponsoring employers yet.</p>;
   return (
     <Stagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -26,7 +30,10 @@ async function Employers() {
                 <Building2 className="size-5" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold">{e.name}</p>
+                <p className="flex items-center gap-1 font-semibold">
+                  <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                  <EditRecord entity="employer" id={e.id} values={plainValues(e)} options={options} caps={ctx.caps} canDelete={ctx.caps.includes("team")} />
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {e.industry ?? "—"}
                   {e.abn ? ` · ABN ${e.abn}` : ""}

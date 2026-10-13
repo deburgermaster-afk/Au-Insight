@@ -44,5 +44,15 @@ export async function GET(req: Request) {
     }
   }
   for (const a of touched) revalidateTag(agencyTag(a), { expire: 0 });
-  return Response.json({ ...r, alerts, domains, payments });
+  // Temporary cover that has reached its return date goes back to the original owner.
+  const { dueReturns, returnHandover } = await import("@/lib/handover");
+  let covers = 0;
+  for (const h of await dueReturns()) {
+    const x = await returnHandover(h.agencyId, h.id, { id: null, name: "Lodgely (cover ended)" });
+    if (!x.error) {
+      covers++;
+      revalidateTag(agencyTag(h.agencyId), { expire: 0 });
+    }
+  }
+  return Response.json({ ...r, alerts, domains, payments, covers });
 }
