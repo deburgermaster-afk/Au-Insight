@@ -32,7 +32,7 @@ export async function recordReceipt(a: Attempt, opts: { amount: number; referenc
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Sydney" });
   const [led] = await db
     .insert(s.ledger)
-    .values({ agencyId: a.agencyId, clientId: a.clientId, invoiceId: a.invoiceId, account, kind: "receipt", amount: opts.amount.toFixed(2), method: methodLabel(a.provider), reference: [inv?.number, opts.reference].filter(Boolean).join(" · ").slice(0, 200), occurredAt: today, memo: opts.note ?? null })
+    .values({ agencyId: a.agencyId, clientId: a.clientId, invoiceId: a.invoiceId, account, kind: "receipt", amount: opts.amount.toFixed(2), method: methodLabel(a.provider), reference: [inv?.number, opts.reference].filter(Boolean).join(" · ").slice(0, 200), occurredAt: today, memo: opts.note && opts.note !== opts.reference ? opts.note : null })
     .returning({ id: s.ledger.id });
   await db.update(s.paymentAttempts).set({ ledgerId: led.id }).where(eq(s.paymentAttempts.id, a.id));
   if (inv) {

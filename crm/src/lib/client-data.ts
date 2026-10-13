@@ -102,7 +102,8 @@ export async function portalInvoice(c: ClientCtx, id: string) {
     .leftJoin(s.matters, eq(s.matters.id, s.invoices.matterId))
     .where(and(eq(s.invoices.agencyId, agencyId), eq(s.invoices.clientId, clientId), eq(s.invoices.id, id)));
   if (!row || row.i.status === "draft" || row.i.status === "void") return null;
-  const receipts = await db.select().from(s.ledger).where(and(eq(s.ledger.agencyId, agencyId), eq(s.ledger.invoiceId, id), eq(s.ledger.kind, "receipt"))).orderBy(desc(s.ledger.occurredAt));
+  // Money the client paid (not internal moves from trust to office for the same invoice).
+  const receipts = (await db.select().from(s.ledger).where(and(eq(s.ledger.agencyId, agencyId), eq(s.ledger.invoiceId, id), eq(s.ledger.kind, "receipt"))).orderBy(desc(s.ledger.occurredAt))).filter((r) => r.method !== "Transfer from trust");
   return { ...row, receipts };
 }
 
