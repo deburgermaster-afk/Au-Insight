@@ -25,7 +25,15 @@ export const features: { group: string; items: Feature[] }[] = [
         "Dependants and family members",
         "Per-client matters, documents, tasks, invoices and bookings",
       ),
-      ...next("Duplicate detection and merge", "Bulk import from CSV and other CRMs", "Custom fields", "Client tags and segments", "Birthday and anniversary reminders"),
+      ...live(
+        "Import clients from a CSV or Excel export: columns matched automatically",
+        "Import review: new, already in Lodgely, warnings and rows that can't import",
+        "Import choice for existing clients: skip, fill in the gaps, or create anyway",
+        "Duplicate finder: same email, passport, name and date of birth, or phone and name",
+        "Merge duplicates: pick each detail, cases, documents, invoices and payments move across",
+        "Mark look-alikes as different people",
+      ),
+      ...next("Custom fields", "Client tags and segments", "Birthday and anniversary reminders"),
     ],
   },
   {
@@ -307,7 +315,7 @@ export const features: { group: string; items: Feature[] }[] = [
     items: [
       ...live("⌘K command menu", "Dark mode", "Works on phones, tablets and desktops", "Collapsible sidebar", "Instant page navigation", "Agency profile with MARN and ABN", "Demo agency in one click"),
       ...live("Client upload portal for checklist documents", "Client portal app: sign in with a 6-digit email code or one-tap link, no password", "Client portal: case progress, Home Affairs status and RFI due dates", "Client portal: checklist uploads from the phone camera", "Client portal: case timeline and files", "Client portal: invoices, bank transfer details with copy buttons, payments received", "Client portal: messages to the agency inbox", "Client portal: clients keep their contact details current", "View the portal as the client"),
-      ...next("AI drafting of submissions and cover letters", "AI document check against the checklist", "Mobile app"),
+      ...next("Mobile app"),
     ],
   },
 ];

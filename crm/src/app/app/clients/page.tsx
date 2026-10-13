@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { GitMerge, Plus, Upload } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Guard } from "@/components/app/guard";
@@ -22,11 +22,23 @@ export default function ClientsPage() {
         title="Clients"
         description="Everyone your agency advises, from first enquiry to grant."
         actions={
-          <Button size="sm" asChild>
-            <Link href="/app/clients/new">
-              <Plus /> New client
-            </Link>
-          </Button>
+          <>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/app/clients/duplicates">
+                <GitMerge /> Duplicates
+              </Link>
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/app/clients/import">
+                <Upload /> Import
+              </Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/app/clients/new">
+                <Plus /> New client
+              </Link>
+            </Button>
+          </>
         }
       />
       <Suspense fallback={<TableSkeleton />}>

@@ -981,3 +981,16 @@ export const drafts = pgTable(
   },
   (t) => [index("drafts_matter_idx").on(t.agencyId, t.matterId)],
 );
+
+/** Pairs of clients staff confirmed are different people, so they stop showing as duplicates. */
+export const duplicateDismissals = pgTable(
+  "duplicate_dismissals",
+  {
+    agencyId: agency(),
+    a: text("a").notNull(),
+    b: text("b").notNull(),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.agencyId, t.a, t.b] })],
+);
