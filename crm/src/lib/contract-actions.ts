@@ -255,8 +255,8 @@ export async function signContract(id: string, typedName: string, agreed: boolea
     let pdfKey: string | null = null;
     try {
       const pdf = await contractPdf({ title: c.title, body: c.body, agencyName: ctx.agencyName, id: c.id, hash: c.hash!, sentByName: c.createdByName, sentAt: c.sentAt, signedName: name, signedAt, ip, agent, email: ctx.email });
-      pdfKey = `${agencyPrefix(ctx.agencyId)}contracts/${c.id}.pdf`;
-      await putFile(pdfKey, pdf, "application/pdf");
+      const blob = await putFile(`${agencyPrefix(ctx.agencyId)}contracts/${c.id}.pdf`, pdf, "application/pdf");
+      pdfKey = blob.pathname;
     } catch (e) {
       console.error("contract pdf", e);
       pdfKey = null;
