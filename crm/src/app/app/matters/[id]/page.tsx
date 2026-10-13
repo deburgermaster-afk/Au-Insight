@@ -19,6 +19,9 @@ import { Timeline } from "@/components/app/timeline";
 import { WithPickers } from "@/components/app/with-pickers";
 import { NewTaskDialog } from "@/components/forms/dialogs";
 import { getAgencyProfile, getMatter } from "@/lib/data";
+import { and, desc, eq, ne } from "drizzle-orm";
+import { db, schema as sch } from "@/db";
+import { fileUrl } from "@/components/mail/file-icon";
 import { MatterAiToggle } from "@/components/mail-ai/controls";
 import { ReviewDeadlineCard } from "@/components/lodge/review-deadline";
 import { aud, daysUntil, dmy, fullName, relativeDays } from "@/lib/format";
@@ -35,6 +38,9 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
   const ctx = await getCtx();
   const visa = visaByCode(m.visaCode);
   const aiOn = Boolean((await getAgencyProfile())?.aiMailEnabledAt);
+  const [ag] = await db.select().from(sch.serviceAgreements).where(and(eq(sch.serviceAgreements.agencyId, ctx.agencyId), eq(sch.serviceAgreements.matterId, m.id), ne(sch.serviceAgreements.status, "void"))).orderBy(desc(sch.serviceAgreements.createdAt)).limit(1);
+  const [agDoc] = ag?.documentId ? await db.select({ key: sch.documents.storageKey, name: sch.documents.name }).from(sch.documents).where(eq(sch.documents.id, ag.documentId)) : [];
+  const esign = ag ? { id: ag.id, status: ag.status, createdAt: ag.createdAt, viewedAt: ag.viewedAt, signedAt: ag.signedAt, signerName: ag.signerName, pdf: agDoc?.key ? fileUrl(agDoc.key, agDoc.name) : null } : null;
   return (
     <>
       <HeaderActions>
@@ -118,7 +124,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
         </div>
         <div className="grid content-start gap-4">
           <Section title="Code of Conduct">
-            <ComplianceChecks matterId={m.id} guide={m.consumerGuideAt} agreement={m.agreementSignedAt} />
+            <ComplianceChecks matterId={m.id} guide={m.consumerGuideAt} agreement={m.agreementSignedAt} esign={esign} hasEmail={Boolean(client.email)} />
           </Section>
           <Section title="Lodgement">
             <MatterDetailsForm matterId={m.id} m={m} />

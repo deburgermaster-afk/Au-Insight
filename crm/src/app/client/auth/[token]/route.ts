@@ -6,7 +6,8 @@ export async function GET(req: Request, { params }: RouteContext<"/client/auth/[
   const { token } = await params;
   const session = await redeemMagicLink(token);
   if (!session) return NextResponse.redirect(new URL("/client/sign-in?expired=1", req.url));
-  const res = NextResponse.redirect(new URL("/client", req.url));
+  const next = new URL(req.url).searchParams.get("next");
+  const res = NextResponse.redirect(new URL(next && /^\/client(\/[\w\-/]*)?$/.test(next) ? next : "/client", req.url));
   res.cookies.set(CLIENT_COOKIE, session.token, { httpOnly: true, secure: true, sameSite: "lax", path: "/", expires: session.expiresAt });
   return res;
 }

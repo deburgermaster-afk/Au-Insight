@@ -89,6 +89,8 @@ export const agencyProfile = pgTable("agency_profile", {
   mailUsageAlerts: jsonb("mail_usage_alerts").$type<string[]>(), // limit emails already sent, e.g. "day:2026-10-12:80"
   /** A second registered agent must sign off a lodgement before the matter can move to Lodged. */
   requireSignoff: boolean("require_signoff").default(true).notNull(),
+  /** The agency's own wording for service agreements (null = Lodgely's template). */
+  agreementTerms: text("agreement_terms"),
   ...stamps,
 });
 
@@ -803,4 +805,45 @@ export const lodgementSignoffs = pgTable(
     ...stamps,
   },
   (t) => [index("signoffs_matter_idx").on(t.agencyId, t.matterId), index("signoffs_reviewer_idx").on(t.agencyId, t.reviewerId, t.status)],
+);
+
+export type AgreementContent = {
+  title: string;
+  agency: { name: string; legalName: string | null; abn: string | null; marn: string | null; agent: string; agentMarn: string | null; email: string | null; phone: string | null; address: string | null };
+  client: { name: string; email: string | null; dateOfBirth: string | null; address: string | null };
+  matter: { reference: string; visa: string; stream: string | null };
+  fees: { label: string; amount: number; note?: string }[];
+  sections: { heading: string; body: string[] }[];
+  preparedOn: string;
+};
+
+/** A service agreement sent to a client to e-sign in the portal. The content is frozen when sent. */
+export const serviceAgreements = pgTable(
+  "service_agreements",
+  {
+    id: id(),
+    agencyId: agency(),
+    matterId: text("matter_id")
+      .notNull()
+      .references(() => matters.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("sent"), // sent | viewed | signed | void
+    content: jsonb("content").$type<AgreementContent>().notNull(),
+    contentHash: text("content_hash").notNull(),
+    sentBy: text("sent_by"),
+    sentByName: text("sent_by_name"),
+    viewedAt: timestamp("viewed_at", { withTimezone: true }),
+    signedAt: timestamp("signed_at", { withTimezone: true }),
+    signerName: text("signer_name"),
+    signerEmail: text("signer_email"),
+    signerIp: text("signer_ip"),
+    signerAgent: text("signer_agent"),
+    signature: text("signature"), // PNG data URL of the drawn signature
+    guideAcknowledged: boolean("guide_acknowledged").default(false).notNull(),
+    documentId: text("document_id"),
+    ...stamps,
+  },
+  (t) => [index("agreements_matter_idx").on(t.agencyId, t.matterId), index("agreements_client_idx").on(t.clientId, t.status)],
 );

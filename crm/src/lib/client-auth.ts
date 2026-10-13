@@ -14,10 +14,10 @@ const hash = (t: string) => createHash("sha256").update(t).digest("hex");
 export const appUrl = () => process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
 
 /** A single-use sign-in link for a client's portal. */
-export async function createMagicLink(clientId: string, agencyId: string, createdBy?: string) {
+export async function createMagicLink(clientId: string, agencyId: string, createdBy?: string, next?: string, minutes = LINK_MINUTES) {
   const token = randomBytes(32).toString("base64url");
-  await db.insert(s.clientSessions).values({ agencyId, clientId, tokenHash: hash(token), kind: "magic", expiresAt: new Date(Date.now() + LINK_MINUTES * 60_000), createdBy: createdBy ?? null });
-  return `${appUrl()}/client/auth/${token}`;
+  await db.insert(s.clientSessions).values({ agencyId, clientId, tokenHash: hash(token), kind: "magic", expiresAt: new Date(Date.now() + minutes * 60_000), createdBy: createdBy ?? null });
+  return `${appUrl()}/client/auth/${token}${next ? `?next=${encodeURIComponent(next)}` : ""}`;
 }
 
 /** Trades a magic link for a session token (stored in an httpOnly cookie by the caller). */

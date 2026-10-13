@@ -1,6 +1,9 @@
 "use client";
 
-import { Check, ChevronDown, Loader2, Paperclip, Plus } from "lucide-react";
+import { Check, ChevronDown, FileSignature, Loader2, Paperclip, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { sendAgreement, voidAgreement } from "@/lib/agreement-actions";
+import { ago } from "@/lib/format";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -241,7 +244,9 @@ export function MatterDetailsForm({
   );
 }
 
-export function ComplianceChecks({ matterId, guide, agreement }: { matterId: string; guide: string | null; agreement: string | null }) {
+type Esign = { id: string; status: string; createdAt: Date; viewedAt: Date | null; signedAt: Date | null; signerName: string | null; pdf: string | null } | null;
+
+export function ComplianceChecks({ matterId, guide, agreement, esign, hasEmail }: { matterId: string; guide: string | null; agreement: string | null; esign?: Esign; hasEmail?: boolean }) {
   const [pending, start] = useTransition();
   const rows = [
     { key: "consumerGuideAt" as const, value: guide, title: "Consumer Guide given", code: "Code s38", hint: "Before giving immigration assistance" },
@@ -271,6 +276,53 @@ export function ComplianceChecks({ matterId, guide, agreement }: { matterId: str
           </button>
         </li>
       ))}
+      <EsignRow matterId={matterId} esign={esign ?? null} signed={Boolean(agreement)} hasEmail={hasEmail ?? true} />
     </ul>
+  );
+}
+
+function EsignRow({ matterId, esign, signed, hasEmail }: { matterId: string; esign: Esign; signed: boolean; hasEmail: boolean }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  const run = (fn: () => Promise<{ ok: boolean; error?: string; id?: string }>, msg: (id?: string) => string) =>
+    start(async () => {
+      const r = await fn();
+      if (!r.ok) return void toast.error(r.error);
+      toast.success(msg(r.id));
+      router.refresh();
+    });
+  const open = esign && (esign.status === "sent" || esign.status === "viewed");
+  if (esign?.status === "signed")
+    return (
+      <li className="flex items-center gap-2 rounded-xl border border-emerald-500/30 px-3 py-2 text-xs">
+        <FileSignature className="size-4 shrink-0 text-emerald-500" />
+        <span className="min-w-0 flex-1" suppressHydrationWarning>
+          E-signed by {esign.signerName} {esign.signedAt ? ago(esign.signedAt) : ""}
+        </span>
+        {esign.pdf ? (
+          <a href={esign.pdf} target="_blank" rel="noreferrer" className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline">
+            Signed PDF
+          </a>
+        ) : null}
+      </li>
+    );
+  if (signed) return null;
+  return (
+    <li className="grid gap-2 rounded-xl border border-dashed px-3 py-2.5 text-xs">
+      <span className="flex items-center gap-2" suppressHydrationWarning>
+        <FileSignature className="size-4 shrink-0 text-sky-500" />
+        {open ? `Sent to sign ${ago(esign!.createdAt)}${esign!.viewedAt ? ` · opened ${ago(esign!.viewedAt)}` : " · not opened yet"}` : "Let the client read and sign the agreement in their portal."}
+      </span>
+      <span className="flex flex-wrap gap-2">
+        <Button size="sm" variant={open ? "outline" : "default"} className="h-7 rounded-full text-xs" disabled={pending || !hasEmail} title={hasEmail ? undefined : "Add the client's email first"} onClick={() => run(() => sendAgreement(matterId), (id) => (id === "emailed" ? "Sent. The client got an email with a link to sign." : "Ready to sign in the client's portal."))}>
+          {pending ? <Loader2 className="animate-spin" /> : <FileSignature />} {open ? "Send again" : "Send to sign"}
+        </Button>
+        {open ? (
+          <Button size="sm" variant="ghost" className="h-7 rounded-full text-xs text-muted-foreground" disabled={pending} onClick={() => confirm("Withdraw this agreement? The client won't be able to sign it.") && run(() => voidAgreement(esign!.id), () => "Withdrawn")}>
+            Withdraw
+          </Button>
+        ) : null}
+      </span>
+    </li>
   );
 }
