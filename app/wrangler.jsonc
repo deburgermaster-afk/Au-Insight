@@ -1,0 +1,17 @@
+// Cloudflare Workers config for the Immi Insight web app (Flutter build in build/web).
+// Workers Builds: root directory "app", build command "bash scripts/cloudflare-build.sh",
+// deploy command "npx wrangler deploy".
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "immi-insight",
+  "main": "cloudflare/worker.js",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "build/web",
+    "binding": "ASSETS",
+    // Deep links fall back to index.html; the worker only handles /r2/* asset paths.
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/r2/*"]
+  },
+  "observability": { "enabled": true }
+}
