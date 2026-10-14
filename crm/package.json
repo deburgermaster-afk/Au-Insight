@@ -15,6 +15,7 @@
     "@date-fns/tz": "^1.5.0",
     "@hookform/resolvers": "^5.9.1",
     "@neondatabase/serverless": "^1.2.0",
+    "@opennextjs/cloudflare": "^1.20.11",
     "@tanstack/react-table": "^9.2.8",
     "@tiptap/extension-color": "^3.31.4",
     "@tiptap/extension-font-family": "^3.31.4",
@@ -67,6 +68,7 @@
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.151.0"
   }
 }

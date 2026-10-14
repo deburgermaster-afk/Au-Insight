@@ -1,0 +1,13 @@
+// Cloudflare Workers config for the Lodgely CRM (Next.js via OpenNext).
+// Workers Builds: root directory "crm", build command
+// "npx opennextjs-cloudflare build", deploy command "npx opennextjs-cloudflare deploy".
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lodgely",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-13",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "lodgely" }],
+  "observability": { "enabled": true }
+}
