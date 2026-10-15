@@ -1,14 +1,8 @@
 import "server-only";
 import { and, desc, eq, gte } from "drizzle-orm";
-import { cacheLife, cacheTag } from "next/cache";
 import { db, schema as s } from "@/db";
-import { agencyTag } from "@/lib/data";
 import { getCtx } from "@/lib/session";
 
-function tag(agencyId: string) {
-  cacheTag(agencyTag(agencyId));
-  cacheLife("minutes");
-}
 
 /** Everything for the signed-in person's employee portal. */
 export async function getMe() {
@@ -17,8 +11,6 @@ export async function getMe() {
 }
 
 async function meFor(agencyId: string, userId: string) {
-  "use cache";
-  tag(agencyId);
   const since = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
   const [[profile], leave, time, slips, cpd, tasks] = await Promise.all([
     db.select().from(s.staffProfiles).where(and(eq(s.staffProfiles.agencyId, agencyId), eq(s.staffProfiles.userId, userId))),
@@ -48,8 +40,6 @@ export async function getHr() {
 }
 
 async function hrFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [staff, leave, runs, slips] = await Promise.all([
     db
       .select({ memberId: s.member.id, role: s.member.role, userId: s.user.id, name: s.user.name, email: s.user.email, profile: s.staffProfiles })

@@ -226,7 +226,7 @@ export async function finalisePayRun(id: string): Promise<ActionResult> {
     if (mailEnabled() && slips.length) {
       const users = await db.select({ id: s.user.id, email: s.user.email }).from(s.user).where(inArray(s.user.id, slips.map((p) => p.userId)));
       const box = (await ensureMailboxes(ctx)).find((b) => b.kind === "shared");
-      const base = process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+      const base = process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
       for (const p of slips) {
         const to = users.find((u) => u.id === p.userId)?.email;
         if (!box || !to || to.endsWith(".test")) continue;

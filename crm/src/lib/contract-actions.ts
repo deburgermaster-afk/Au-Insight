@@ -208,7 +208,7 @@ export async function sendContract(id: string): Promise<ActionResult> {
     const [u] = await db.select({ email: s.user.email, name: s.user.name }).from(s.user).where(eq(s.user.id, c.userId));
     if (mailEnabled() && u && !u.email.endsWith(".test")) {
       const box = (await ensureMailboxes(ctx)).find((b) => b.kind === "shared");
-      const base = process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+      const base = process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
       if (box)
         await sendMail({
           agencyId: ctx.agencyId,

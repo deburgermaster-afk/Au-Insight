@@ -29,7 +29,7 @@ const P = {
 
 export const providerReady = (p: Provider) => Boolean(P[p].id() && P[p].secret());
 export const isProvider = (v: string): v is Provider => v === "google" || v === "microsoft";
-const base = () => process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+const base = () => process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
 export const redirectUri = (p: Provider) => `${base()}/api/connect/${p}/callback`;
 
 export function authUrl(p: Provider, state: string, loginHint?: string) {

@@ -11,7 +11,7 @@ const SESSION_DAYS = 30;
 const LINK_MINUTES = 60;
 
 const hash = (t: string) => createHash("sha256").update(t).digest("hex");
-export const appUrl = () => process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+export const appUrl = () => process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
 
 /** A single-use sign-in link for a client's portal. */
 export async function createMagicLink(clientId: string, agencyId: string, createdBy?: string, next?: string, minutes = LINK_MINUTES) {

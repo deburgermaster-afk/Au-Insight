@@ -28,7 +28,6 @@
     "@tiptap/react": "^3.31.4",
     "@tiptap/starter-kit": "^3.31.4",
     "@types/sanitize-html": "^2.16.2",
-    "@vercel/blob": "^2.8.1",
     "better-auth": "^1.7.7",
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",

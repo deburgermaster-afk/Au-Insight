@@ -114,7 +114,7 @@ export async function sendLimitEmail(agencyId: string, view: UsageView, fire: { 
   if (to) people.splice(0, people.length, ...to.map((email) => ({ email, name: email })));
   if (!people.length) return;
   const [org] = await db.select({ name: s.organization.name }).from(s.organization).where(eq(s.organization.id, agencyId));
-  const base = process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+  const base = process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
   const worst = fire.sort((a, b) => b.threshold - a.threshold)[0];
   const p = view.usage[worst.period];
   const reached = worst.threshold >= 100;

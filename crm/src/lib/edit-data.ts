@@ -1,8 +1,6 @@
 import "server-only";
 import { and, desc, eq } from "drizzle-orm";
-import { cacheLife, cacheTag } from "next/cache";
 import { db, schema as s } from "@/db";
-import { agencyTag } from "@/lib/data";
 import { marnCurrent } from "@/lib/permissions";
 import { getCtx } from "@/lib/session";
 import { DEFAULT_LISTS, listOf } from "@/lib/workflow";
@@ -21,9 +19,6 @@ export async function getEditOptions(): Promise<EditOptions> {
 }
 
 async function optionsFor(agencyId: string): Promise<EditOptions> {
-  "use cache";
-  cacheTag(agencyTag(agencyId));
-  cacheLife("minutes");
   const [staff, employers, institutions, [p]] = await Promise.all([
     db
       .select({ id: s.user.id, name: s.user.name, position: s.staffProfiles.position, marn: s.staffProfiles.marn, marnExpiry: s.staffProfiles.marnExpiry })

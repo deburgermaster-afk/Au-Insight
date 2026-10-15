@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { db, schema } from "@/db";
 import { auth } from "@/lib/auth";
 
@@ -24,14 +25,8 @@ export type Ctx = {
   registered: boolean;
 };
 
-/**
- * The signed-in user, their agency and role. Cached privately (in the browser only) for the
- * session, so every page can call it and navigations stay instant.
- */
-export async function getCtx(): Promise<Ctx> {
-  "use cache: private";
-  return resolveCtx();
-}
+/** The signed-in user, their agency and role; resolved once per request, however many callers. */
+export const getCtx: () => Promise<Ctx> = cache(() => resolveCtx());
 
 /** The same, read fresh: for server actions and route handlers, which must authorise themselves. */
 export async function actionCtx(): Promise<Ctx> {

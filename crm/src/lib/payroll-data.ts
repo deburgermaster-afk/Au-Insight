@@ -1,8 +1,6 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, lt, ne } from "drizzle-orm";
-import { cacheLife, cacheTag } from "next/cache";
 import { db, schema as s } from "@/db";
-import { agencyTag } from "@/lib/data";
 import { financialYear, type Frequency, type TaxProfile } from "@/lib/payg";
 import { employmentBasis, taxTreatment } from "@/lib/payroll";
 import { decrypt } from "@/lib/secure";
@@ -144,9 +142,6 @@ export async function getPayroll() {
 }
 
 async function payrollFor(agencyId: string) {
-  "use cache";
-  cacheTag(agencyTag(agencyId));
-  cacheLife("minutes");
   const [settings, contributions, events, templates, contracts, connectors] = await Promise.all([
     payrollSettingsFor(agencyId),
     db.select().from(s.superContributions).where(eq(s.superContributions.agencyId, agencyId)).orderBy(desc(s.superContributions.payDate), s.superContributions.name).limit(400),

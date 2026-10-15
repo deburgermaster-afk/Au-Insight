@@ -1,7 +1,7 @@
 import "server-only";
 import { emailShell, mailDomain, mailEnabled, resend } from "@/lib/mail";
 
-const base = () => process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+const base = () => process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
 
 /** A short system email to staff (sign-offs, deadlines). Sent from Lodgely, not from the agency's mailboxes. */
 export async function notifyStaff(to: string[], subject: string, body: { heading: string; lines: string[]; cta?: { label: string; path: string } }) {

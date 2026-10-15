@@ -1,5 +1,4 @@
 import "server-only";
-import { cacheLife, cacheTag } from "next/cache";
 
 // Occupation and SkillSelect data comes from the Immi Insight database (Supabase), which imports
 // the occupation lists, the Jobs and Skills Australia shortage list, invitation rounds and the
@@ -8,7 +7,21 @@ import { cacheLife, cacheTag } from "next/cache";
 const URL = process.env.INSIGHT_SUPABASE_URL ?? "https://rzwntsessjeofmhwudhe.supabase.co";
 const KEY = process.env.INSIGHT_SUPABASE_KEY ?? "sb_publishable_hkd8Y3eV1g4Rg6c7WHwx9w_Q6MVBH7m";
 
+// Reference data that changes monthly: keep GET results for an hour in this server instance.
+// Only settled values are kept (a pending request can't be shared across requests on Workers).
+const memo = new Map<string, { at: number; value: unknown }>();
+const HOUR = 60 * 60 * 1000;
+
 async function rest<T>(path: string, init?: RequestInit): Promise<T> {
+  if (init?.method && init.method !== "GET") return fetchRest<T>(path, init);
+  const hit = memo.get(path);
+  if (hit && Date.now() - hit.at < HOUR) return hit.value as T;
+  const value = await fetchRest<T>(path, init);
+  memo.set(path, { at: Date.now(), value });
+  return value;
+}
+
+async function fetchRest<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${URL}/rest/v1/${path}`, { ...init, headers: { apikey: KEY, "Content-Type": "application/json", ...init?.headers } });
   if (!res.ok) throw new Error(`Occupation data: ${res.status} ${await res.text()}`);
   return res.json() as Promise<T>;
@@ -17,9 +30,6 @@ async function rest<T>(path: string, init?: RequestInit): Promise<T> {
 export type OccupationSummary = { anzsco: string; title: string; lists: string[] | null; visa_subclasses: string[] | null; authorities: string[] | null };
 
 export async function listOccupations(): Promise<OccupationSummary[]> {
-  "use cache";
-  cacheTag("occupations");
-  cacheLife("hours");
   return rest<OccupationSummary[]>("occupations?select=anzsco,title,lists,visa_subclasses,authorities&listed=eq.true&order=anzsco");
 }
 
@@ -49,9 +59,6 @@ export type EoiSubclass = {
 export type Eoi = { as_at: string; data_current_to: string; notes: string[]; source_url: string; subclasses: EoiSubclass[] };
 
 export async function getOccupation(code: string) {
-  "use cache";
-  cacheTag("occupations");
-  cacheLife("hours");
   const c = (code.match(/\d{6}/) ?? [""])[0];
   if (!c) return null;
   const [occ] = await rest<Occupation[]>(`occupations?anzsco=eq.${c}&select=anzsco,title,lists,visa_subclasses,authorities,code_2022,visas,caveats,assessing_authorities,anzsco_links`);
@@ -87,9 +94,6 @@ export type Processing = { subclass: string; stream: string; p25: string | null;
 
 /** Home Affairs global processing times for a visa (e.g. "820/801" → both subclasses). */
 export async function visaProcessing(code: string): Promise<Processing[]> {
-  "use cache";
-  cacheTag("occupations");
-  cacheLife("hours");
   const subs = code.split("/").filter((c) => /^\d{3}$/.test(c));
   if (!subs.length) return [];
   return rest<Processing[]>(`visa_processing_times?subclass=in.(${subs.join(",")})&select=subclass,stream,p25,p50,p75,p90,p50_days,p90_days,updated&order=subclass,stream`);

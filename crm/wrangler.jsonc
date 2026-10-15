@@ -4,10 +4,19 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "lodgely",
-  "main": ".open-next/worker.js",
+  "main": "cloudflare/worker.js",
   "compatibility_date": "2026-10-13",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Stops esbuild injecting __name() into scripts Next.js serialises to the browser.
+  "keep_names": false,
+  // Lets Cloudflare run the app next to the database (Neon, Sydney) when that's faster for a
+  // visitor. (An explicit "aws:ap-southeast-2" region hint caused intermittent 500s.)
+  "placement": { "mode": "smart" },
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "lodgely" }],
+  // Client documents and mail attachments (was Vercel Blob).
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "lodgely-files" }],
+  // Daily mail sync, usage alerts and domain checks (was the Vercel cron in vercel.json).
+  "triggers": { "crons": ["17 20 * * *"] },
   "observability": { "enabled": true }
 }

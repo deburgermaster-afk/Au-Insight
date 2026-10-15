@@ -1,6 +1,5 @@
 import "server-only";
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
-import { cacheLife, cacheTag } from "next/cache";
 import { db, schema as s } from "@/db";
 import { getCtx } from "@/lib/session";
 
@@ -10,10 +9,6 @@ import { getCtx } from "@/lib/session";
 
 export const agencyTag = (agencyId: string) => `agency:${agencyId}`;
 
-function tag(agencyId: string) {
-  cacheTag(agencyTag(agencyId));
-  cacheLife("minutes");
-}
 
 const num = (v: unknown) => (v == null ? 0 : Number(v));
 
@@ -25,8 +20,6 @@ export async function getDashboard() {
 }
 
 async function dashboardFor(agencyId: string, userId: string) {
-  "use cache";
-  tag(agencyId);
   const today = new Date();
   const in90 = new Date(Date.now() + 90 * 864e5).toISOString().slice(0, 10);
   const todayIso = today.toISOString().slice(0, 10);
@@ -126,8 +119,6 @@ export async function listClients(q = "", stage = "") {
 }
 
 async function clientsFor(agencyId: string, q: string, stage: string) {
-  "use cache";
-  tag(agencyId);
   const where = [eq(s.clients.agencyId, agencyId)];
   if (q) {
     const like = `%${q}%`;
@@ -154,8 +145,6 @@ export async function getClient(id: string) {
 }
 
 async function clientFor(agencyId: string, id: string) {
-  "use cache";
-  tag(agencyId);
   const [client] = await db.select().from(s.clients).where(and(eq(s.clients.agencyId, agencyId), eq(s.clients.id, id)));
   if (!client) return null;
   const [matters, documents, activities, tasks, dependants, invoices, appointments] = await Promise.all([
@@ -195,8 +184,6 @@ export async function listMatters() {
 }
 
 async function mattersFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const rows = await db
     .select({
       matter: s.matters,
@@ -227,8 +214,6 @@ export async function getMatter(id: string) {
 }
 
 async function matterFor(agencyId: string, id: string) {
-  "use cache";
-  tag(agencyId);
   const [row] = await db
     .select({ matter: s.matters, client: s.clients, employer: s.employers })
     .from(s.matters)
@@ -253,8 +238,6 @@ export async function listTasks() {
 }
 
 async function tasksFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   return db
     .select({ task: s.tasks, assignee: s.user.name, clientFirst: s.clients.firstName, clientLast: s.clients.lastName, matterRef: s.matters.reference })
     .from(s.tasks)
@@ -272,8 +255,6 @@ export async function listAppointments() {
 }
 
 async function appointmentsFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   return db
     .select({ appt: s.appointments, clientFirst: s.clients.firstName, clientLast: s.clients.lastName, staff: s.user.name })
     .from(s.appointments)
@@ -292,8 +273,6 @@ export async function getBilling() {
 }
 
 async function billingFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [invoices, ledger] = await Promise.all([
     db
       .select({ invoice: s.invoices, clientFirst: s.clients.firstName, clientLast: s.clients.lastName })
@@ -318,8 +297,6 @@ export async function listMessages(folder = "inbox") {
 }
 
 async function messagesFor(agencyId: string, folder: string) {
-  "use cache";
-  tag(agencyId);
   return db
     .select()
     .from(s.messages)
@@ -336,8 +313,6 @@ export async function listEmployers() {
 }
 
 async function employersFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   return db
     .select({
       employer: s.employers,
@@ -354,8 +329,6 @@ export async function listDocuments() {
 }
 
 async function documentsFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   return db
     .select({ doc: s.documents, clientFirst: s.clients.firstName, clientLast: s.clients.lastName })
     .from(s.documents)
@@ -371,8 +344,6 @@ export async function listTeam() {
 }
 
 async function teamFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [members, invitations] = await Promise.all([
     db
       .select({ id: s.member.id, role: s.member.role, joined: s.member.createdAt, userId: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image, position: s.staffProfiles.position, title: s.staffProfiles.title, marn: s.staffProfiles.marn, marnExpiry: s.staffProfiles.marnExpiry, qeac: s.staffProfiles.qeac })
@@ -404,8 +375,6 @@ export async function getAgencyProfile() {
 }
 
 async function profileFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [p] = await db.select().from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, agencyId));
   return p ?? null;
 }
@@ -416,8 +385,6 @@ export async function listAudit() {
 }
 
 async function auditFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   return db.select().from(s.auditLog).where(eq(s.auditLog.agencyId, agencyId)).orderBy(desc(s.auditLog.createdAt)).limit(300);
 }
 
@@ -428,8 +395,6 @@ export async function getPickers() {
 }
 
 async function pickersFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [clients, staff, employers] = await Promise.all([
     db.select({ id: s.clients.id, name: sql<string>`${s.clients.firstName} || ' ' || ${s.clients.lastName}` }).from(s.clients).where(eq(s.clients.agencyId, agencyId)).orderBy(asc(s.clients.firstName)).limit(1000),
     db.select({ id: s.user.id, name: s.user.name, role: s.member.role }).from(s.member).innerJoin(s.user, eq(s.user.id, s.member.userId)).where(eq(s.member.organizationId, agencyId)),
@@ -445,8 +410,6 @@ export async function getReports() {
 }
 
 async function reportsFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [byVisa, bySource, byMonth, outcomes] = await Promise.all([
     db.select({ visa: s.matters.visaCode, n: count() }).from(s.matters).where(eq(s.matters.agencyId, agencyId)).groupBy(s.matters.visaCode).orderBy(desc(count())),
     db.select({ source: s.clients.source, n: count() }).from(s.clients).where(eq(s.clients.agencyId, agencyId)).groupBy(s.clients.source).orderBy(desc(count())),
@@ -468,8 +431,6 @@ export async function getNavData() {
 }
 
 async function navCountsFor(agencyId: string, userId: string) {
-  "use cache";
-  tag(agencyId);
   const [[inbox], [tasks], [matters], [clients]] = await Promise.all([
     db.select({ n: count() }).from(s.messages).where(and(eq(s.messages.agencyId, agencyId), eq(s.messages.folder, "inbox"), eq(s.messages.read, false))),
     db.select({ n: count() }).from(s.tasks).where(and(eq(s.tasks.agencyId, agencyId), eq(s.tasks.assignedTo, userId), sql`${s.tasks.status} <> 'done'`)),
@@ -486,8 +447,6 @@ export async function listMail() {
 }
 
 async function mailFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const rows = await db
     .select({ m: s.messages, first: s.clients.firstName, last: s.clients.lastName, insight: s.mailInsights })
     .from(s.messages)
@@ -506,8 +465,6 @@ export async function mattersOnVisa(code: string) {
 }
 
 async function mattersOnVisaFor(agencyId: string, code: string) {
-  "use cache";
-  tag(agencyId);
   return db
     .select({ id: s.matters.id, reference: s.matters.reference, stage: s.matters.stage, stream: s.matters.stream, first: s.clients.firstName, last: s.clients.lastName, lodgedAt: s.matters.lodgedAt, outcome: s.matters.outcome })
     .from(s.matters)
@@ -523,8 +480,6 @@ export async function getDrive() {
 }
 
 async function driveFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [docs, clients] = await Promise.all([
     db
       .select({ d: s.documents, first: s.clients.firstName, last: s.clients.lastName })
@@ -549,8 +504,6 @@ export async function getEducation() {
 }
 
 async function educationFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [apps, institutions] = await Promise.all([
     db
       .select({ a: s.studentApplications, first: s.clients.firstName, last: s.clients.lastName, onshore: s.clients.onshore, inst: s.institutions.name, agent: s.user.name })
@@ -572,8 +525,6 @@ export async function getSettings() {
 }
 
 async function settingsFor(agencyId: string) {
-  "use cache";
-  tag(agencyId);
   const [[profile], [resend], mailboxes, connections, [members]] = await Promise.all([
     db.select().from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, agencyId)),
     db

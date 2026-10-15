@@ -163,7 +163,7 @@ export async function sendChecklist(input: { matterId: string; itemIds: string[]
     });
     await db.update(s.checklistItems).set({ status: "requested" }).where(and(inArray(s.checklistItems.id, items.map((i) => i.id)), inArray(s.checklistItems.status, ["needed", "rejected"])));
 
-    const base = process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+    const base = process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
     const url = `${base}/portal/${token}`;
     const visa = visaByCode(row.matter.visaCode);
     const groups = new Map<string, typeof items>();

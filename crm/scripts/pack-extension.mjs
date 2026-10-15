@@ -4,7 +4,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
 
-const base = (process.env.EXTENSION_BASE || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "https://lodgely-alpha.vercel.app")).replace(/\/$/, "");
+const base = (process.env.EXTENSION_BASE || "https://lodgely.mapcn.workers.dev").replace(/\/$/, "");
 const dir = new URL("../extension/", import.meta.url).pathname;
 const files = {};
 for (const name of readdirSync(dir)) {

@@ -1,11 +1,14 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
 import type { MailAttachment } from "@/db/crm-schema";
 
-const SMALL = 4 * 1024 * 1024;
+const MAX = 25 * 1024 * 1024;
 
-/** Sends small files through the app's own upload route, with progress. */
+function checkSize(f: File) {
+  if (f.size > MAX) throw new Error(`${f.name} is larger than 25 MB`);
+}
+
+/** Sends a file through the app's own upload route (into R2), with progress. */
 function viaServer(form: FormData, onProgress?: (pct: number) => void) {
   return new Promise<string>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -22,69 +25,36 @@ function viaServer(form: FormData, onProgress?: (pct: number) => void) {
 }
 
 /**
- * Uploads a browser file to the agency's private store and returns its attachment record. Files
- * under 4 MB go through the app; larger ones go straight to Blob storage with a short-lived token.
+ * Uploads a browser file to the agency's private store and returns its attachment record.
  */
 export async function uploadFile(agencyId: string, folder: string, f: File, onProgress?: (pct: number) => void): Promise<MailAttachment> {
   const name = f.name.replace(/[^\w.\- ()]+/g, "_").slice(0, 120) || "file";
   const type = f.type || "application/octet-stream";
   const sub = `${folder}/${crypto.randomUUID().slice(0, 8)}`;
-  let key: string;
-  if (f.size <= SMALL) {
-    const form = new FormData();
-    form.set("file", f);
-    form.set("agencyId", agencyId);
-    form.set("folder", sub);
-    key = await viaServer(form, onProgress);
-  } else {
-    const blob = await upload(`agency/${agencyId}/${sub}/${name}`, f, {
-      access: "private",
-      handleUploadUrl: "/api/upload",
-      contentType: f.type || undefined,
-      multipart: f.size > 8 * 1024 * 1024,
-      onUploadProgress: (p) => onProgress?.(p.percentage),
-    });
-    key = blob.pathname;
-  }
-  return { name: f.name, size: f.size, type, key };
+  checkSize(f);
+  const form = new FormData();
+  form.set("file", f, name);
+  form.set("agencyId", agencyId);
+  form.set("folder", sub);
+  return { name: f.name, size: f.size, type, key: await viaServer(form, onProgress) };
 }
 
 /** The client-portal variant: authorised by the portal token instead of a session. */
 export async function uploadPortalFile(token: string, agencyId: string, linkId: string, f: File, onProgress?: (pct: number) => void): Promise<MailAttachment> {
   const type = f.type || "application/octet-stream";
-  if (f.size <= SMALL) {
-    const form = new FormData();
-    form.set("file", f);
-    form.set("token", token);
-    return { name: f.name, size: f.size, type, key: await viaServer(form, onProgress) };
-  }
-  const blob = await upload(`agency/${agencyId}/portal/${linkId}/${f.name.replace(/[^\w.\- ()]+/g, "_")}`, f, {
-    access: "private",
-    handleUploadUrl: "/api/upload",
-    clientPayload: JSON.stringify({ token }),
-    contentType: f.type || undefined,
-    multipart: f.size > 8 * 1024 * 1024,
-    onUploadProgress: (p) => onProgress?.(p.percentage),
-  });
-  return { name: f.name, size: f.size, type, key: blob.pathname };
+  checkSize(f);
+  const form = new FormData();
+  form.set("file", f);
+  form.set("token", token);
+  return { name: f.name, size: f.size, type, key: await viaServer(form, onProgress) };
 }
 
 /** The signed-in client portal variant: authorised by the client's session cookie. */
 export async function uploadClientFile(agencyId: string, clientId: string, f: File, onProgress?: (pct: number) => void): Promise<MailAttachment> {
   const type = f.type || "application/octet-stream";
-  if (f.size <= SMALL) {
-    const form = new FormData();
-    form.set("file", f);
-    form.set("client", "1");
-    return { name: f.name, size: f.size, type, key: await viaServer(form, onProgress) };
-  }
-  const blob = await upload(`agency/${agencyId}/client/${clientId}/${crypto.randomUUID().slice(0, 8)}/${f.name.replace(/[^\w.\- ()]+/g, "_")}`, f, {
-    access: "private",
-    handleUploadUrl: "/api/upload",
-    clientPayload: JSON.stringify({ client: true }),
-    contentType: f.type || undefined,
-    multipart: f.size > 8 * 1024 * 1024,
-    onUploadProgress: (p) => onProgress?.(p.percentage),
-  });
-  return { name: f.name, size: f.size, type, key: blob.pathname };
+  checkSize(f);
+  const form = new FormData();
+  form.set("file", f);
+  form.set("client", "1");
+  return { name: f.name, size: f.size, type, key: await viaServer(form, onProgress) };
 }

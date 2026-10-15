@@ -11,7 +11,7 @@ export async function sendInvite(data: { id: string; email: string; role: string
   const boxes = await ensureMailboxes({ agencyId: data.organization.id, agencySlug: data.organization.slug, agencyName: data.organization.name, userId: data.inviter.user.id, name: data.inviter.user.name });
   const box = boxes.find((b) => b.kind === "shared") ?? boxes[0];
   if (!box) return;
-  const base = process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+  const base = process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
   const url = `${base}/invite/${data.id}`;
   const as = pos ? positionLabel(pos.position) : data.role;
   await sendMail({

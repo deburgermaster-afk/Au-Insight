@@ -8,7 +8,7 @@ import { decrypt, encrypt } from "@/lib/secure";
 // its domain sends from (and counts against) its own plan. Lodgely registers itself as a public
 // OAuth client once per deployment (dynamic client registration) and keeps the client_id.
 const API = "https://api.resend.com";
-const base = () => process.env.BETTER_AUTH_URL ?? "https://lodgely-alpha.vercel.app";
+const base = () => process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev";
 export const resendRedirect = () => `${base()}/api/connect/resend/callback`;
 export const RESEND_SCOPE = "full_access";
 

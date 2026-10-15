@@ -5,15 +5,15 @@ import { auth } from "@/lib/auth";
 import { clientSession } from "@/lib/client-auth";
 import { putFile, safeName } from "@/lib/files";
 
-const MAX = 4 * 1024 * 1024; // the function body limit; larger files upload direct to Blob
+const MAX = 25 * 1024 * 1024;
 
-// Server-side upload for small files: works on any network that can reach the app itself.
+// Uploads go through the app into R2: works on any network that can reach the app itself.
 // Form fields: file, folder (staff), token (upload link) or client=1 (signed-in client portal).
 export async function POST(req: Request) {
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) return Response.json({ error: "No file" }, { status: 400 });
-  if (file.size > MAX) return Response.json({ error: "Too large for this route" }, { status: 413 });
+  if (file.size > MAX) return Response.json({ error: "Files must be 25 MB or smaller" }, { status: 413 });
   const token = form.get("token");
   let prefix: string;
   if (typeof token === "string" && token) {
