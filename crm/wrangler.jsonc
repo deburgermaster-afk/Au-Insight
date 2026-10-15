@@ -13,10 +13,14 @@
   // visitor. (An explicit "aws:ap-southeast-2" region hint caused intermittent 500s.)
   "placement": { "mode": "smart" },
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
-  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "lodgely" }],
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "lodgely" },
+    // SkillSelect rounds watcher, run from this worker's cron (see cloudflare/worker.js).
+    { "binding": "ROUNDS_WATCH", "service": "rounds-watch" }
+  ],
   // Client documents and mail attachments (was Vercel Blob).
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "lodgely-files" }],
-  // Daily mail sync, usage alerts and domain checks (was the Vercel cron in vercel.json).
-  "triggers": { "crons": ["17 20 * * *"] },
+  // Every 10 minutes: the rounds watcher; once a day (20:0x UTC) the mail sync. See cloudflare/worker.js.
+  "triggers": { "crons": ["*/10 * * * *"] },
   "observability": { "enabled": true }
 }

@@ -1,0 +1,18 @@
+// Watches the Home Affairs SkillSelect invitation rounds page and imports new rounds into the
+// Immi Insight database (read by Immi Insight and Lodgely). Deploy: npx wrangler deploy
+// Secrets: WORKER_TOKEN (a worker token from private.worker_tokens), RUN_KEY (for POST /run).
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "rounds-watch",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-13",
+  "vars": {
+    "SUPABASE_URL": "https://rzwntsessjeofmhwudhe.supabase.co",
+    // Public (publishable) key, the same one shipped in the Immi Insight web app.
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_hkd8Y3eV1g4Rg6c7WHwx9w_Q6MVBH7m"
+  },
+  // No trigger of its own while the account is on the free plan (5 crons max): Lodgely's every-10-
+  // minute cron calls POST /run through a service binding. On Workers Paid, use ["*/10 * * * *"].
+  "triggers": { "crons": [] },
+  "observability": { "enabled": true }
+}
