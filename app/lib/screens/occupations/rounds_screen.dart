@@ -80,7 +80,7 @@ class _RoundsScreenState extends State<RoundsScreen> {
                   children: [
                     const Icon(LucideIcons.clock, size: 16, color: AppColors.brand),
                     const SizedBox(width: 10),
-                    Expanded(child: Text('Next round: ${formatDay(o.nextRound!)}', style: AppText.heading.copyWith(fontSize: 13))),
+                    Expanded(child: Text(nextRoundLabel(o.nextRound!, o.rounds).$1, style: AppText.heading.copyWith(fontSize: 13))),
                   ],
                 ),
               ),

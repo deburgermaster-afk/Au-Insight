@@ -9,6 +9,7 @@ import '../../widgets/common.dart';
 import '../shell.dart' show PageHeader;
 import '../study/widgets.dart';
 import 'eoi_card.dart';
+import 'rounds_insight.dart';
 import 'widgets.dart';
 
 /// One occupation: lists and visas, assessing authority, invitation history and minimum points,
@@ -148,7 +149,12 @@ class _OccupationScreenState extends State<OccupationScreen> {
       ),
       if (o.nextRound != null) ...[
         const SizedBox(height: 8),
-        Tag('Next 189 round ${formatDay(o.nextRound!)}', icon: LucideIcons.clock, color: AppColors.brand),
+        Builder(
+          builder: (context) {
+            final (label, pending) = nextRoundLabel(o.nextRound!, _published?.rounds ?? const [], prefix: '189 ');
+            return Tag(label, icon: LucideIcons.clock, color: pending ? AppColors.warning : AppColors.brand);
+          },
+        ),
       ],
       if (_pathway != null) ...[const SectionLabel('PR pathway at a glance'), PathwayCard(p: _pathway!)],
       const SectionLabel('Lists and visas'),
@@ -204,10 +210,26 @@ class _OccupationScreenState extends State<OccupationScreen> {
       ],
       if (_eoi != null) ...eoiSection(context, _eoi!, heading: 'Who else is waiting (SkillSelect EOIs)'),
       const SectionLabel('Invitation rounds'),
+      if (_published != null) ...[
+        for (final sub in ['189', '491'])
+          if (sub == '189' || o.roundsFor('491').isNotEmpty) ...[
+            LatestRoundCard(
+              published: _published!.rounds,
+              mine: o.roundsFor(sub),
+              subclass: sub,
+              nextRound: sub == '189' ? (o.nextRound ?? _published!.nextRound) : null,
+            ),
+            const SizedBox(height: 8),
+          ],
+      ],
       Panel(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_published != null) ...[
+              InvitedPerRoundChart(published: _published!.rounds, mine: r189, subclass: '189'),
+              const Divider(color: AppColors.border, height: 24),
+            ],
             if (o.rounds.isEmpty)
               Text(
                 'Not invited in the published rounds. 189 rounds invite only some occupations; state nomination (190, 491) may still be open.',
@@ -232,15 +254,13 @@ class _OccupationScreenState extends State<OccupationScreen> {
                     const Divider(color: AppColors.border, height: 22),
                   ],
               ],
+              const Text('ROUNDS THAT INVITED THIS OCCUPATION', style: AppText.label),
+              const SizedBox(height: 4),
               for (final r in (_allRounds ? o.rounds : o.rounds.take(8)))
-                KeyValue(
-                  formatDay(r.date),
-                  r.minPoints == null ? 'Invited' : '${r.minPoints} points',
-                  hint: [
-                    'Subclass ${r.subclass}',
-                    if (_published != null && roundTotal(_published!.rounds, r.date, r.subclass) != null)
-                      '${formatCount(roundTotal(_published!.rounds, r.date, r.subclass)!)} invited in the round',
-                  ].join(' · '),
+                RoundRow(
+                  round: r,
+                  total: _published == null ? null : roundTotal(_published!.rounds, r.date, r.subclass),
+                  tieBreak: _published?.rounds.where((p) => p.date == r.date && p.subclass == r.subclass).firstOrNull?.tieBreak,
                 ),
               if (o.rounds.length > 8)
                 Padding(
@@ -254,6 +274,14 @@ class _OccupationScreenState extends State<OccupationScreen> {
           ],
         ),
       ),
+      if (_published != null && _published!.stateNominations.isNotEmpty) ...[
+        const SectionLabel('State and territory nominations'),
+        StateNominationsCard(nominations: _published!.stateNominations),
+      ],
+      if (_pathway != null && _pathway!.routes.any((r) => r.p50Days != null)) ...[
+        const SectionLabel('After an invitation: processing time'),
+        ProcessingAfterInviteCard(routes: _pathway!.routes),
+      ],
       if (shortage != null) ...[
         SectionLabel('Shortage by state · ${shortage.year}'),
         Panel(

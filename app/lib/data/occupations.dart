@@ -437,6 +437,18 @@ String formatDay(DateTime d) {
   return '${d.day} ${m[d.month - 1]} ${d.year}';
 }
 
+/// The label for a scheduled round, e.g. prefix "189 ": "Next 189 round 15 Oct 2026" before the date,
+/// "189 round held 15 Oct 2026 · results not published yet" after it until the round is published, then
+/// "Last 189 round 15 Oct 2026". Returns (label, pending).
+(String, bool) nextRoundLabel(DateTime next, List<InvitationRound> published, {String subclass = '189', String prefix = ''}) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  if (next.isAfter(today)) return ('Next ${prefix}round ${formatDay(next)}', false);
+  if (published.any((r) => r.subclass == subclass && !r.date.isBefore(next))) return ('Last ${prefix}round ${formatDay(next)}', false);
+  final held = '${prefix}round held ${formatDay(next)}';
+  return ('${held[0].toUpperCase()}${held.substring(1)} · results not published yet', true);
+}
+
 /// The chat prompt behind "Show my pathway".
 String pathwayPrompt(OccupationDetail o) {
   final latest = o.roundsFor('189').firstOrNull;
@@ -648,13 +660,30 @@ int? roundTotal(List<InvitationRound> published, DateTime date, String subclass)
 
 /// One visa route an occupation opens, with Home Affairs' processing times.
 class PathwayRoute {
-  const PathwayRoute({required this.visa, required this.name, required this.open, this.how, this.p50, this.p90});
+  const PathwayRoute({
+    required this.visa,
+    required this.name,
+    required this.open,
+    this.how,
+    this.p50,
+    this.p90,
+    this.p50Days,
+    this.p90Days,
+    this.updated,
+    this.familyP50Days,
+    this.familyP90Days,
+  });
   final String visa;
   final String name;
   final bool open;
   final String? how;
   final String? p50; // half of applications decided within
   final String? p90;
+  final int? p50Days;
+  final int? p90Days;
+  final String? updated; // when Home Affairs last published the processing times
+  final int? familyP50Days; // 491 Family Sponsored stream
+  final int? familyP90Days;
 }
 
 /// One step of the timeline, with a day range when the data supports one.
@@ -707,6 +736,11 @@ class PrPathway {
             how: _str(r['how']),
             p50: _str(_map(r['processing'])['p50']),
             p90: _str(_map(r['processing'])['p90']),
+            p50Days: _int(_map(r['processing'])['p50_days']),
+            p90Days: _int(_map(r['processing'])['p90_days']),
+            updated: _str(_map(r['processing'])['updated']),
+            familyP50Days: _int(_map(r['processing_family'])['p50_days']),
+            familyP90Days: _int(_map(r['processing_family'])['p90_days']),
           ),
       ],
       steps: [

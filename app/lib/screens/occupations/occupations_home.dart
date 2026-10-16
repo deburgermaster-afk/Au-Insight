@@ -393,7 +393,12 @@ class _RoundsCard extends StatelessWidget {
               ],
               if (o?.nextRound != null) ...[
                 const SizedBox(height: 10),
-                Tag('Next round ${formatDay(o!.nextRound!)}', icon: LucideIcons.clock, color: AppColors.brand),
+                Builder(
+                  builder: (context) {
+                    final (label, pending) = nextRoundLabel(o!.nextRound!, o.rounds);
+                    return Tag(label, icon: LucideIcons.clock, color: pending ? AppColors.warning : AppColors.brand);
+                  },
+                ),
               ],
             ],
           ),
