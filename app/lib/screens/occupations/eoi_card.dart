@@ -47,9 +47,9 @@ class _EoiPoolCardState extends State<EoiPoolCard> {
           ],
           Row(
             children: [
-              Expanded(child: Stat(s.byStatus['SUBMITTED']?.text ?? '0', 'waiting', color: AppColors.brand)),
-              Expanded(child: Stat(s.byStatus['INVITED']?.text ?? '0', 'holding an invite')),
-              Expanded(child: Stat(s.byStatus['LODGED']?.text ?? '0', 'lodged a visa')),
+              Expanded(child: Stat(s.byStatus['SUBMITTED']?.text ?? '0', 'waiting for an invitation', color: AppColors.brand)),
+              Expanded(child: Stat(s.byStatus['INVITED']?.text ?? '0', 'invited, not applied yet')),
+              Expanded(child: Stat(s.byStatus['LODGED']?.text ?? '0', 'visa lodged, waiting')),
             ],
           ),
           if (pool.asAt != null) ...[
@@ -63,6 +63,8 @@ class _EoiPoolCardState extends State<EoiPoolCard> {
           if (s.byMonth.length >= 2) ...[
             const SizedBox(height: 14),
             const Text('WAITING EOIS, MONTH BY MONTH', style: AppText.label),
+            const SizedBox(height: 2),
+            const Text('How many EOIs were waiting for an invitation on the last day of each month. A drop usually follows a round.', style: AppText.tiny),
             const SizedBox(height: 8),
             _MonthTrend(months: s.byMonth.length > 12 ? s.byMonth.sublist(s.byMonth.length - 12) : s.byMonth),
           ],

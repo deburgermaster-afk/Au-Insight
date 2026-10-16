@@ -237,13 +237,17 @@ class _OccupationScreenState extends State<OccupationScreen> {
               )
             else ...[
               if (r189.length >= 2) ...[
-                Text('Minimum points, subclass 189', style: AppText.small),
-                const SizedBox(height: 8),
+                const ChartTitle(
+                  'Lowest score invited for this occupation (subclass 189)',
+                  'Each bar is a round that included this occupation; the number is the minimum points it was invited at. Taller means harder.',
+                ),
                 PointsTrend(rounds: r189),
                 const SizedBox(height: 10),
               ] else if (r491.length >= 2) ...[
-                Text('Minimum points, subclass 491 (family sponsored)', style: AppText.small),
-                const SizedBox(height: 8),
+                const ChartTitle(
+                  'Lowest score invited for this occupation (subclass 491, family sponsored)',
+                  'Each bar is a round that included this occupation; the number is the minimum points it was invited at.',
+                ),
                 PointsTrend(rounds: r491),
                 const SizedBox(height: 10),
               ],
@@ -255,6 +259,8 @@ class _OccupationScreenState extends State<OccupationScreen> {
                   ],
               ],
               const Text('ROUNDS THAT INVITED THIS OCCUPATION', style: AppText.label),
+              const SizedBox(height: 2),
+              Text('Big number on the right: the lowest points invited. Below the date: everyone invited in that round.', style: AppText.tiny),
               const SizedBox(height: 4),
               for (final r in (_allRounds ? o.rounds : o.rounds.take(8)))
                 RoundRow(
@@ -274,6 +280,17 @@ class _OccupationScreenState extends State<OccupationScreen> {
           ],
         ),
       ),
+      if (_published != null && _eoi != null)
+        for (final (sub, code) in [('189', '189PTS'), ('491', '491FSR')])
+          if (o.roundsFor(sub).isNotEmpty && _eoi!.streams.any((s) => s.code == code)) ...[
+            SectionLabel(sub == '189' ? 'What happened after each round' : 'What happened after each 491 round'),
+            AfterRoundsCard(
+              subclass: sub,
+              mine: o.roundsFor(sub),
+              published: _published!.rounds,
+              stream: _eoi!.streams.firstWhere((s) => s.code == code),
+            ),
+          ],
       if (_published != null && _published!.stateNominations.isNotEmpty) ...[
         const SectionLabel('State and territory nominations'),
         StateNominationsCard(nominations: _published!.stateNominations),

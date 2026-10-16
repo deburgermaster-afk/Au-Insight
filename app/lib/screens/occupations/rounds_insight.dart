@@ -49,9 +49,9 @@ class LatestRoundCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: Stat(formatThousands(latest.invited!), 'people invited (all occupations)', color: AppColors.brand)),
+              Expanded(child: Stat(formatThousands(latest.invited!), 'people invited in the round (all occupations)', color: AppColors.brand)),
               const SizedBox(width: 10),
-              Expanded(child: Stat(hit?.minPoints?.toString() ?? '–', hit == null ? 'not in this round' : 'min points for this job')),
+              Expanded(child: Stat(hit?.minPoints?.toString() ?? '–', hit == null ? 'this occupation was not in the round' : 'lowest points invited for this occupation')),
             ],
           ),
           const SizedBox(height: 10),
@@ -96,8 +96,10 @@ class InvitedPerRoundChart extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('People invited per round, subclass $subclass', style: AppText.small),
-        const SizedBox(height: 8),
+        ChartTitle(
+          'How many people were invited in each round (subclass $subclass)',
+          'All occupations combined. Green bars are rounds that invited this occupation; grey bars are rounds that did not include it.',
+        ),
         SizedBox(
           height: height + 32,
           child: Row(
@@ -226,6 +228,10 @@ class _StateNominationsCardState extends State<StateNominationsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          ChartTitle(
+            'Nominations issued by each state and territory',
+            'How many people each state nominated this program year, all occupations together. Switch between 190 (permanent) and 491 (regional).',
+          ),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -306,6 +312,10 @@ class ProcessingAfterInviteCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const ChartTitle(
+            'How long the visa takes after you apply',
+            'Bright part: half of applications are decided within this time. Faded part: 90% are decided within it.',
+          ),
           Row(
             children: [
               const Icon(LucideIcons.calendarClock, size: 14, color: AppColors.brand),
@@ -365,4 +375,164 @@ class ProcessingAfterInviteCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A chart title with a one-line plain-English explanation underneath.
+class ChartTitle extends StatelessWidget {
+  const ChartTitle(this.title, this.caption, {super.key});
+  final String title;
+  final String caption;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: AppText.heading.copyWith(fontSize: 13)),
+      const SizedBox(height: 3),
+      Text(caption, style: AppText.tiny),
+      const SizedBox(height: 10),
+    ],
+  );
+}
+
+EoiMonth? _monthOf(List<EoiMonth> months, DateTime d) => months.where((m) => m.asAt.year == d.year && m.asAt.month == d.month).firstOrNull;
+
+/// What happened to this occupation's EOIs around each round, from the SkillSelect EOI dashboard's
+/// month-end snapshots: how many held an invitation at the end of the round's month, and how the count
+/// of lodged visa applications (lodged, not yet decided) moved over the 60 days people have to apply.
+class AfterRoundsCard extends StatelessWidget {
+  const AfterRoundsCard({super.key, required this.subclass, required this.mine, required this.published, required this.stream, this.title});
+  final String subclass;
+  final List<RoundEntry> mine; // this occupation's rounds for the subclass, newest first
+  final List<InvitationRound> published;
+  final EoiStream stream;
+  final String? title;
+
+  @override
+  Widget build(BuildContext context) {
+    final months = stream.byMonth;
+    if (months.length < 2) return const SizedBox.shrink();
+    final first = months.first.asAt;
+    final rounds = mine.where((r) => !DateTime(r.date.year, r.date.month).isBefore(DateTime(first.year, first.month))).toList();
+    final shown = months.length > 12 ? months.sublist(months.length - 12) : months;
+    final roundMonths = {for (final r in mine) DateTime(r.date.year, r.date.month)};
+    final top = shown.expand((m) => [m['INVITED'].floor, m['LODGED'].floor]).fold<int>(20, (a, b) => b > a ? b : a);
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ChartTitle(
+            title ?? 'Invited and lodged each month, subclass $subclass',
+            'This occupation only. Each pair of bars is the count on the last day of the month: holding an invitation (not used yet) and visa lodged (waiting for a decision). ▲ marks a month with a round.',
+          ),
+          SizedBox(
+            height: 112,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final m in shown)
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [_bar(m['INVITED'], top, AppColors.brand), const SizedBox(width: 1.5), _bar(m['LODGED'], top, AppColors.success.withValues(alpha: 0.75))],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(_months[m.asAt.month - 1].substring(0, 1), style: AppText.tiny.copyWith(fontSize: 8.5)),
+                        Text(
+                          roundMonths.contains(DateTime(m.asAt.year, m.asAt.month)) ? '▲' : ' ',
+                          style: AppText.tiny.copyWith(fontSize: 8, color: AppColors.warning, height: 1),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 14,
+            runSpacing: 4,
+            children: [
+              _legend(AppColors.brand, 'Holding an invitation'),
+              _legend(AppColors.success.withValues(alpha: 0.75), 'Visa lodged, waiting'),
+              Text('▲ round month', style: AppText.tiny.copyWith(color: AppColors.warning)),
+            ],
+          ),
+          if (rounds.isNotEmpty) ...[
+            const Divider(color: AppColors.border, height: 24),
+            const Text('ROUND BY ROUND, THIS OCCUPATION', style: AppText.label),
+            const SizedBox(height: 6),
+            for (final r in rounds) _roundRow(r, months),
+            const SizedBox(height: 4),
+            Text(
+              'Home Affairs does not publish grants per round. A lodged count that rises after a round means invitees applied; it falls again as applications are decided.',
+              style: AppText.tiny.copyWith(color: AppColors.faint),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _bar(EoiCount c, int top, Color color) {
+    final v = c.value;
+    final h = v == null ? 10.0 : (v == 0 ? 2.0 : 3 + 70 * v / top);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(v == null ? '<20' : (v == 0 ? '' : '$v'), style: AppText.tiny.copyWith(fontSize: 7, color: AppColors.fg)),
+        const SizedBox(height: 1),
+        Container(
+          width: 7,
+          height: h,
+          decoration: BoxDecoration(color: v == null ? color.withValues(alpha: 0.35) : (v == 0 ? AppColors.raised : color), borderRadius: BorderRadius.circular(2)),
+        ),
+      ],
+    );
+  }
+
+  Widget _roundRow(RoundEntry r, List<EoiMonth> months) {
+    final total = roundTotal(published, r.date, r.subclass);
+    final at = _monthOf(months, r.date);
+    final before = _monthOf(months, DateTime(r.date.year, r.date.month - 1));
+    final after = [for (var k = 0; k <= 2; k++) _monthOf(months, DateTime(r.date.year, r.date.month + k))].whereType<EoiMonth>().toList();
+    String monthCount(EoiMonth m) => '${_months[m.asAt.month - 1]} ${m['LODGED'].text}';
+    final lodgedPath = [if (before != null) monthCount(before), for (final m in after) monthCount(m)];
+    final b = before?['LODGED'].value;
+    final peak = after.map((m) => m['LODGED'].value).whereType<int>().fold<int?>(null, (a, v) => a == null || v > a ? v : a);
+    final rise = b != null && peak != null && peak > b ? peak - b : null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('${formatDay(r.date)} · subclass ${r.subclass}', style: AppText.body.copyWith(fontSize: 12.5, fontWeight: FontWeight.w600))),
+              if (r.minPoints != null) Text('${r.minPoints} pts minimum', style: AppText.small.copyWith(color: AppColors.fg)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _fact('Invited in the round', total == null ? '–' : '${formatThousands(total)} (all occupations)'),
+          _fact('Holding an invitation, end of ${_months[r.date.month - 1]}', at == null ? 'no data' : at['INVITED'].text),
+          _fact('Visas lodged, waiting', lodgedPath.length < 2 ? 'no data' : lodgedPath.join(' → ')),
+          if (rise != null) _fact('Rise after the round (invitees who applied)', '+$rise'),
+        ],
+      ),
+    );
+  }
+
+  Widget _fact(String label, String value) => Padding(
+    padding: const EdgeInsets.only(top: 2),
+    child: Row(
+      children: [
+        Expanded(child: Text(label, style: AppText.tiny)),
+        Text(value, style: AppText.tiny.copyWith(color: AppColors.fg)),
+      ],
+    ),
+  );
 }
