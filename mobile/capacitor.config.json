@@ -3,7 +3,7 @@
   "appName": "Immi Insight",
   "webDir": "www",
   "server": {
-    "url": "https://au-insight.vercel.app",
+    "url": "https://immi-insight.mapcn.workers.dev",
     "allowNavigation": ["au-insight.vercel.app", "*.supabase.co"]
   },
   "ios": {

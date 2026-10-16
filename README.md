@@ -1,6 +1,6 @@
 # Immi Insight
 
-**Live:** https://au-insight.vercel.app (Vercel, Sydney; deploys automatically on every push)
+**Live:** https://immi-insight.mapcn.workers.dev (Vercel, Sydney; deploys automatically on every push)
 
 Australian migration decisions computed from the law itself. A Flutter web app (PWA) with a cited, agentic chat; a deterministic visa rules engine; and a background crawler that keeps a versioned copy of every official source up to date.
 

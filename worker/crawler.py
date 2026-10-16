@@ -65,7 +65,7 @@ SKIP_EXTENSIONS = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".zip", ".j
 
 # Plain HTTP (robots.txt, sitemaps) says who it is; robots.txt groups are matched on ROBOTS_AGENT, else "*".
 ROBOTS_AGENT = "ImmiInsightBot"
-HTTP_HEADERS = {"User-Agent": f"Mozilla/5.0 (compatible; {ROBOTS_AGENT}/1.0; +https://au-insight.vercel.app)"}
+HTTP_HEADERS = {"User-Agent": f"Mozilla/5.0 (compatible; {ROBOTS_AGENT}/1.0; +https://immi-insight.mapcn.workers.dev)"}
 ROBOTS_TTL = 12 * 3600
 SITEMAP_MAX_URLS = 20_000  # matching page URLs kept per source, across all its sitemaps
 SITEMAP_MAX_FILES = 20  # sitemap files fetched per source (indexes and nested sitemaps)

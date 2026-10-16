@@ -1,6 +1,6 @@
 # Immi Insight for iPhone and Android
 
-Native shells (Capacitor 8) around the live app at https://au-insight.vercel.app.
+Native shells (Capacitor 8) around the live app at https://immi-insight.mapcn.workers.dev.
 
 What you get over the website or the home-screen web app:
 

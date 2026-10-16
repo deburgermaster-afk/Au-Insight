@@ -34,7 +34,7 @@ FILES = {
     "course_locations": "CRICOS Course Locations",
 }
 BATCH = 1000
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ImmiInsight/1.0; +https://au-insight.vercel.app)"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ImmiInsight/1.0; +https://immi-insight.mapcn.workers.dev)"}
 
 
 def _text(v: str | None) -> str | None:
