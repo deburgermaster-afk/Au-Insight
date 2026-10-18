@@ -11,6 +11,12 @@ export default {
       const req = new Request("https://rounds-watch/run", { method: "POST", headers: { authorization: `Bearer ${env.ROUNDS_WATCH_KEY}` } });
       ctx.waitUntil(env.ROUNDS_WATCH.fetch(req).then(async (res) => console.log("rounds-watch", res.status, (await res.text()).slice(0, 300))));
     }
+    const run = (path, label) => {
+      const req = new Request(`https://lodgely.internal${path}`, { headers: { authorization: `Bearer ${env.CRON_SECRET}` } });
+      ctx.waitUntil(app.fetch(req, env, ctx).then(async (res) => console.log(label, res.status, (await res.text()).slice(0, 300))));
+    };
+    // Hourly: signature reminders (the route itself only emails during Sydney business hours).
+    if (at.getUTCMinutes() < 10) run("/api/cron/sign-reminders", "sign-reminders");
     // Daily mail sync, usage alerts and domain checks (was the Vercel cron at 20:17 UTC).
     if (at.getUTCHours() === 20 && at.getUTCMinutes() < 10) {
       const req = new Request("https://lodgely.internal/api/cron/mail-sync", { headers: { authorization: `Bearer ${env.CRON_SECRET}` } });

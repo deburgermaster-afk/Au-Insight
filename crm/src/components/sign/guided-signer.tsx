@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import type { SignField } from "@/db/crm-schema";
-import { submitSignature } from "@/lib/sign-actions";
+import { submitAgentSignature, submitLinkSignature, submitSignature } from "@/lib/sign-actions";
 import { cn } from "@/lib/utils";
 import { PdfPages } from "./pdf-pages";
 import { SignaturePad } from "./signature-pad";
@@ -22,8 +22,10 @@ const verb: Record<SignField["type"], string> = { signature: "Sign", initials: "
  * to the next field one at a time. Signatures are drawn or typed once and applied to every
  * signature field after that.
  */
-export function GuidedSigner({ id, pdfUrl, fields, expectedName }: { id: string; pdfUrl: string; fields: SignField[]; expectedName: string }) {
-  const ordered = useMemo(() => [...fields].sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x), [fields]);
+export type SignerMode = { kind: "client" } | { kind: "link"; token: string } | { kind: "agent" };
+
+export function GuidedSigner({ id, pdfUrl, fields, expectedName, signer = "client", mode = { kind: "client" }, others = [], doneText }: { id: string; pdfUrl: string; fields: SignField[]; expectedName: string; signer?: string; mode?: SignerMode; others?: { label: string; fields: SignField[] }[]; doneText?: string }) {
+  const ordered = useMemo(() => fields.filter((f) => (f.signer ?? "client") === signer).sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x), [fields, signer]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [active, setActive] = useState<string | null>(null);
   const [editing, setEditing] = useState<SignField | null>(null);
@@ -89,8 +91,18 @@ export function GuidedSigner({ id, pdfUrl, fields, expectedName }: { id: string;
 
       <PdfPages
         url={pdfUrl}
-        overlay={(page) =>
-          ordered
+        overlay={(page) => [
+          // Other people's places to sign: shown, not editable.
+          ...others.flatMap((o) =>
+            o.fields
+              .filter((f) => f.page === page)
+              .map((f) => (
+                <span key={`o-${f.id}`} className="absolute flex items-center overflow-hidden rounded-[3px] bg-slate-400/15 px-1 text-[clamp(6px,1.3vw,9px)] font-medium text-slate-500 ring-1 ring-slate-400/40 ring-dashed" style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.w * 100}%`, height: `${f.h * 100}%` }}>
+                  <span className="truncate">{f.type === "checkbox" ? "" : `For ${o.label.toLowerCase()}`}</span>
+                </span>
+              )),
+          ),
+          ...ordered
             .filter((f) => f.page === page)
             .map((f) => {
               const v = values[f.id];
@@ -127,8 +139,8 @@ export function GuidedSigner({ id, pdfUrl, fields, expectedName }: { id: string;
                   ) : null}
                 </button>
               );
-            })
-        }
+            }),
+        ]}
       />
 
       {/* Guide bar */}
@@ -234,10 +246,11 @@ export function GuidedSigner({ id, pdfUrl, fields, expectedName }: { id: string;
                   disabled={!agree || name.trim().length < 3 || pending}
                   onClick={() =>
                     start(async () => {
-                      const r = await submitSignature(id, { name, agree, values: Object.entries(values).map(([fid, value]) => ({ id: fid, value })) });
+                      const payload = { name, agree, values: Object.entries(values).map(([fid, value]) => ({ id: fid, value })) };
+                      const r = mode.kind === "link" ? await submitLinkSignature(mode.token, payload) : mode.kind === "agent" ? await submitAgentSignature(id, payload) : await submitSignature(id, payload);
                       if (!r.ok) return void toast.error(r.error);
                       setFinish(false);
-                      toast.success("Signed and sent. A copy is in your documents.");
+                      toast.success(doneText ?? (r.id === "waiting" ? "Signed. We'll let you know when everyone has signed." : "Signed and sent. A copy is in your documents."));
                       router.refresh();
                     })
                   }

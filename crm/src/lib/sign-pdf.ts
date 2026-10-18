@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { degrees, PDFDocument, type PDFFont, type PDFPage, rgb, StandardFonts } from "pdf-lib";
-import type { SignField, SignValue } from "@/db/crm-schema";
+import type { SignField, SignSigner, SignValue } from "@/db/crm-schema";
 import { type ConsentTemplate, type ConsentVars, consentSections, fillConsent } from "@/lib/consent-templates";
 
 // PDFs for e-signing: consent forms rendered from templates (with their fields placed exactly), and
@@ -55,15 +55,35 @@ const fieldLine = rgb(0.62, 0.7, 0.86);
  * when even the smallest doesn't. Fields are placed on exact point positions and returned as page
  * fractions for the signing screen.
  */
-export async function renderConsentPdf(t: ConsentTemplate, vars: Partial<ConsentVars>) {
+/** A signer besides the client: another person (sponsor, second parent) or the agent countersigning. */
+export type ExtraSigner = { id: string; role: "other" | "agent"; label: string; name: string; marn?: string | null };
+
+export async function renderConsentPdf(t: ConsentTemplate, vars: Partial<ConsentVars>, extra: ExtraSigner[] = []) {
   for (const size of [10, 9.6, 9.2, 8.8, 8.4, 8, 7.6]) {
-    const r = await layoutConsent(t, vars, size);
+    const r = await layoutConsent(t, vars, size, extra);
     if (r.pages === 1) return r;
   }
-  return layoutConsent(t, vars, 9);
+  return layoutConsent(t, vars, 9, extra);
 }
 
-async function layoutConsent(t: ConsentTemplate, vars: Partial<ConsentVars>, size: number) {
+/** Several consent forms as one PDF (a "pack"), each starting on its own page; fields keep their page. */
+export async function renderBundle(list: ConsentTemplate[], vars: Partial<ConsentVars>, extra: ExtraSigner[] = [], agentFor: (t: ConsentTemplate) => boolean = (t) => Boolean(t.countersign)) {
+  const out = await PDFDocument.create();
+  out.setTitle(safe(list.map((t) => t.title).join(", ")).slice(0, 200));
+  out.setCreator("Lodgely");
+  const fields: SignField[] = [];
+  for (const t of list) {
+    const r = await renderConsentPdf(t, vars, extra.filter((e) => e.role !== "agent" || agentFor(t)));
+    const src = await PDFDocument.load(r.bytes);
+    const offset = out.getPageCount();
+    for (const pg of await out.copyPages(src, src.getPageIndices())) out.addPage(pg);
+    for (const f of r.fields) fields.push({ ...f, page: f.page + offset, label: list.length > 1 ? `${f.label} · ${t.title}`.slice(0, 110) : f.label });
+  }
+  fields.forEach((f, i) => (f.id = `f${i + 1}`));
+  return { bytes: await out.save(), fields, pages: out.getPageCount() };
+}
+
+async function layoutConsent(t: ConsentTemplate, vars: Partial<ConsentVars>, size: number, extra: ExtraSigner[] = []) {
   const [W, H] = A4;
   const MX = 46; // side margin
   const TOP = 44;
@@ -105,8 +125,8 @@ async function layoutConsent(t: ConsentTemplate, vars: Partial<ConsentVars>, siz
   const rightText = (s: string, yy: number, sz: number, font = reg, color: Rgb = muted) => page.drawText(safe(s), { x: W - MX - font.widthOfTextAtSize(safe(s), sz), y: yy, size: sz, font, color });
   const box = (x: number, top: number, w: number, h: number, fill = fieldFill, border = fieldLine) => page.drawRectangle({ x, y: top - h, width: w, height: h, color: fill, borderColor: border, borderWidth: 0.7 });
   /** A field at point coordinates (top-left of the box), recorded as page fractions. */
-  const field = (f: Pick<SignField, "type" | "label" | "required">, x: number, top: number, w: number, h: number, pageNo = pdf.getPageCount()) => {
-    fields.push({ ...f, id: `f${fields.length + 1}`, page: pageNo, x: x / W, y: (H - top) / H, w: w / W, h: h / H, source: "template" });
+  const field = (f: Pick<SignField, "type" | "label" | "required">, x: number, top: number, w: number, h: number, signer = "client") => {
+    fields.push({ ...f, id: `f${fields.length + 1}`, page: pdf.getPageCount(), x: x / W, y: (H - top) / H, w: w / W, h: h / H, source: "template", signer });
   };
 
   // ── Letterhead ──
@@ -160,7 +180,8 @@ async function layoutConsent(t: ConsentTemplate, vars: Partial<ConsentVars>, siz
   const cbLines = cbs.map((cb) => wrapR(cb.label + (cb.required ? "" : " (optional)"), size, width - 44));
   const textH = t.textField ? labelSz * 1.4 + 26 + 8 : 0;
   const sigBlock = 14 + size * 1.6 + cbLines.reduce((h, l) => h + Math.max(16, l.length * lh) + 4, 0) + textH + 12 + 58 + 10 + 26 + 18 + 12;
-  need(sigBlock);
+  const extraH = extra.length * 92;
+  need(sigBlock + extraH);
   y -= 2;
   const blockTop = y;
   y -= 12;
@@ -207,6 +228,26 @@ async function layoutConsent(t: ConsentTemplate, vars: Partial<ConsentVars>, siz
   // Border drawn last, sized to what was drawn (outline only, so it covers nothing).
   page.drawRectangle({ x: MX, y, width, height: blockTop - y, borderColor: line, borderWidth: 0.8 });
 
+  // ── Other signers: each gets its own box with signature and date ──
+  for (const e of extra) {
+    y -= 10;
+    const top = y;
+    y -= 12;
+    const head = e.role === "agent" ? `REGISTERED MIGRATION AGENT  ·  ${e.name}${e.marn ? `  (MARN ${e.marn})` : ""}` : `${e.label.toUpperCase()}  ·  ${e.name}`;
+    page.drawText(safe(head), { x: ix, y: y - size + 1, size: size - 1, font: bold, color: muted });
+    y -= size * 1.6;
+    page.drawText("Signature", { x: ix, y: y - labelSz, size: labelSz, font: reg, color: muted });
+    y -= labelSz * 1.5;
+    box(ix, y, sigW, 40);
+    field({ type: "signature", label: `${e.role === "agent" ? "Agent" : e.label} signature`, required: true }, ix, y, sigW, 40, e.id);
+    page.drawLine({ start: { x: ix + 8, y: y - 31 }, end: { x: ix + sigW - 8, y: y - 31 }, thickness: 0.5, color: fieldLine });
+    page.drawText("Date", { x: dateX, y: y - 40 + 26 + 4, size: labelSz, font: reg, color: muted });
+    box(dateX, y - 14, dateW, 26);
+    field({ type: "date", label: `${e.role === "agent" ? "Agent" : e.label} date`, required: true }, dateX, y - 14, dateW, 26, e.id);
+    y -= 40 + 12;
+    page.drawRectangle({ x: MX, y, width, height: top - y, borderColor: line, borderWidth: 0.8 });
+  }
+
   // ── Footer on every page, with initials boxes when the template asks for them ──
   const pages = pdf.getPages();
   pages.forEach((pg, i) => {
@@ -217,7 +258,7 @@ async function layoutConsent(t: ConsentTemplate, vars: Partial<ConsentVars>, siz
       const bx = W - MX - 64;
       pg.drawText("Initials", { x: bx - reg.widthOfTextAtSize("Initials", 7) - 6, y: 40, size: 7, font: reg, color: muted });
       pg.drawRectangle({ x: bx, y: 34, width: 64, height: 22, color: fieldFill, borderColor: fieldLine, borderWidth: 0.7 });
-      fields.push({ id: `f${fields.length + 1}`, page: i + 1, x: bx / W, y: (H - 56) / H, w: 64 / W, h: 22 / H, type: "initials", label: "Initials", required: true, source: "template" });
+      fields.push({ id: `f${fields.length + 1}`, page: i + 1, x: bx / W, y: (H - 56) / H, w: 64 / W, h: 22 / H, type: "initials", label: "Initials", required: true, source: "template", signer: "client" });
     }
     pg.drawText(pn, { x: W - MX - reg.widthOfTextAtSize(pn, 7), y: 19, size: 7, font: reg, color: muted });
   });
@@ -251,6 +292,7 @@ export type SignAudit = {
   signerEmail: string | null;
   signerIp: string | null;
   signerAgent: string | null;
+  signers?: SignSigner[];
 };
 
 /** Stamps the client's values onto the original PDF and adds a signing record page. */
@@ -306,21 +348,37 @@ export async function stampSignedPdf(source: Uint8Array, fields: SignField[], va
     }
   }
 
-  // Signing record
-  const page = pdf.addPage(A4);
+  // Signing record (flows onto more pages when there are many fields)
+  let page = pdf.addPage(A4);
   let y = A4[1] - M;
   const wrap = wrapper(reg);
+  const KEY_W = 168;
+  const ensure = (h: number) => {
+    if (y - h < M) {
+      page = pdf.addPage(A4);
+      y = A4[1] - M;
+    }
+  };
+  /** Cuts text to fit a width, with an ellipsis. */
+  const fit = (s: string, size: number, w: number) => {
+    let t = safe(s);
+    if (reg.widthOfTextAtSize(t, size) <= w) return t;
+    while (t.length > 1 && reg.widthOfTextAtSize(`${t}...`, size) > w) t = t.slice(0, -1);
+    return `${t.trimEnd()}...`;
+  };
   const write = (s: string, size = 9.5, font = reg, color = ink) => {
     for (const l of wrap(s, size, A4[0] - M * 2)) {
+      ensure(size + 4);
       page.drawText(l, { x: M, y: y - size, size, font, color });
       y -= size + 4;
     }
   };
-  const pair = (k: string, v: string) => {
-    page.drawText(safe(k), { x: M, y: y - 9.5, size: 9.5, font: reg, color: muted });
-    const lines = wrap(v, 9.5, A4[0] - M * 2 - 150);
-    lines.forEach((l, i) => page.drawText(l, { x: M + 150, y: y - 9.5 - i * 13, size: 9.5, font: reg, color: ink }));
-    y -= Math.max(1, lines.length) * 13 + 2;
+  const pair = (k: string, v: string, size = 9.5) => {
+    const lines = wrap(v, size, A4[0] - M * 2 - KEY_W);
+    ensure(Math.max(1, lines.length) * (size + 3.5) + 2);
+    page.drawText(fit(k, size, KEY_W - 10), { x: M, y: y - size, size, font: reg, color: muted });
+    lines.forEach((l, i) => page.drawText(l, { x: M + KEY_W, y: y - size - i * (size + 3.5), size, font: reg, color: ink }));
+    y -= Math.max(1, lines.length) * (size + 3.5) + 2;
   };
   write("Signing record", 15, bold);
   y -= 2;
@@ -340,13 +398,21 @@ export async function stampSignedPdf(source: Uint8Array, fields: SignField[], va
   pair("Method", "Client portal sign-in (emailed link or code), guided fields, drawn or typed signature");
   pair("IP address", audit.signerIp ?? "-");
   pair("Device", audit.signerAgent ?? "-");
-  y -= 6;
+  for (const sg of (audit.signers ?? []).filter((x) => x.role !== "client")) {
+    y -= 4;
+    pair(sg.role === "agent" ? "Countersigned by agent" : `Signed by ${sg.label.toLowerCase()}`, `${sg.signedName ?? sg.name} · ${syd(sg.signedAt ? new Date(sg.signedAt) : null)}`);
+    pair("    Signed in as", `${sg.email ?? "-"}${sg.role === "other" ? " (personal emailed link)" : sg.role === "agent" ? " (Lodgely staff sign-in)" : ""}`);
+    pair("    IP address", sg.ip ?? "-");
+  }
+  y -= 8;
   write("Fields completed", 10.5, bold);
+  y -= 2;
+  const who = new Map((audit.signers ?? []).map((x) => [x.id, x.role === "agent" ? "agent" : x.label.toLowerCase()]));
   for (const f of fields) {
     const v = byId.get(f.id);
     const shown = !v ? "(left blank)" : f.type === "signature" || f.type === "initials" ? `${f.type} applied` : f.type === "checkbox" ? (v === "yes" ? "ticked" : "not ticked") : v;
-    pair(`p${f.page} · ${f.label}`.slice(0, 40), shown);
-    if (y < M + 30) break;
+    const by = who.size > 1 ? ` (${who.get(f.signer ?? "client") ?? "client"})` : "";
+    pair(`p${f.page}  ${f.label}`, `${shown}${by}`, 8.5);
   }
   return pdf.save();
 }

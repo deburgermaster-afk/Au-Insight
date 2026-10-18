@@ -50,7 +50,7 @@ export function SignList({ rows, showClient = true, empty = "No signature reques
           <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5 first:pt-0 last:pb-0">
             <FileSignature className="size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{r.title}</p>
+              <Link href={r.status === "draft" ? `/app/sign/new?draft=${r.id}` : `/app/sign/${r.id}`} className="block truncate text-sm font-medium hover:underline">{r.title}</Link>
               <p className="truncate text-xs text-muted-foreground">
                 {showClient && r.clientName ? (
                   <>

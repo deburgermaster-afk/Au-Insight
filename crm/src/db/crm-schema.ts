@@ -1263,6 +1263,25 @@ export type SignField = {
   label: string;
   required: boolean;
   source?: "template" | "detected" | "ai" | "manual";
+  /** Who completes it: a signer id from the request's signers ("client" when absent). */
+  signer?: string;
+};
+
+/** Someone who signs a request: the client (in the portal), another person (by emailed link) or the agent (countersign). */
+export type SignSigner = {
+  id: string; // "client", "agent", or "s2", "s3"…
+  role: "client" | "other" | "agent";
+  label: string; // "Client", "Sponsor", "Second parent", "Registered migration agent"
+  name: string;
+  email: string | null;
+  userId?: string | null; // agent
+  tokenHash?: string | null; // other: sha256 of the link token
+  status: "pending" | "viewed" | "signed";
+  viewedAt?: string | null;
+  signedAt?: string | null;
+  signedName?: string | null;
+  ip?: string | null;
+  agent?: string | null;
 };
 export type SignValue = { id: string; value: string }; // signature/initials: PNG data URL; checkbox: "yes" | ""
 export type SignEvent = { at: string; kind: "created" | "sent" | "viewed" | "signed" | "void" | "reminded"; by: string | null; detail?: string };
@@ -1301,6 +1320,9 @@ export const signRequests = pgTable(
     signerIp: text("signer_ip"),
     signerAgent: text("signer_agent"),
     values: jsonb("values").$type<SignValue[]>(),
+    signers: jsonb("signers").$type<SignSigner[]>().notNull().default([]),
+    bundle: jsonb("bundle").$type<string[]>(), // template keys when several forms go as one pack
+    invoiceId: text("invoice_id"), // pay straight after signing
     documentId: text("document_id"), // the signed PDF in the client's documents
     ...stamps,
   },
@@ -1342,4 +1364,45 @@ export const caseReviews = pgTable(
     ...stamps,
   },
   (t) => [index("case_reviews_client_idx").on(t.agencyId, t.clientId, t.createdAt), index("case_reviews_matter_idx").on(t.matterId, t.createdAt)],
+);
+
+/** An agency's own wording for a consent template (key of a built-in one), or its own extra template. */
+export const consentTemplateOverrides = pgTable(
+  "consent_template_overrides",
+  {
+    id: id(),
+    agencyId: agency(),
+    key: text("key").notNull(),
+    custom: boolean("custom").default(false).notNull(),
+    disabled: boolean("disabled").default(false).notNull(),
+    title: text("title").notNull(),
+    group: text("group").notNull(),
+    summary: text("summary").notNull().default(""),
+    body: text("body").notNull(),
+    checkboxes: jsonb("checkboxes").$type<{ id: string; label: string; required?: boolean }[]>().notNull().default([]),
+    textField: jsonb("text_field").$type<{ id: string; label: string; required?: boolean } | null>(),
+    initials: boolean("initials").default(false).notNull(),
+    countersign: boolean("countersign").default(false).notNull(),
+    updatedBy: text("updated_by"),
+    ...stamps,
+  },
+  (t) => [uniqueIndex("consent_template_overrides_key").on(t.agencyId, t.key)],
+);
+
+/** Home Affairs' published processing times (50% and 90%), copied daily from Immi Insight. */
+export const processingTimes = pgTable(
+  "processing_times",
+  {
+    subclass: text("subclass").notNull(),
+    stream: text("stream").notNull().default(""),
+    visaName: text("visa_name"),
+    p50: text("p50"),
+    p90: text("p90"),
+    p50Days: integer("p50_days"),
+    p90Days: integer("p90_days"),
+    asAt: date("as_at"),
+    sourceUrl: text("source_url"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.subclass, t.stream] })],
 );

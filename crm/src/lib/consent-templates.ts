@@ -19,6 +19,11 @@ export type ConsentTemplate = {
   initials?: boolean;
   /** A free-text field the client completes (e.g. names of people to share with). */
   textField?: { id: string; label: string; required?: boolean };
+  /** The registered migration agent countersigns. */
+  countersign?: boolean;
+  /** Set for an agency's own wording (edited) or its own template (custom). */
+  edited?: boolean;
+  custom?: boolean;
 };
 
 export const CONSENT_VARS = {
@@ -75,6 +80,7 @@ You can ask to see or correct the information we hold about you. If you have a p
   },
   {
     key: "authority-to-act",
+    countersign: true,
     title: "Authority to act and appointment of registered migration agent",
     group: "Engagement",
     summary: "Appoints the agent to act and receive correspondence for the client (pairs with Form 956).",
@@ -138,6 +144,7 @@ The Consumer Guide explains what I can expect from a registered migration agent,
   },
   {
     key: "fee-estimate",
+    countersign: true,
     title: "Fee estimate and costs disclosure",
     group: "Money",
     summary: "Acknowledges the professional fee estimate, government charges and third-party costs.",
@@ -155,6 +162,7 @@ Government charges are generally not refundable if an application is refused or 
   },
   {
     key: "client-account",
+    countersign: true,
     title: "Client account authority",
     group: "Money",
     summary: "Authorises the agency to hold money in its client (trust) account and pay it out for fees and charges.",
@@ -313,6 +321,7 @@ I understand that documents not in English must be translated by a NAATI-accredi
   },
   {
     key: "conflict",
+    countersign: true,
     title: "Conflict of interest disclosure and consent",
     group: "Engagement",
     summary: "Discloses an actual or potential conflict (e.g. acting for both sponsor and applicant) and records consent.",
@@ -341,6 +350,7 @@ My agent has explained that the visa application charge is generally not refunde
   },
   {
     key: "termination",
+    countersign: true,
     title: "Termination of services and return of documents",
     group: "Ending",
     summary: "Records the end of the agency's services, the final account and return of original documents.",
@@ -357,6 +367,7 @@ My original documents will be returned to me. {agencyLegal} will keep a copy of 
   },
   {
     key: "documents-receipt",
+    countersign: true,
     title: "Receipt of original documents",
     group: "Ending",
     summary: "Confirms the client received their original documents back from the agency.",

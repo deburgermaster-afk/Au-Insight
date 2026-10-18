@@ -5,22 +5,20 @@ import { headers } from "next/headers";
 import { updateTag } from "next/cache";
 import { z } from "zod";
 import { db, schema as s } from "@/db";
-import type { SignEvent, SignField } from "@/db/crm-schema";
+import type { SignField, SignSigner } from "@/db/crm-schema";
 import type { ActionResult } from "@/lib/actions";
-import { clientSession, createMagicLink } from "@/lib/client-auth";
-import { consentByKey } from "@/lib/consent-templates";
+import { agencyTemplate, agencyTemplates } from "@/lib/agency-templates";
+import { clientSession } from "@/lib/client-auth";
+import { recommendFor, type TemplatePick } from "@/lib/consent-rank";
 import { agencyTag } from "@/lib/data";
 import { fileBytes, putFile, safeName } from "@/lib/files";
-import { mailEnabled, sendMail } from "@/lib/mail";
-import { notifyStaff } from "@/lib/notify";
-import { memberCtx, requireCap } from "@/lib/session";
-import { consentVars } from "@/lib/sign";
-import { recommendFor, type TemplatePick } from "@/lib/consent-rank";
+import { requireCap, requireRole } from "@/lib/session";
+import { consentVars, responsibleAgent } from "@/lib/sign";
+import { emailClient, emailOther, ev, hashToken, newToken, pendingSigners, recordSignature, signersOf } from "@/lib/sign-core";
 import { detectSignFields } from "@/lib/sign-detect";
-import { renderConsentPdf, sha256, stampSignedPdf } from "@/lib/sign-pdf";
+import { type ExtraSigner, renderBundle, sha256 } from "@/lib/sign-pdf";
 
 const fail = (e: unknown): ActionResult => ({ ok: false, error: e instanceof Error ? e.message : String(e) });
-const ev = (kind: SignEvent["kind"], by: string | null, detail?: string): SignEvent => ({ at: new Date().toISOString(), kind, by, ...(detail ? { detail } : {}) });
 const MAX_PDF = 20 * 1024 * 1024;
 
 const fieldSchema = z.object({
@@ -34,41 +32,66 @@ const fieldSchema = z.object({
   label: z.string().max(120),
   required: z.boolean(),
   source: z.enum(["template", "detected", "ai", "manual"]).optional(),
+  signer: z.string().max(20).optional(),
 });
 
-export type SignDraft = { id: string; fields: SignField[]; pages: number; method: string; title: string };
+export type SignerInput = { others: { label: string; name: string; email: string }[]; agentCountersign: boolean };
+export type SignDraft = { id: string; fields: SignField[]; pages: number; method: string; title: string; signers: SignSigner[]; formFields?: number };
+
+const otherSchema = z.array(z.object({ label: z.string().trim().min(2).max(40), name: z.string().trim().min(2).max(120), email: z.string().trim().email("Enter a valid email for each extra signer.").max(200) })).max(4);
+
+async function meta() {
+  const h = await headers();
+  return { ip: (h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "").split(",")[0].trim() || null, agent: h.get("user-agent")?.slice(0, 300) ?? null };
+}
 
 /**
- * Staff: start a signature request. The source is a consent template (rendered and filled in now),
- * a PDF just uploaded, or a PDF already in the client's documents. Finds the signing fields and
- * returns a draft for the agent to check before sending.
+ * Staff: start a signature request. The source is one consent template, several as one pack, a PDF
+ * just uploaded, or a PDF already in the client's documents. Sets up the signers, finds the fields
+ * and returns a draft for the agent to check before sending.
  */
-export async function createSignDraft(input: { clientId: string; matterId?: string | null; origin: "template" | "upload" | "file"; templateKey?: string; documentId?: string; upload?: { key: string; name: string }; ai?: boolean }): Promise<ActionResult & { draft?: SignDraft }> {
+export async function createSignDraft(input: { clientId: string; matterId?: string | null; origin: "template" | "upload" | "file"; templateKey?: string; templateKeys?: string[]; documentId?: string; upload?: { key: string; name: string }; ai?: boolean; signers?: SignerInput }): Promise<ActionResult & { draft?: SignDraft }> {
   try {
     const ctx = await requireCap("clients");
     const [c] = await db.select().from(s.clients).where(and(eq(s.clients.agencyId, ctx.agencyId), eq(s.clients.id, input.clientId)));
     if (!c) return { ok: false, error: "Client not found." };
     let matterId = input.matterId || null;
+    let assignedTo: string | null = null;
     if (matterId) {
-      const [m] = await db.select({ id: s.matters.id }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId), eq(s.matters.clientId, c.id)));
+      const [m] = await db.select({ id: s.matters.id, assignedTo: s.matters.assignedTo }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId), eq(s.matters.clientId, c.id)));
       if (!m) matterId = null;
+      assignedTo = m?.assignedTo ?? null;
     }
     const clientName = `${c.firstName} ${c.lastName}`;
+    const others = otherSchema.parse(input.signers?.others ?? []);
+    const agent = input.signers?.agentCountersign ? await responsibleAgent(ctx.agencyId, assignedTo, ctx.userId) : null;
+    const signers: SignSigner[] = [
+      { id: "client", role: "client", label: "Client", name: clientName, email: c.email, status: "pending" },
+      ...others.map((o, i) => ({ id: `s${i + 2}`, role: "other" as const, label: o.label, name: o.name, email: o.email, status: "pending" as const })),
+      ...(agent ? [{ id: "agent", role: "agent" as const, label: "Registered migration agent", name: agent.name, email: null, userId: agent.userId, status: "pending" as const }] : []),
+    ];
+    const extra: ExtraSigner[] = signers.filter((x) => x.role !== "client").map((x) => ({ id: x.id, role: x.role as "other" | "agent", label: x.label, name: x.name, marn: x.role === "agent" ? agent?.marn : null }));
+
     let bytes: Uint8Array;
     let title: string;
     let fields: SignField[];
     let pages: number;
     let method: string;
+    let formFields = 0;
     let sourceDocumentId: string | null = null;
+    let bundle: string[] | null = null;
     if (input.origin === "template") {
-      const t = consentByKey(input.templateKey ?? "");
-      if (!t) return { ok: false, error: "Template not found." };
+      const keys = (input.templateKeys?.length ? input.templateKeys : [input.templateKey ?? ""]).slice(0, 12);
+      const list = (await Promise.all(keys.map((k) => agencyTemplate(ctx.agencyId, k)))).filter((t): t is NonNullable<typeof t> => Boolean(t));
+      if (!list.length) return { ok: false, error: "Template not found." };
       const vars = await consentVars(ctx.agencyId, c.id, matterId, ctx.userId);
-      const r = await renderConsentPdf(t, vars);
+      // The agent countersigns only the forms that call for it.
+      const r = await renderBundle(list, vars, extra, (t) => Boolean(t.countersign));
       bytes = r.bytes;
       fields = r.fields;
       pages = r.pages;
-      title = t.title;
+      title = list.length === 1 ? list[0].title : keys.join(",") === NEW_CLIENT_PACK.join(",") ? "New client pack" : `${list.length} consent forms`;
+      if (list.length > 1) bundle = list.map((t) => t.key);
       method = "template";
     } else {
       let key: string;
@@ -90,19 +113,35 @@ export async function createSignDraft(input: { clientId: string; matterId?: stri
       if (buf.subarray(0, 5).toString() !== "%PDF-") return { ok: false, error: "This file isn't a valid PDF." };
       bytes = new Uint8Array(buf);
       const r = await detectSignFields(bytes, { clientName, useAi: input.ai !== false });
-      fields = r.fields;
+      fields = r.fields.map((f) => ({ ...f, signer: "client" }));
       pages = r.pages;
       method = r.method;
+      formFields = await countTextFields(bytes);
     }
-    // Freeze a copy of exactly what the client will sign.
+    // A signer with nothing to sign on these forms (e.g. no form in the pack needs the agent) is dropped.
+    if (input.origin === "template") signers.splice(0, signers.length, ...signers.filter((x) => x.role === "client" || fields.some((f) => f.signer === x.id)));
+    // Freeze a copy of exactly what will be signed.
     const stored = await putFile(`agency/${ctx.agencyId}/client/${c.id}/signing/${safeName(title)}.pdf`, Buffer.from(bytes), "application/pdf");
     const [row] = await db
       .insert(s.signRequests)
-      .values({ agencyId: ctx.agencyId, clientId: c.id, matterId, title: title.slice(0, 200), origin: input.origin, templateKey: input.origin === "template" ? input.templateKey : null, sourceDocumentId, sourceKey: stored.pathname, sourceHash: sha256(bytes), pages, fields, status: "draft", events: [ev("created", ctx.name, method)], sentBy: ctx.userId, sentByName: ctx.name })
+      .values({ agencyId: ctx.agencyId, clientId: c.id, matterId, title: title.slice(0, 200), origin: input.origin, templateKey: input.origin === "template" ? (bundle ? null : (input.templateKeys?.[0] ?? input.templateKey)) : null, bundle, sourceDocumentId, sourceKey: stored.pathname, sourceHash: sha256(bytes), pages, fields, signers, status: "draft", events: [ev("created", ctx.name, method)], sentBy: ctx.userId, sentByName: ctx.name })
       .returning({ id: s.signRequests.id });
-    return { ok: true, id: row.id, draft: { id: row.id, fields, pages, method, title } };
+    return { ok: true, id: row.id, draft: { id: row.id, fields, pages, method, title, signers, formFields } };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/** The forms most agencies send at engagement, as one pack. */
+const NEW_CLIENT_PACK = ["privacy", "authority-to-act", "consumer-guide", "fee-estimate", "electronic-communication"];
+
+async function countTextFields(bytes: Uint8Array) {
+  try {
+    const { PDFDocument, PDFTextField } = await import("pdf-lib");
+    const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+    return pdf.getForm().getFields().filter((f) => f instanceof PDFTextField).length;
+  } catch {
+    return 0;
   }
 }
 
@@ -114,34 +153,58 @@ export async function redetectFields(id: string): Promise<ActionResult & { field
     if (!r) return { ok: false, error: "Draft not found." };
     const [c] = await db.select({ f: s.clients.firstName, l: s.clients.lastName }).from(s.clients).where(eq(s.clients.id, r.clientId));
     const out = await detectSignFields(new Uint8Array(await fileBytes(r.sourceKey)), { clientName: `${c.f} ${c.l}`, useAi: true });
-    await db.update(s.signRequests).set({ fields: out.fields }).where(eq(s.signRequests.id, id));
-    return { ok: true, fields: out.fields, method: out.method };
+    const fields = out.fields.map((f) => ({ ...f, signer: "client" }));
+    await db.update(s.signRequests).set({ fields }).where(eq(s.signRequests.id, id));
+    return { ok: true, fields, method: out.method };
   } catch (e) {
     return fail(e);
   }
 }
 
-/** Staff: send a checked draft to the client (email with a sign-in link, and in the portal). */
-export async function sendSignRequest(id: string, input: { title: string; message?: string; fields: SignField[]; dueAt?: string | null }): Promise<ActionResult> {
+/** Staff: send a checked draft. The client gets a portal link; other signers their own links; the agent countersigns in Lodgely. */
+export async function sendSignRequest(id: string, input: { title: string; message?: string; fields: SignField[]; dueAt?: string | null; invoiceId?: string | null }): Promise<ActionResult> {
   try {
     const ctx = await requireCap("clients");
     const [r] = await db.select().from(s.signRequests).where(and(eq(s.signRequests.agencyId, ctx.agencyId), eq(s.signRequests.id, id)));
     if (!r) return { ok: false, error: "Request not found." };
     if (r.status !== "draft") return { ok: false, error: "This request was already sent." };
-    const fields = z.array(fieldSchema).min(1, "Add at least one field for the client.").max(120).parse(input.fields).filter((f) => f.page <= r.pages);
-    if (!fields.some((f) => f.type === "signature" || f.type === "initials")) return { ok: false, error: "Add a signature field." };
     const [c] = await db.select().from(s.clients).where(eq(s.clients.id, r.clientId));
+    const signers = signersOf(r, `${c.firstName} ${c.lastName}`);
+    const ids = new Set(signers.map((x) => x.id));
+    const fields = z.array(fieldSchema).min(1, "Add at least one field.").max(200).parse(input.fields).filter((f) => f.page <= r.pages).map((f) => ({ ...f, signer: f.signer && ids.has(f.signer) ? f.signer : "client" }));
+    for (const sg of signers) {
+      const mine = fields.filter((f) => f.signer === sg.id);
+      if (!mine.some((f) => f.type === "signature" || f.type === "initials")) return { ok: false, error: `Add a signature field for ${sg.label === "Client" ? "the client" : sg.label.toLowerCase()} (${sg.name}).` };
+    }
     if (!c.email) return { ok: false, error: "Add the client's email first so they can sign in to the portal." };
+    let invoiceId: string | null = null;
+    if (input.invoiceId) {
+      const [inv] = await db.select({ id: s.invoices.id }).from(s.invoices).where(and(eq(s.invoices.agencyId, ctx.agencyId), eq(s.invoices.id, input.invoiceId), eq(s.invoices.clientId, c.id)));
+      invoiceId = inv?.id ?? null;
+    }
     const title = input.title.trim().slice(0, 200) || r.title;
     const dueAt = input.dueAt && /^\d{4}-\d{2}-\d{2}$/.test(input.dueAt) ? input.dueAt : null;
-    await db
+    // Personal links for other signers (only the hash is stored).
+    const tokens = new Map<string, string>();
+    const withTokens = signers.map((x) => {
+      if (x.role !== "other") return x;
+      const t = newToken();
+      tokens.set(x.id, t);
+      return { ...x, tokenHash: hashToken(t) };
+    });
+    const [sent] = await db
       .update(s.signRequests)
-      .set({ title, message: input.message?.trim().slice(0, 2000) || null, fields, dueAt, status: "sent", events: sql`${s.signRequests.events} || ${JSON.stringify([ev("sent", ctx.name)])}::jsonb`, sentBy: ctx.userId, sentByName: ctx.name, createdAt: new Date() })
-      .where(eq(s.signRequests.id, id));
+      .set({ title, message: input.message?.trim().slice(0, 2000) || null, fields, signers: withTokens, dueAt, invoiceId, status: "sent", events: sql`${s.signRequests.events} || ${JSON.stringify([ev("sent", ctx.name)])}::jsonb`, sentBy: ctx.userId, sentByName: ctx.name, createdAt: new Date() })
+      .where(and(eq(s.signRequests.id, id), eq(s.signRequests.status, "draft")))
+      .returning();
+    if (!sent) return { ok: false, error: "This request was already sent." };
     await db.update(s.clients).set({ portalEnabled: true }).where(eq(s.clients.id, c.id));
-    const emailed = await emailLink(ctx, c, id, title, input.message ?? null, dueAt);
-    await db.insert(s.activities).values({ agencyId: ctx.agencyId, clientId: c.id, matterId: r.matterId, kind: "document", title: `Sent to sign: ${title}`, body: `${fields.length} field${fields.length === 1 ? "" : "s"} to complete${dueAt ? `, due ${dueAt}` : ""}.${emailed ? " Emailed with a sign-in link." : " Waiting in the client portal."}`, actorId: ctx.userId, actorName: ctx.name });
-    await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "create", entity: "sign_request", entityId: id, detail: { title, fields: fields.length } });
+    const emailed = await emailClient(sent, { agencyName: ctx.agencyName, byUserId: ctx.userId });
+    let othersEmailed = 0;
+    for (const x of withTokens.filter((y) => y.role === "other")) if (await emailOther(sent, x, tokens.get(x.id)!, { agencyName: ctx.agencyName, clientName: `${c.firstName} ${c.lastName}` })) othersEmailed++;
+    const who = withTokens.filter((x) => x.role !== "client").map((x) => `${x.label} (${x.name})`);
+    await db.insert(s.activities).values({ agencyId: ctx.agencyId, clientId: c.id, matterId: r.matterId, kind: "document", title: `Sent to sign: ${title}`, body: `${fields.length} field${fields.length === 1 ? "" : "s"}${dueAt ? `, due ${dueAt}` : ""}.${emailed ? " Emailed to the client with a sign-in link." : " Waiting in the client portal."}${who.length ? ` Also signing: ${who.join(", ")}${othersEmailed < withTokens.filter((y) => y.role === "other").length ? " (copy their links from E-sign: email isn't set up)" : ""}.` : ""}`, actorId: ctx.userId, actorName: ctx.name });
+    await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "create", entity: "sign_request", entityId: id, detail: { title, fields: fields.length, signers: withTokens.length } });
     updateTag(agencyTag(ctx.agencyId));
     return { ok: true, id: emailed ? "emailed" : "portal" };
   } catch (e) {
@@ -149,36 +212,39 @@ export async function sendSignRequest(id: string, input: { title: string; messag
   }
 }
 
-async function emailLink(ctx: { agencyId: string; agencyName: string; userId: string }, c: typeof s.clients.$inferSelect, id: string, title: string, message: string | null, dueAt: string | null) {
-  if (!c.email || c.email.endsWith(".test") || !mailEnabled()) return false;
-  const [box] = await db.select().from(s.mailboxes).where(and(eq(s.mailboxes.agencyId, ctx.agencyId), eq(s.mailboxes.kind, "shared")));
-  if (!box) return false;
-  const url = await createMagicLink(c.id, ctx.agencyId, ctx.userId, `/client/signatures/${id}`, 72 * 60);
-  const esc = (v: string) => v.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
-  await sendMail({
-    agencyId: ctx.agencyId,
-    from: { address: box.address, name: ctx.agencyName },
-    to: [c.email],
-    subject: `Please sign: ${title}`,
-    html: `<p>Hi ${esc(c.firstName)},</p><p>${esc(ctx.agencyName)} has sent you <b>${esc(title)}</b> to sign${dueAt ? ` by ${esc(dueAt)}` : ""}.</p>${message ? `<p style="white-space:pre-line">${esc(message)}</p>` : ""}
-<p>We'll guide you to each place to sign, one at a time. It takes about a minute on your phone.</p>
-<p style="margin:24px 0"><a href="${url}" style="background:#18181b;color:#ffffff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;display:inline-block">Review and sign</a></p>
-<p style="color:#71717a;font-size:13px">This button signs you in to your client portal and works once in the next 3 days. After that, sign in to the portal with your email.</p>`,
-    clientId: c.id,
-    footer: `Sent by ${ctx.agencyName} via Lodgely`,
-  });
-  return true;
+/** Staff: a fresh personal link for another signer (to copy and send yourself, or re-email). */
+export async function otherSignerLink(id: string, signerId: string, email: boolean): Promise<ActionResult & { url?: string }> {
+  try {
+    const ctx = await requireCap("clients");
+    const [r] = await db.select().from(s.signRequests).where(and(eq(s.signRequests.agencyId, ctx.agencyId), eq(s.signRequests.id, id), inArray(s.signRequests.status, ["sent", "viewed"])));
+    if (!r) return { ok: false, error: "Only unsigned requests have links." };
+    const sg = signersOf(r).find((x) => x.id === signerId && x.role === "other");
+    if (!sg || sg.status === "signed") return { ok: false, error: "That signer has already signed." };
+    const t = newToken();
+    const { appUrl } = await import("@/lib/client-auth");
+    // Email first: the old link keeps working if the email can't be sent.
+    if (email) {
+      const [c] = await db.select({ f: s.clients.firstName, l: s.clients.lastName }).from(s.clients).where(eq(s.clients.id, r.clientId));
+      if (!(await emailOther(r, sg, t, { agencyName: ctx.agencyName, clientName: `${c.f} ${c.l}`, reminder: true }))) return { ok: false, error: "Email isn't set up for this agency. Copy the link instead." };
+    }
+    await db.update(s.signRequests).set({ signers: signersOf(r).map((x) => (x.id === signerId ? { ...x, tokenHash: hashToken(t) } : x)) }).where(eq(s.signRequests.id, id));
+    return { ok: true, url: `${appUrl()}/sign/${t}` };
+  } catch (e) {
+    return fail(e);
+  }
 }
 
-/** Staff: email the client again with a fresh link. */
+/** Staff: remind everyone who hasn't signed yet. */
 export async function remindSignRequest(id: string): Promise<ActionResult> {
   try {
     const ctx = await requireCap("clients");
     const [r] = await db.select().from(s.signRequests).where(and(eq(s.signRequests.agencyId, ctx.agencyId), eq(s.signRequests.id, id), inArray(s.signRequests.status, ["sent", "viewed"])));
     if (!r) return { ok: false, error: "Only unsigned requests can be resent." };
-    const [c] = await db.select().from(s.clients).where(eq(s.clients.id, r.clientId));
-    const ok = await emailLink(ctx, c, id, r.title, r.message, r.dueAt);
-    if (!ok) return { ok: false, error: "Email isn't set up for this agency or client. The request is waiting in their portal." };
+    const left = pendingSigners(r);
+    let n = 0;
+    if (left.some((x) => x.role === "client") && (await emailClient(r, { agencyName: ctx.agencyName, byUserId: ctx.userId, reminder: "nudge" }))) n++;
+    for (const x of left.filter((y) => y.role === "other")) if ((await otherSignerLink(id, x.id, true)).ok) n++;
+    if (!n) return { ok: false, error: left.every((x) => x.role === "agent") ? "Only your countersignature is left: open the request to sign." : "Email isn't set up for this agency or client. The request is waiting in their portal." };
     await db.update(s.signRequests).set({ events: sql`${s.signRequests.events} || ${JSON.stringify([ev("reminded", ctx.name)])}::jsonb` }).where(eq(s.signRequests.id, id));
     await db.insert(s.activities).values({ agencyId: ctx.agencyId, clientId: r.clientId, matterId: r.matterId, kind: "email", title: `Reminder to sign: ${r.title}`, actorId: ctx.userId, actorName: ctx.name });
     updateTag(agencyTag(ctx.agencyId));
@@ -207,66 +273,53 @@ export async function voidSignRequest(id: string): Promise<ActionResult> {
   }
 }
 
-const norm = (v: string) => v.toLowerCase().normalize("NFKD").replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
+type SignInput = { name: string; values: { id: string; value: string }[]; agree: boolean };
 
-/** Client: complete every field and sign. Stamps the PDF, files it in their documents and tells the agent. */
-export async function submitSignature(id: string, input: { name: string; values: { id: string; value: string }[]; agree: boolean }): Promise<ActionResult> {
+/** Client (portal): complete their fields and sign. */
+export async function submitSignature(id: string, input: SignInput): Promise<ActionResult> {
   try {
     const c = await clientSession();
     if (!c) return { ok: false, error: "Your session has ended. Sign in again." };
     const [r] = await db.select().from(s.signRequests).where(and(eq(s.signRequests.id, id), eq(s.signRequests.clientId, c.client.id)));
-    if (!r || r.status === "draft") return { ok: false, error: "Document not found." };
-    if (r.status === "signed") return { ok: true };
-    if (r.status === "void") return { ok: false, error: "This request was withdrawn. Your agent will send a new one if needed." };
-    if (!input.agree) return { ok: false, error: "Tick the box to agree to sign electronically." };
-    const name = input.name.trim().replace(/\s+/g, " ");
-    if (name.length < 3 || !norm(name).includes(norm(c.client.lastName))) return { ok: false, error: `Type your full name as it appears on your passport (${c.client.firstName} ${c.client.lastName}).` };
-    const given = new Map(input.values.filter((v) => typeof v.value === "string").map((v) => [v.id, v.value]));
-    const values: { id: string; value: string }[] = [];
-    for (const f of r.fields) {
-      const v = (given.get(f.id) ?? "").trim();
-      if (f.type === "signature" || f.type === "initials") {
-        if (v && (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(v) || v.length > 400_000)) return { ok: false, error: `Sign again in "${f.label}".` };
-      } else if (v.length > 300) return { ok: false, error: `"${f.label}" is too long.` };
-      if (f.required && (!v || (f.type === "checkbox" && v !== "yes"))) return { ok: false, error: `Complete "${f.label}" (page ${f.page}).` };
-      if (v) values.push({ id: f.id, value: f.type === "checkbox" ? (v === "yes" ? "yes" : "") : v });
-    }
-    const source = await fileBytes(r.sourceKey);
-    if (sha256(source) !== r.sourceHash) return { ok: false, error: "This document couldn't be verified. Ask your agent to send it again." };
-    const h = await headers();
-    const ip = (h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "").split(",")[0].trim() || null;
-    const agent = h.get("user-agent")?.slice(0, 300) ?? null;
-    const signedAt = new Date();
-    const [org] = await db.select({ name: s.organization.name }).from(s.organization).where(eq(s.organization.id, r.agencyId));
-    const pdf = await stampSignedPdf(new Uint8Array(source), r.fields, values, { id: r.id, title: r.title, agency: org?.name ?? "", clientName: `${c.client.firstName} ${c.client.lastName}`, sourceHash: r.sourceHash, sentByName: r.sentByName, sentAt: r.createdAt, viewedAt: r.viewedAt, signedAt, signerName: name, signerEmail: c.client.email, signerIp: ip, signerAgent: agent });
-    const fileName = `${r.title} (signed).pdf`;
-    const blob = await putFile(`agency/${r.agencyId}/client/${r.clientId}/signed/${safeName(fileName)}`, Buffer.from(pdf), "application/pdf").catch((e) => {
-      console.error("signed pdf store", e);
-      throw new Error("We couldn't save your signed copy just now. Please try again in a minute.");
-    });
-    const [doc] = await db
-      .insert(s.documents)
-      .values({ agencyId: r.agencyId, clientId: r.clientId, matterId: r.matterId, name: fileName, category: "Signed", mimeType: "application/pdf", sizeBytes: pdf.byteLength, storageKey: blob.pathname, uploadedBy: name, source: "portal" })
-      .returning({ id: s.documents.id });
-    const updated = await db
-      .update(s.signRequests)
-      .set({ status: "signed", signedAt, signerName: name, signerEmail: c.client.email, signerIp: ip, signerAgent: agent, values, documentId: doc.id, events: sql`${s.signRequests.events} || ${JSON.stringify([ev("signed", name, ip ?? undefined)])}::jsonb` })
-      .where(and(eq(s.signRequests.id, id), inArray(s.signRequests.status, ["sent", "viewed"])))
-      .returning({ id: s.signRequests.id });
-    if (!updated.length) return { ok: true };
-    // Templates that satisfy Code of Conduct steps update the matter.
-    if (r.matterId && r.templateKey === "consumer-guide") {
-      const today = signedAt.toLocaleDateString("en-CA", { timeZone: "Australia/Sydney" });
-      await db.update(s.matters).set({ consumerGuideAt: today }).where(and(eq(s.matters.id, r.matterId), sql`${s.matters.consumerGuideAt} is null`));
-    }
-    await db.insert(s.activities).values({ agencyId: r.agencyId, clientId: r.clientId, matterId: r.matterId, kind: "document", title: `Signed: ${r.title}`, body: `${name} signed in the client portal. The signed PDF is in the client's documents.`, actorName: name });
-    await db.insert(s.auditLog).values({ agencyId: r.agencyId, actorId: null, actorName: name, action: "sign", entity: "sign_request", entityId: r.id, detail: { ip } });
-    const [m] = r.matterId ? await db.select({ assignedTo: s.matters.assignedTo }).from(s.matters).where(eq(s.matters.id, r.matterId)) : [];
-    const tell = [...new Set([r.sentBy, m?.assignedTo].filter((x): x is string => Boolean(x)))];
-    const emails = (await Promise.all(tell.map((u) => memberCtx(r.agencyId, u)))).filter(Boolean).map((x) => x!.email);
-    await notifyStaff(emails, `Signed: ${r.title} (${c.client.firstName} ${c.client.lastName})`, { heading: `${c.client.firstName} ${c.client.lastName} signed ${r.title}`, lines: ["The signed PDF, with its signing record, is in the client's documents."], cta: { label: "Open e-sign", path: `/app/sign` } });
+    if (!r) return { ok: false, error: "Document not found." };
+    const out = await recordSignature(r, "client", { ...input, expectLastName: c.client.lastName }, { ...(await meta()), email: c.client.email });
+    if ("error" in out) return { ok: false, error: out.error };
     updateTag(agencyTag(r.agencyId));
-    return { ok: true, id: doc.id };
+    return { ok: true, id: out.done ? (out.documentId ?? "done") : "waiting" };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Another signer (emailed link, no account). */
+export async function submitLinkSignature(token: string, input: SignInput): Promise<ActionResult> {
+  try {
+    const h = hashToken(token);
+    const [r] = await db.select().from(s.signRequests).where(sql`${s.signRequests.signers} @> ${JSON.stringify([{ tokenHash: h }])}::jsonb`);
+    const sg = r ? signersOf(r).find((x) => x.tokenHash === h) : null;
+    if (!r || !sg) return { ok: false, error: "This link is no longer valid. Ask the agency for a new one." };
+    const out = await recordSignature(r, sg.id, { ...input, expectLastName: sg.name.split(" ").pop() ?? null }, { ...(await meta()), email: sg.email });
+    if ("error" in out) return { ok: false, error: out.error };
+    updateTag(agencyTag(r.agencyId));
+    return { ok: true, id: out.done ? "done" : "waiting" };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** The registered migration agent countersigns (signed in to Lodgely as that agent, or an admin). */
+export async function submitAgentSignature(id: string, input: SignInput): Promise<ActionResult> {
+  try {
+    const ctx = await requireRole("staff");
+    const [r] = await db.select().from(s.signRequests).where(and(eq(s.signRequests.agencyId, ctx.agencyId), eq(s.signRequests.id, id)));
+    if (!r) return { ok: false, error: "Request not found." };
+    const sg = signersOf(r).find((x) => x.role === "agent");
+    if (!sg) return { ok: false, error: "This request has no countersignature." };
+    if (sg.userId && sg.userId !== ctx.userId && !["admin", "owner"].includes(ctx.role)) return { ok: false, error: `Only ${sg.name} (or an agency admin) can countersign.` };
+    const out = await recordSignature(r, "agent", input, { ...(await meta()), email: ctx.email });
+    if ("error" in out) return { ok: false, error: out.error };
+    updateTag(agencyTag(ctx.agencyId));
+    return { ok: true, id: out.done ? "done" : "waiting" };
   } catch (e) {
     return fail(e);
   }
@@ -276,7 +329,9 @@ export async function submitSignature(id: string, input: { name: string; values:
 export async function recommendTemplates(clientId: string, matterId: string | null): Promise<{ ok: true; picks: TemplatePick[]; done: string[]; method: "ai" | "rules" } | { ok: false; error: string }> {
   try {
     const ctx = await requireCap("clients");
-    return { ok: true, ...(await recommendFor(ctx.agencyId, clientId, matterId)) };
+    const keys = new Set((await agencyTemplates(ctx.agencyId)).map((t) => t.key));
+    const r = await recommendFor(ctx.agencyId, clientId, matterId);
+    return { ok: true, ...r, picks: r.picks.filter((p) => keys.has(p.key)) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

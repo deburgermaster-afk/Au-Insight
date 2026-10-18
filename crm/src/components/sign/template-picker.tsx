@@ -1,13 +1,13 @@
 "use client";
 
-import { CheckCircle2, Eye, FileText, Search, Sparkles, X } from "lucide-react";
+import { CheckCircle2, Eye, FileText, Layers, Pencil, Search, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type ConsentTemplate, consentGroups, consentTemplates } from "@/lib/consent-templates";
+import { type ConsentTemplate, consentGroups } from "@/lib/consent-templates";
 import { recommendTemplates } from "@/lib/sign-actions";
 import { cn } from "@/lib/utils";
 import { PdfPages } from "./pdf-pages";
@@ -24,7 +24,11 @@ const matches = (t: ConsentTemplate, q: string) => {
  * The consent form library: search, the forms this case needs now on top (ranked from the case,
  * with the AI's reasons), then every form by group. Each form can be previewed as the exact PDF.
  */
-export function TemplatePicker({ clientId, matterId, onPick, hrefBase, busy, compact }: { clientId?: string; matterId?: string; onPick?: (key: string) => void; hrefBase?: string; busy?: boolean; compact?: boolean }) {
+const NEW_CLIENT_PACK = ["privacy", "authority-to-act", "consumer-guide", "fee-estimate", "electronic-communication"];
+
+export function TemplatePicker({ templates, clientId, matterId, onPick, onPickMany, hrefBase, editBase, busy, compact }: { templates: ConsentTemplate[]; clientId?: string; matterId?: string; onPick?: (key: string) => void; onPickMany?: (keys: string[]) => void; hrefBase?: string; editBase?: string; busy?: boolean; compact?: boolean }) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (k: string) => setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
   const [q, setQ] = useState("");
   const [rec, setRec] = useState<{ picks: Pick[]; done: string[]; method: "ai" | "rules" } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,9 +63,10 @@ export function TemplatePicker({ clientId, matterId, onPick, hrefBase, busy, com
     return () => window.removeEventListener("keydown", k);
   }, []);
 
-  const shown = useMemo(() => consentTemplates.filter((t) => matches(t, q)), [q]);
+  const shown = useMemo(() => templates.filter((t) => matches(t, q)), [templates, q]);
+  const groups = [...new Set([...consentGroups, ...templates.map((t) => t.group)])];
   const recKeys = new Set(rec?.picks.map((p) => p.key) ?? []);
-  const recommended = (rec?.picks ?? []).map((p) => ({ t: consentTemplates.find((t) => t.key === p.key)!, reason: p.reason })).filter((x) => x.t && matches(x.t, q));
+  const recommended = (rec?.picks ?? []).map((p) => ({ t: templates.find((t) => t.key === p.key)!, reason: p.reason })).filter((x) => x.t && matches(x.t, q));
   const previewUrl = (key: string) => `/api/sign/preview?template=${key}${clientId ? `&client=${clientId}` : ""}${matterId ? `&matter=${matterId}` : ""}`;
 
   const Row = ({ t, reason }: { t: ConsentTemplate; reason?: string }) => {
@@ -72,6 +77,8 @@ export function TemplatePicker({ clientId, matterId, onPick, hrefBase, busy, com
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 text-sm font-medium">
             {t.title}
+            {t.custom ? <span className="rounded-full bg-violet-500/12 px-1.5 py-px text-[10px] font-medium text-violet-600">Your template</span> : t.edited ? <span className="rounded-full bg-sky-500/12 px-1.5 py-px text-[10px] font-medium text-sky-600">Your wording</span> : null}
+            {t.countersign ? <span className="rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">Agent countersigns</span> : null}
             {done ? (
               <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/12 px-1.5 py-px text-[10px] font-medium text-emerald-600">
                 <CheckCircle2 className="size-2.5" /> Sent
@@ -83,7 +90,12 @@ export function TemplatePicker({ clientId, matterId, onPick, hrefBase, busy, com
       </>
     );
     return (
-      <li className={cn("group flex items-start gap-1 rounded-lg border border-transparent transition hover:border-border hover:bg-muted/30", reason && "border-[var(--chart-2)]/25 bg-[var(--chart-2)]/[0.04]")}>
+      <li className={cn("group flex items-start gap-1 rounded-lg border border-transparent transition hover:border-border hover:bg-muted/30", reason && "border-[var(--chart-2)]/25 bg-[var(--chart-2)]/[0.04]", picked.includes(t.key) && "border-foreground/40 bg-muted/40")}>
+        {onPickMany ? (
+          <label className="grid h-full place-items-center pt-3 pl-2.5" title="Add to a pack">
+            <input type="checkbox" className="size-4 accent-foreground" checked={picked.includes(t.key)} onChange={() => toggle(t.key)} aria-label={`Add ${t.title} to a pack`} />
+          </label>
+        ) : null}
         {hrefFor ? (
           <Link href={hrefFor(t.key)} className="flex min-w-0 flex-1 items-start gap-2.5 p-2.5">
             {body}
@@ -96,6 +108,13 @@ export function TemplatePicker({ clientId, matterId, onPick, hrefBase, busy, com
         <Button type="button" size="xs" variant="ghost" className="m-1.5 shrink-0 text-muted-foreground opacity-70 group-hover:opacity-100" onClick={() => setPreview(t)} aria-label={`Preview ${t.title}`}>
           <Eye /> Preview
         </Button>
+        {editBase ? (
+          <Button asChild size="icon-xs" variant="ghost" className="mt-1.5 mr-1.5 shrink-0 text-muted-foreground opacity-70 group-hover:opacity-100" aria-label={`Edit ${t.title}`}>
+            <Link href={`${editBase}${t.key}`}>
+              <Pencil />
+            </Link>
+          </Button>
+        ) : null}
       </li>
     );
   };
@@ -104,7 +123,7 @@ export function TemplatePicker({ clientId, matterId, onPick, hrefBase, busy, com
     <div className="grid gap-4">
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${consentTemplates.length} consent forms`} className="h-10 pr-16 pl-9" />
+        <Input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${templates.length} consent forms`} className="h-10 pr-16 pl-9" />
         {q ? (
           <button type="button" onClick={() => setQ("")} className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground" aria-label="Clear search">
             <X className="size-4" />
@@ -113,6 +132,26 @@ export function TemplatePicker({ clientId, matterId, onPick, hrefBase, busy, com
           <kbd className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded border px-1.5 text-[10px] text-muted-foreground">/</kbd>
         )}
       </div>
+
+      {onPickMany ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed p-2.5 text-xs">
+          <Layers className="size-4 text-muted-foreground" />
+          <span className="text-muted-foreground">{picked.length ? `${picked.length} form${picked.length === 1 ? "" : "s"} selected` : "Tick forms to send several as one pack, signed in one go."}</span>
+          <Button type="button" size="xs" variant="outline" onClick={() => setPicked(NEW_CLIENT_PACK.filter((k) => templates.some((t) => t.key === k)))}>
+            New client pack
+          </Button>
+          {picked.length ? (
+            <>
+              <Button type="button" size="xs" variant="ghost" onClick={() => setPicked([])}>
+                Clear
+              </Button>
+              <Button type="button" size="xs" className="ml-auto" disabled={busy || picked.length < 1} onClick={() => onPickMany(picked)}>
+                <Layers /> Prepare {picked.length > 1 ? `pack of ${picked.length}` : "form"}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       {clientId ? (
         <section className="grid gap-1.5">
@@ -140,7 +179,7 @@ export function TemplatePicker({ clientId, matterId, onPick, hrefBase, busy, com
 
       <section className="grid gap-3">
         {clientId ? <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{q ? "Search results" : "All consent forms"}</p> : null}
-        {consentGroups.map((g) => {
+        {groups.map((g) => {
           const list = shown.filter((t) => t.group === g && (q || !recKeys.has(t.key)));
           if (!list.length) return null;
           return (

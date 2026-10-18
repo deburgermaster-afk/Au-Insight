@@ -8,6 +8,8 @@ import { GuidedSigner } from "@/components/sign/guided-signer";
 import { Button } from "@/components/ui/button";
 import { db, schema as s } from "@/db";
 import { requireClient } from "@/lib/client-auth";
+import { fieldsFor, signersOf } from "@/lib/sign-core";
+import { Clock3, CreditCard } from "lucide-react";
 
 export const metadata = { title: "Sign a document" };
 
@@ -25,7 +27,12 @@ export default async function SignPage({ params }: PageProps<"/client/signatures
     await db.insert(s.activities).values({ agencyId: r.agencyId, clientId: r.clientId, matterId: r.matterId, kind: "document", title: `Opened to sign: ${r.title}`, actorName: `${c.client.firstName} ${c.client.lastName}` });
   }
   const [doc] = r.documentId ? await db.select({ key: s.documents.storageKey, name: s.documents.name }).from(s.documents).where(eq(s.documents.id, r.documentId)) : [];
-  const count = r.fields.length;
+  const signers = signersOf(r, `${c.client.firstName} ${c.client.lastName}`);
+  const me = signers.find((x) => x.role === "client");
+  const waitingOn = signers.filter((x) => x.role !== "client" && x.status !== "signed");
+  const count = fieldsFor(r, "client").length;
+  const [inv] = r.invoiceId ? await db.select({ id: s.invoices.id, number: s.invoices.number, total: s.invoices.total, paid: s.invoices.paid }).from(s.invoices).where(eq(s.invoices.id, r.invoiceId)) : [];
+  const owing = inv ? Math.max(0, Number(inv.total) - Number(inv.paid)) : 0;
   return (
     <div className="grid gap-3">
       <Link href="/client" className="flex items-center gap-1 px-0.5 text-[13px] text-muted-foreground">
@@ -65,9 +72,34 @@ export default async function SignPage({ params }: PageProps<"/client/signatures
           <XCircle className="mt-0.5 size-5 shrink-0 text-rose-500" />
           <p className="text-[13px]">This request was withdrawn. Your agent will send a new one if needed.</p>
         </section>
+      ) : me?.status === "signed" ? (
+        <section className="flex items-start gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/[0.05] p-3.5">
+          <Clock3 className="mt-0.5 size-5 shrink-0 text-sky-500" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">You&apos;ve signed</p>
+            <p className="text-[12px] text-muted-foreground">Waiting for {waitingOn.map((x) => (x.role === "agent" ? `your agent (${x.name})` : `${x.label.toLowerCase()} ${x.name}`)).join(", ")}. You&apos;ll find the signed copy in your documents once everyone has signed.</p>
+          </div>
+        </section>
       ) : (
-        <GuidedSigner id={r.id} pdfUrl={`/api/sign/${r.id}`} fields={r.fields} expectedName={`${c.client.firstName} ${c.client.lastName}`} />
+        <GuidedSigner
+          id={r.id}
+          pdfUrl={`/api/sign/${r.id}`}
+          fields={r.fields}
+          expectedName={`${c.client.firstName} ${c.client.lastName}`}
+          others={signers.filter((x) => x.role !== "client").map((x) => ({ label: x.role === "agent" ? "agent" : x.label, fields: fieldsFor(r, x.id) }))}
+        />
       )}
+      {inv && owing > 0.005 && (r.status === "signed" || me?.status === "signed") ? (
+        <Link href={`/client/payments/${inv.id}`} className="flex items-center gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/[0.06] p-3.5 transition active:scale-[.98]">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600">
+            <CreditCard className="size-4.5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Next: pay invoice {inv.number}</span>
+            <span className="block text-[12px] text-muted-foreground">${owing.toLocaleString("en-AU", { minimumFractionDigits: 2 })} owing · pay by card or bank transfer</span>
+          </span>
+        </Link>
+      ) : null}
     </div>
   );
 }

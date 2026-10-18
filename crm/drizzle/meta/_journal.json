@@ -155,6 +155,13 @@
       "when": 1792319933568,
       "tag": "0021_esign_case_review",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792327866547,
+      "tag": "0022_signers_bundles_templates_times",
+      "breakpoints": true
     }
   ]
 }

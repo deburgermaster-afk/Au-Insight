@@ -23,12 +23,7 @@ export async function consentVars(agencyId: string, clientId: string, matterId: 
     matterId ? db.select().from(s.matters).where(and(eq(s.matters.agencyId, agencyId), eq(s.matters.id, matterId))) : Promise.resolve([]),
   ]);
   if (!c) throw new Error("Client not found.");
-  const staff = async (userId: string | null | undefined) => {
-    if (!userId) return null;
-    const [u] = await db.select({ name: s.user.name, marn: s.staffProfiles.marn }).from(s.user).leftJoin(s.staffProfiles, and(eq(s.staffProfiles.userId, s.user.id), eq(s.staffProfiles.agencyId, agencyId))).where(eq(s.user.id, userId));
-    return u?.marn ? { name: u.name, marn: u.marn } : null;
-  };
-  const agent = (await staff(m?.assignedTo)) ?? (await staff(senderId)) ?? { name: p?.legalName ?? org?.name ?? "", marn: p?.marn ?? "" };
+  const agent = await responsibleAgent(agencyId, m?.assignedTo ?? null, senderId);
   const visa = m ? visaByCode(m.visaCode) : null;
   return {
     agency: org?.name ?? "",
@@ -49,4 +44,17 @@ export async function consentVars(agencyId: string, clientId: string, matterId: 
     matterRef: m?.reference ?? "",
     date: dmyLong(new Date()),
   };
+}
+
+/** The registered migration agent responsible: the matter's agent if they hold a MARN, else the sender if they do, else the principal. */
+export async function responsibleAgent(agencyId: string, assignedTo: string | null, senderId: string): Promise<{ userId: string | null; name: string; marn: string | null }> {
+  const staff = async (userId: string | null | undefined) => {
+    if (!userId) return null;
+    const [u] = await db.select({ name: s.user.name, marn: s.staffProfiles.marn }).from(s.user).leftJoin(s.staffProfiles, and(eq(s.staffProfiles.userId, s.user.id), eq(s.staffProfiles.agencyId, agencyId))).where(eq(s.user.id, userId));
+    return u?.marn ? { userId, name: u.name, marn: u.marn } : null;
+  };
+  const found = (await staff(assignedTo)) ?? (await staff(senderId));
+  if (found) return found;
+  const [[org], [p]] = await Promise.all([db.select({ name: s.organization.name }).from(s.organization).where(eq(s.organization.id, agencyId)), db.select().from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, agencyId))]);
+  return { userId: senderId, name: p?.legalName ?? org?.name ?? "", marn: p?.marn ?? null };
 }
