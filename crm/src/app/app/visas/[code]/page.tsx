@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, ExternalLink, FileText, Layers, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, FileText, FolderPlus, Layers, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -114,6 +114,11 @@ export default async function VisaPage({ params }: PageProps<"/app/visas/[code]"
           </a>
         </Button>
         <WithPickers fallback="Send checklist" render={(p) => <UseVisa code={v.code} name={v.name} streams={v.streams ?? []} pickers={p} />} />
+        <Button size="sm" className="rounded-full" asChild>
+          <Link href={`/app/visas/${encodeURIComponent(v.code)}/open`}>
+            <FolderPlus /> Open a file
+          </Link>
+        </Button>
       </HeaderActions>
       <FadeIn className="relative overflow-hidden rounded-xl border">
         <div className="absolute inset-0" style={{ background: art[v.category] ?? art.Other }} />

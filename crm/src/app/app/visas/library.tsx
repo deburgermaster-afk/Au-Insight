@@ -1,8 +1,9 @@
 "use client";
 
-import { CircleCheck, Search } from "lucide-react";
+import { CircleCheck, FolderPlus, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Pill } from "@/components/app/badges";
 import { Button } from "@/components/ui/button";
@@ -15,12 +16,16 @@ export function VisaLibrary({ visas }: { visas: Visa[] }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [open, setOpen] = useState<Visa | null>(null);
+  // Arriving from a client ("Open a file for Mei"): the file opens for them.
+  const forClient = useSearchParams().get("for");
+  const fileHref = (code: string) => `/app/visas/${encodeURIComponent(code)}/open${forClient ? `?client=${encodeURIComponent(forClient)}` : ""}`;
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     return visas.filter((v) => (cat === "All" || v.category === cat) && (!t || `${v.code} ${v.name} ${v.summary} ${v.streams?.join(" ")}`.toLowerCase().includes(t)));
   }, [visas, q, cat]);
   return (
     <div className="grid gap-4">
+      {forClient ? <p className="w-fit rounded-full bg-sky-500/12 px-3 py-1 text-xs text-sky-700 dark:text-sky-300">Choose the visa to open a file for this client</p> : null}
       <div className="relative max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search 189, partner, graduate…" className="pl-9" />
@@ -41,7 +46,10 @@ export function VisaLibrary({ visas }: { visas: Visa[] }) {
       <motion.div layout className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <AnimatePresence mode="popLayout">
           {shown.map((v) => (
-            <motion.div key={v.code} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} transition={{ duration: 0.2 }}>
+            <motion.div key={v.code} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} transition={{ duration: 0.2 }} className="group/card relative">
+              <Link href={fileHref(v.code)} className="absolute top-3 right-3 z-10 inline-flex items-center gap-1 rounded-full border bg-background/90 px-2.5 py-1 text-[11px] font-medium opacity-100 shadow-sm transition hover:bg-primary hover:text-primary-foreground sm:opacity-0 sm:group-hover/card:opacity-100 focus-visible:opacity-100">
+                <FolderPlus className="size-3.5" /> Open file
+              </Link>
               <button type="button" onClick={() => setOpen(v)} className="group flex h-full w-full flex-col rounded-xl border bg-card p-4 text-left transition hover:border-foreground/20">
                 <div className="flex items-center gap-3">
                   <span className="grid h-10 min-w-10 place-items-center rounded-xl bg-muted px-2 font-mono text-sm font-semibold transition group-hover:bg-primary group-hover:text-primary-foreground">
@@ -87,8 +95,13 @@ export function VisaLibrary({ visas }: { visas: Visa[] }) {
                   <Button variant="secondary" className="h-10 rounded-full" onClick={() => setOpen(null)}>
                     Close
                   </Button>
-                  <Button className="h-10 rounded-full" asChild>
+                  <Button variant="secondary" className="h-10 rounded-full" asChild>
                     <Link href={`/app/visas/${encodeURIComponent(open.code)}`}>Full checklist</Link>
+                  </Button>
+                  <Button className="col-span-2 h-11 rounded-full" asChild>
+                    <Link href={fileHref(open.code)}>
+                      <FolderPlus /> Open a file for a client
+                    </Link>
                   </Button>
                 </div>
               </div>

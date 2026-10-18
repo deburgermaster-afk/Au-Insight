@@ -24,7 +24,7 @@ import { fileUrl } from "@/components/mail/file-icon";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getClient } from "@/lib/data";
 import { and as andOp, desc as descOp, eq as eqOp } from "drizzle-orm";
-import { FileSignature } from "lucide-react";
+import { FileSignature, FolderPlus } from "lucide-react";
 import { CaseReview } from "@/components/ai/case-review";
 import { EligibilityCheck } from "@/components/app/eligibility-check";
 import { hasRules } from "@/lib/eligibility";
@@ -120,6 +120,11 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
             </Link>
           </Button>
           <PortalMenu clientId={c.id} enabled={c.portalEnabled} hasEmail={Boolean(c.email)} />
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/app/visas?for=${c.id}`}>
+              <FolderPlus /> Open a file
+            </Link>
+          </Button>
           <WithPickers render={(p) => <NewMatterDialog pickers={p} clientId={c.id} />} />
         </HeaderActions>
       </FadeIn>
