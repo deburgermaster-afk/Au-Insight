@@ -116,7 +116,8 @@ export function predictTimeline(m: MatterLike): Milestone[] {
   const v = visaByCode(m.visaCode);
   const [p50, p90] = processingMonths(m.visaCode);
   const today = new Date();
-  const start = day(m.createdAt);
+  // A matter opened after work began (e.g. imported) starts at its earliest recorded date.
+  const start = [m.agreementSignedAt, m.consumerGuideAt, m.lodgedAt].filter((d): d is string => Boolean(d)).map(day).reduce((a, b) => (b < a ? b : a), day(m.createdAt));
   const stageIdx = STAGE_ORDER.indexOf(m.stage);
   const out: Omit<Milestone, "status">[] = [];
 
