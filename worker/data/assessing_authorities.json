@@ -1,0 +1,536 @@
+{
+ "about": "Skills assessment facts for the assessing authorities on the Home Affairs skilled occupation list, as each authority publishes them on its own website. Loaded by worker/authorities.py. Null means the authority does not publish that figure (the text field says so). processing_*_days are business days; weeks are counted as five business days.",
+ "authorities": [
+  {
+   "short": "VETASSESS",
+   "name": "Vocational Education and Training Assessment Services",
+   "url": "https://www.vetassess.com.au/",
+   "aliases": [
+    "VETASSESS (non-trades)"
+   ],
+   "assesses": "Professional and general occupations: both qualifications (compared with the Australian Qualifications Framework and their relevance to the nominated occupation) and employment (relevance and skill level); a suitable outcome needs both. Trade occupations: Pathway 1 is a documentary evidence assessment, a technical assessment and a practical assessment; Pathway 2 is a documentary evidence assessment and a technical interview. Also Points Test Advice on qualifications, subclass 485 and DAMA assessments.",
+   "processing_text": "Professional occupations: 7 weeks; may take longer depending on the complexity of the application and whether the documents and information submitted are sufficient. Trade occupations: varies by program (see the program's applicant guidelines). Renewals 2 to 5 weeks; Points Test Advice 2 to 4 weeks; subclass 485 assessments 1 to 2 weeks.",
+   "processing_min_days": 35,
+   "processing_max_days": 35,
+   "priority_text": "Priority Processing (professional and general occupations only, not trades): assessed in 10 business days once the application is confirmed eligible, which normally takes up to 2 business days. Extra AUD $949.30 incl. GST ($863.00 excl. GST) on top of the assessment fee. Refunded less a $179 administration fee if the application is not accepted or not finished in 10 business days.",
+   "fee_text": "Full skills assessment (qualifications and employment), professional and general occupations: AUD $1,260.60 incl. GST (applying from within Australia) or $1,146.00 excl. GST (not an Australian tax resident). Qualifications only (Points Test Advice): $357.50 / $325.00. Professional fees rose in line with inflation from 9 September 2026. Trade occupations: Pathway 1 documentary evidence $1,120, technical assessment $2,000, practical assessment $2,200; Pathway 2 documentary evidence $1,120, technical interview $900.",
+   "fee_aud": 1260.6,
+   "validity_text": "A suitable full skills assessment outcome is usually valid for three years from its issue date. It can be renewed before it expires; an expired outcome needs a new application.",
+   "validity_years": 3,
+   "requirements": "Qualification and employment criteria differ by occupation (each occupation's group and requirements are on the VETASSESS occupation pages). Documents not in English need translations by a registered translation service; at least one current government-issued photo ID.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://www.vetassess.com.au/skills-assessment-for-migration/skills-assessment-for-professional-occupations"
+    },
+    {
+     "label": "Fees (professional occupations)",
+     "url": "https://www.vetassess.com.au/skills-assessment-for-migration/professional-occupations/skills-assessment-fees-for-professional-occupations"
+    },
+    {
+     "label": "Fees (trade occupations)",
+     "url": "https://www.vetassess.com.au/skills-assessment-for-migration/skills-assessment-for-trade-occupations/assessment-fee-for-trade-occupations"
+    },
+    {
+     "label": "Processing times",
+     "url": "https://www.vetassess.com.au/current-processing-times"
+    },
+    {
+     "label": "Priority processing",
+     "url": "https://www.vetassess.com.au/skills-assessment-for-migration/professional-occupations/priority-processing"
+    }
+   ],
+   "source_urls": [
+    "https://www.vetassess.com.au/skills-assessment-for-migration/skills-assessment-for-professional-occupations",
+    "https://www.vetassess.com.au/skills-assessment-for-migration/professional-occupations/skills-assessment-fees-for-professional-occupations",
+    "https://www.vetassess.com.au/skills-assessment-for-migration/skills-assessment-for-trade-occupations/assessment-fee-for-trade-occupations",
+    "https://www.vetassess.com.au/current-processing-times",
+    "https://www.vetassess.com.au/skills-assessment-for-migration/professional-occupations/priority-processing",
+    "https://www.vetassess.com.au/skills-assessment-for-migration/professional-occupations/renewal-of-full-skills-assessment",
+    "https://www.vetassess.com.au/news/change-in-assessment-fees-for-professional-skills-assessments"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "ACS",
+   "name": "Australian Computer Society Incorporated",
+   "url": "https://www.acs.org.au/",
+   "aliases": [
+    "Australian Computer Society",
+    "ACS (Data Scientist only)"
+   ],
+   "assesses": "Qualifications and ICT work experience for IT, data science and cyber security occupations: qualifications are compared with the Australian Qualifications Framework and their ICT content rated (major, minor or insufficient), then employment is assessed for being closely related to the nominated ANZSCO occupation at a professional level. Pathways: Qualification Only (Australian diploma or associate degree), Post Australian Study (Australian bachelor's or higher plus at least 1 year of experience or the ACS Professional Year), General Skills (overseas or Australian qualifications plus at least 2 years of experience) and Recognition of Prior Learning (an RPL form with 2 projects and at least 6 years of experience).",
+   "processing_text": "For applications that need no further documents or information, allow 4 to 6 weeks. ACS says its new portal can give decisions in as little as 15 days; the applicant dashboard shows real-time status.",
+   "processing_min_days": 20,
+   "processing_max_days": 30,
+   "priority_text": "Priority only for Australian visa deadlines less than 12 weeks from the date of application, with at least 2 weeks' notice of the deadline; applied automatically when the visa is due to expire. No fee: ACS offers it as a courtesy.",
+   "fee_text": "Application fee by pathway: Qualification Only $625; Post Australian Study $1,136; General Skills $1,498; Recognition of Prior Learning $625. Appeals: Level 1 $516, Level 2 $620 (refundable if the decision is overturned). Up to three ANZSCO codes can be assessed at once for one fixed price.",
+   "fee_aud": 1498,
+   "validity_text": "Suitable outcomes are valid for 2 years. ACS does not currently offer outcome reassessments or renewals.",
+   "validity_years": 2,
+   "requirements": "No English language test. Only professional ICT work experience from age 18 counts. Proof of identity, qualification documents and employment evidence as listed in the chosen pathway's checklist; an application must be submitted within 90 days of starting it.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://www.acs.org.au/msa.html"
+    },
+    {
+     "label": "Fees",
+     "url": "https://www.acs.org.au/msa/infohub/fees-and-payment.html"
+    },
+    {
+     "label": "Processing time",
+     "url": "https://www.acs.org.au/msa/information-for-applicants.html"
+    },
+    {
+     "label": "Assessment pathways",
+     "url": "https://www.acs.org.au/msa/assessment-pathway.html"
+    },
+    {
+     "label": "Assessment outcome and validity",
+     "url": "https://www.acs.org.au/msa/infohub/assessment-process.html"
+    }
+   ],
+   "source_urls": [
+    "https://www.acs.org.au/msa.html",
+    "https://www.acs.org.au/msa/information-for-applicants.html",
+    "https://www.acs.org.au/msa/infohub/fees-and-payment.html",
+    "https://www.acs.org.au/msa/infohub/application-process.html",
+    "https://www.acs.org.au/msa/infohub/assessment-process.html"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "Engineers Australia",
+   "name": "The Institution of Engineers Australia",
+   "url": "https://www.engineersaustralia.org.au/",
+   "aliases": [
+    "EA",
+    "Institution of Engineers Australia"
+   ],
+   "assesses": "Qualifications against an engineering occupational category (professional engineer, engineering technologist, engineering associate or engineering manager), by pathway: an Australian accredited qualification, a Washington, Sydney or Dublin Accord qualification, or a Competency Demonstration Report (CDR) for other qualifications. Relevant skilled employment and overseas engineering PhDs are assessed as optional extras (employment is a mandatory part of the CDR for engineering managers).",
+   "processing_text": "Standard applications generally take 15 weeks to be assigned to an assessor. Engineers Australia says this is not the time to an outcome, which depends on the quality of the documents and whether more information is requested.",
+   "processing_min_days": null,
+   "processing_max_days": null,
+   "priority_text": "Fast-track: the application is assigned to an assessor within 20 business days (not an outcome time). Fee $396 incl. GST ($360 excl. GST) on top of the assessment fee; non-refundable.",
+   "fee_text": "2026-27 fees incl. GST (excl. GST): Competency Demonstration Report $1,034 ($940); CDR plus relevant skilled employment $1,512.50 ($1,375); Washington/Sydney/Dublin Accord qualification $555.50 ($505), plus relevant skilled employment $1,034 ($940); Australian accredited qualification $346.50 ($315), plus relevant skilled employment $825 ($750). Review $368.50; appeal $704.",
+   "fee_aud": 1034,
+   "validity_text": "Engineers Australia says its assessment letter is valid for an indefinite period with Engineers Australia; how long it is accepted for a visa is set by Home Affairs.",
+   "validity_years": null,
+   "requirements": "English test taken at a secure centre within 3 years before lodging. Tests from 7 August 2025: IELTS (General or Academic) 6 in each band; PTE Academic L47 R48 W51 S54; TOEFL iBT L16 R16 W19 S19; Cambridge C1 Advanced 169 each; LanguageCert, Michigan and CELPIP also accepted. Usually exempt: graduates of two academic years (at least 92 weeks) of AQF level 6 or higher study at a CRICOS-registered institution in Australia, and citizens holding passports of the UK, USA, Canada, New Zealand or Ireland. Ethical standards apply.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://www.engineersaustralia.org.au/migrants/migration-skills-assessment"
+    },
+    {
+     "label": "Fees and fast-track",
+     "url": "https://www.engineersaustralia.org.au/migrants/migration-skills-assessment/assessment-fees-and-additional-services"
+    },
+    {
+     "label": "Processing times",
+     "url": "https://www.engineersaustralia.org.au/migrants/migration-skills-assessment"
+    },
+    {
+     "label": "Application guide (English requirements)",
+     "url": "https://www.engineersaustralia.org.au/publications/prepare-your-migration-skills-assessment-application"
+    }
+   ],
+   "source_urls": [
+    "https://www.engineersaustralia.org.au/migrants/migration-skills-assessment",
+    "https://www.engineersaustralia.org.au/migrants/migration-skills-assessment/assessment-fees-and-additional-services",
+    "https://www.engineersaustralia.org.au/sites/default/files/2026-02/Prepare-your-migration-skills-assessment-application-Jan-2026.pdf"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "TRA",
+   "name": "Trades Recognition Australia",
+   "url": "https://www.tradesrecognitionaustralia.gov.au/",
+   "aliases": [
+    "TRA (trades)"
+   ],
+   "assesses": "Trade occupations, through a program chosen by occupation, passport country, where you studied and the visa: Migration Skills Assessment (a documentary assessment of qualifications and employment against Australian standards, for MLTSSL and STSOL occupations not covered by another program; a relevant formal qualification is required and work experience cannot replace it); Offshore Skills Assessment Program (run by TRA-approved RTOs: documentary evidence, a technical interview and, where required, a practical assessment; compulsory for Electrician (General), Electrician (Special Class), Plumber (General) and Air-conditioning and Refrigeration Mechanic, and for listed passport countries and occupations); Job Ready Program for Australian VET graduates (including subclass 485); TSS Skills Assessment Program (subclass 482); Migration Points Advice.",
+   "processing_text": "Migration Skills Assessment: typically within 120 days of submission, counted from when all required evidence has been provided (average tracking at 120 days as of July 2026). Offshore Skills Assessment Program: about 15 weeks after complete documentary evidence. TRA says processing times are a guide only.",
+   "processing_min_days": null,
+   "processing_max_days": null,
+   "priority_text": "No paid priority: non-construction occupations are processed in order of receipt. Faster processing can be requested with a Home Affairs or state or territory letter confirming an approved nominated position, the applicant as nominee and the offer's expiry date. TRA prioritised targeted construction occupations at no extra fee from 1 July 2024 to 30 June 2026.",
+   "fee_text": "Migration Skills Assessment: $795 in total. Offshore Skills Assessment Program: Pathway 1 up to $5,320 (documentary evidence $1,120, technical interview $2,000, practical assessment if required $2,200); Pathway 2 $2,020 (documentary evidence $1,120, technical interview $900). Additional assessment, review and refund fees are in the program guidelines.",
+   "fee_aud": 795,
+   "validity_text": "Skills assessments issued by TRA or a TRA-approved RTO and lodged with certain skilled visa applications must be no older than three years from the date of issue (Migration Regulations, from 1 July 2014).",
+   "validity_years": 3,
+   "requirements": "No English language test (IELTS) for any TRA program. The Migration Skills Assessment needs a relevant formal qualification (an occupational licence or work experience cannot replace it) and documentary pay evidence for each employment period claimed (cash-paid work is not accepted). Documents not in English need translations by NAATI-accredited translators (in Australia) or translators approved in the country of translation.",
+   "links": [
+    {
+     "label": "Assessment overview (Migration Skills Assessment)",
+     "url": "https://www.tradesrecognitionaustralia.gov.au/programs/migration-skills-assessment"
+    },
+    {
+     "label": "Fees and processing time (Migration Skills Assessment)",
+     "url": "https://www.tradesrecognitionaustralia.gov.au/programs/migration-skills-assessment#current-processing-times"
+    },
+    {
+     "label": "Offshore Skills Assessment Program",
+     "url": "https://www.tradesrecognitionaustralia.gov.au/programs/offshore-skills-assessment-program-osap"
+    },
+    {
+     "label": "Program guidelines",
+     "url": "https://www.tradesrecognitionaustralia.gov.au/programs-migration-skills-assessment/guidelines"
+    },
+    {
+     "label": "FAQs (validity, English)",
+     "url": "https://www.tradesrecognitionaustralia.gov.au/help/trades-recognition-australia-tra-faqs"
+    }
+   ],
+   "source_urls": [
+    "https://www.tradesrecognitionaustralia.gov.au/",
+    "https://www.tradesrecognitionaustralia.gov.au/programs/migration-skills-assessment",
+    "https://www.tradesrecognitionaustralia.gov.au/programs/offshore-skills-assessment-program-osap",
+    "https://www.tradesrecognitionaustralia.gov.au/help/migration-skills-assessment-msa-faqs",
+    "https://www.tradesrecognitionaustralia.gov.au/help/trades-recognition-australia-tra-faqs"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "ANMAC",
+   "name": "Australian Nursing & Midwifery Accreditation Council Limited",
+   "url": "https://www.anmac.org.au/",
+   "aliases": [
+    "Australian Nursing and Midwifery Accreditation Council",
+    "Anmac"
+   ],
+   "assesses": "Qualifications, registration and work experience of registered nurses, enrolled nurses and midwives against the nominated ANZSCO code. Modified skills assessment: nurses or midwives currently registered in Australia or New Zealand. Full skills assessment: nurses registered in Canada, Hong Kong, Ireland, Singapore, Spain, the UK or the USA, and midwives with a bachelor's from and registration in Ireland, the UK or the USA. Also Direct care and GradReady assessments. ANMAC does not assess registration to practise in Australia (the Nursing and Midwifery Board does, through Ahpra).",
+   "processing_text": "Current wait time for an assessment to start: 6 to 8 weeks (Full and Modified skills assessments). ANMAC does not publish a time to outcome.",
+   "processing_min_days": null,
+   "processing_max_days": null,
+   "priority_text": "Not published: ANMAC's skilled migration pages describe no priority or fast-track service.",
+   "fee_text": "Current fees (no GST): Full skills assessment $595; Modified skills assessment $395; Direct care skills assessment $545; GradReady skills assessment $395. Outcome letter update $145; internal review $300; external appeal $300; GuideMe consultation $95. ANMAC has announced new assessment names and fees from later in 2026: Essential $395, Essential Plus $495, Comprehensive $695, Care $545, Care Plus $645.",
+   "fee_aud": 595,
+   "validity_text": "Outcome letters are valid for 2 years from the date of the decision. The validity cannot be extended, including by an outcome letter update.",
+   "validity_years": 2,
+   "requirements": "Full skills assessment: an English test less than two years old from one provider: IELTS Academic overall 7 (7 in listening, reading and speaking, 6.5 in writing), OET B in listening, reading and speaking and C+ in writing, or PTE Academic overall 66 (66 in listening, reading and speaking, 56 in writing); TOEFL iBT and Cambridge C1 Advanced or C2 Proficiency are also accepted. Verification of overseas registration (certificate of good standing) sent directly by the regulator; at least 3 months (260 hours) of paid employment in the last 5 years; NAATI translations of documents not in English. Non-genuine claims bring a 2-year lock-out.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://www.anmac.org.au/skilled-migrants/skills-assessment-overview-and-process"
+    },
+    {
+     "label": "Fees",
+     "url": "https://www.anmac.org.au/skilled-migrants/fees"
+    },
+    {
+     "label": "Full skills assessment (wait time, requirements)",
+     "url": "https://www.anmac.org.au/skilled-migrants/apply/full-skills-assessment"
+    },
+    {
+     "label": "Modified skills assessment",
+     "url": "https://www.anmac.org.au/skilled-migrants/apply/modified-skills-assessment"
+    },
+    {
+     "label": "Upcoming fee and name changes",
+     "url": "https://www.anmac.org.au/upcoming-changes-to-anmac-skilled-migration-services"
+    }
+   ],
+   "source_urls": [
+    "https://www.anmac.org.au/skilled-migrants/fees",
+    "https://www.anmac.org.au/skilled-migrants/skills-assessment-overview-and-process",
+    "https://www.anmac.org.au/skilled-migrants/apply/full-skills-assessment",
+    "https://www.anmac.org.au/skilled-migrants/apply/modified-skills-assessment",
+    "https://www.anmac.org.au/skilled-migrants/frequently-asked-questions",
+    "https://www.anmac.org.au/upcoming-changes-to-anmac-skilled-migration-services"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "IML",
+   "name": "Institute of Managers and Leaders National",
+   "url": "https://managersandleaders.com.au/",
+   "aliases": [
+    "IML ANZ",
+    "Institute of Managers and Leaders"
+   ],
+   "assesses": "Senior management occupations (Chief Executive or Managing Director, Corporate General Manager, Sales and Marketing Manager, Advertising Manager, Public Relations Manager, Human Resource Manager, Engineering Manager, Supply and Distribution Manager, Procurement Manager): both the higher education degree and up to 10 years of employment history, against each occupation's published assessment criteria.",
+   "processing_text": "Standard service times from receipt of a complete application with documents and payment: 10 weeks (regular) or 6 weeks (express). Renewal, re-assessment and review 4 weeks; appeal 12 weeks. Incomplete applications take longer.",
+   "processing_min_days": 50,
+   "processing_max_days": 50,
+   "priority_text": "Express service: 6 weeks instead of 10, for an extra A$240 incl. GST (A$218 excl. GST).",
+   "fee_text": "From 21 September 2026: Migration Skills Assessment (regular) A$902 incl. GST for applicants in Australia or A$820 excl. GST for applicants outside Australia; express fee A$240 / A$218; renewal A$661 / A$601; re-assessment within 12 months A$661 / A$601; review within 90 days A$661 / A$601; appeal A$1,084 / A$985; subclass 485 qualification assessment A$613 / A$557. Fees are non-refundable (withdrawing within 2 business days refunds the fee less A$50).",
+   "fee_aud": 902,
+   "validity_text": "A positive outcome is valid for three years.",
+   "validity_years": 3,
+   "requirements": "Online applications only, with the documents in IML's Migration Skills Assessment Document Checklist; read the assessment criteria for the nominated occupation first. IML does not state an English test requirement on these pages.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://managersandleaders.com.au/migration-skills-assessment/skills-assessment-guide/"
+    },
+    {
+     "label": "Fees and processing times",
+     "url": "https://managersandleaders.com.au/migration-skills-assessment/fees-timeframes/"
+    },
+    {
+     "label": "Occupations assessed",
+     "url": "https://managersandleaders.com.au/migration-skills-assessment/occupations-we-assess/"
+    }
+   ],
+   "source_urls": [
+    "https://managersandleaders.com.au/migration-skills-assessment/skills-assessment-guide/",
+    "https://managersandleaders.com.au/migration-skills-assessment/fees-timeframes/"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "ASMIRT",
+   "name": "Australian Society of Medical Imaging and Radiation Therapy",
+   "url": "https://www.asmirt.org/",
+   "aliases": [
+    "Australian Society of Medical Imagery and Radiation Therapy"
+   ],
+   "assesses": "Qualifications gained outside Australia, for equivalence to the Australian standard at undergraduate level plus the associated clinical work experience (postgraduate study and experience may be considered), for Medical Diagnostic Radiographer (251211), Radiation Therapist (251212) and Sonographer (251214). Its Overseas Qualification Assessment Panel decides; a successful outcome gives a Statement of Qualification (or a Certificate of Recognition in Ultrasound) and a letter for migration.",
+   "processing_text": "Not published for the overseas migration assessment. Graduates of pre-approved accredited courses (New Zealand radiography and radiation therapy degrees; ASAR-approved ultrasound courses) should get an outcome within one month.",
+   "processing_min_days": null,
+   "processing_max_days": null,
+   "priority_text": "Not published; only graduates of pre-approved courses get an accelerated assessment.",
+   "fee_text": "Migration assessment: AUD $1,074.00 for applicants residing overseas, $1,180.00 incl. GST for those residing in Australia; an extra $516 for dual modalities. Pre-approved course pathway $338.00 incl. GST. Appeal $306 (outside Australia) or $338 incl. GST (in Australia). Fees are non-refundable.",
+   "fee_aud": 1180,
+   "validity_text": "Not published: ASMIRT refers to expired skills assessments but does not say how long one stays valid.",
+   "validity_years": null,
+   "requirements": "English for all applicants, from a single test in the last two years taken at a test venue: IELTS Academic 7.0 overall and in each band; OET B in each component; PTE 66 overall and in each; or TOEFL iBT 94 total (listening 24, reading 24, writing 27, speaking 23). Certified copies of documents and employer letters verifying clinical experience. A skills assessment does not guarantee registration with the Medical Radiation Practice Board of Australia.",
+   "links": [
+    {
+     "label": "Assessment overview, fees and English",
+     "url": "https://asmirt.org/overseas-assessments/"
+    }
+   ],
+   "source_urls": [
+    "https://asmirt.org/overseas-assessments/"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "AACA",
+   "name": "Architects Accreditation Council of Australia",
+   "url": "https://aaca.org.au/",
+   "aliases": [],
+   "assesses": "Academic qualifications in architecture for the occupation Architect (OSCA 241131, previously ANZSCO 232111). Accredited qualifications from Australia, New Zealand, Hong Kong or Singapore: a Verification application. Other overseas qualifications: the Overseas Qualifications Assessment (document review, then a Competency Assessment Interview) or the Experienced Practitioner Assessment; UK ARB Part 1 and 2 graduates may use the UK/Australia mutual recognition agreement.",
+   "processing_text": "Overseas Qualifications Assessment: generally finalised within 7 weeks of lodgement (12 weeks when documents are incomplete), not counting the scheduling of the Competency Assessment Interview. Verification: generally within 4 weeks. Renewals: about 10 working days.",
+   "processing_min_days": 35,
+   "processing_max_days": 35,
+   "priority_text": "No paid priority processing (discontinued 18 March 2024). AACA may expedite at no extra cost when extenuating circumstances are documented.",
+   "fee_text": "Overseas Qualifications Assessment (new applicants): $4,973.01 with an Australian card or $5,042.10 with an overseas card; OQA Stage 2 only $3,044.70 / $3,087.00; second Competency Assessment Interview $1,217.88 / $1,234.80. Verification of an Australian accredited qualification $446.56 / $452.76; renewal of an OQA skilled migration assessment $446.56 / $452.76. Fees include all processing costs and were adjusted from 1 July 2026.",
+   "fee_aud": 4973.01,
+   "validity_text": "A Skilled Migration Assessment is valid for 3 years from the date of issue; a renewal is valid for a further 3 years.",
+   "validity_years": 3,
+   "requirements": "An English proficiency test (per the OQA Applicants Guide) if the qualification was not taught in English, or a letter from an architectural employer in Australia certifying adequate English. Only coursework qualifications that allow registration as an architect in the awarding country are assessed. A suitable outcome is not registration as an architect (that needs the Architectural Practice Examination).",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://aaca.org.au/migration-assessments/"
+    },
+    {
+     "label": "Overseas Qualifications Assessment (fees, processing time)",
+     "url": "https://aaca.org.au/overseas-qualifications-assessment/"
+    },
+    {
+     "label": "Verification of an accredited qualification",
+     "url": "https://aaca.org.au/migration-assessments/verification-of-australian-accredited-architecture-qualification/"
+    }
+   ],
+   "source_urls": [
+    "https://aaca.org.au/migration-assessments/",
+    "https://aaca.org.au/overseas-qualifications-assessment/",
+    "https://aaca.org.au/migration-assessments/verification-of-australian-accredited-architecture-qualification/",
+    "https://aaca.org.au/program-fee-update/"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "AITSL",
+   "name": "Australian Institute for Teaching and School Leadership Limited",
+   "url": "https://www.aitsl.edu.au/",
+   "aliases": [
+    "Australian Institute for Teaching and School Leadership"
+   ],
+   "assesses": "Qualifications and English language proficiency for school teacher occupations (Primary, Middle School, Secondary, Special Needs, Teacher of the Hearing Impaired, Teacher of the Sight Impaired, Special Education Teachers nec): at least 4 years of full-time (or equivalent) university study including a relevant initial teacher education qualification with supervised teaching practice. Both criteria must be met. Employment is not assessed in the skills assessment; an optional Skilled Employment Statement can follow a suitable outcome.",
+   "processing_text": "Most assessment-ready applications are completed within 4 weeks; some take up to 6 weeks. Times can extend when application numbers rise; AITSL publishes the week of applications it is currently assessing (September 2026 at 10 October 2026).",
+   "processing_min_days": 20,
+   "processing_max_days": 30,
+   "priority_text": "None: AITSL does not offer a general fast-track or priority processing service.",
+   "fee_text": "Effective 7 September 2026 (no GST): skills assessment AUD 1,198; appeal AUD 938; Skilled Employment Statement AUD 265. A partial refund of AUD 982 is possible only before the assessment starts.",
+   "fee_aud": 1198,
+   "validity_text": "Valid for the period shown on the outcome statement from its date of issue; it cannot be renewed. AITSL's pages do not state the period.",
+   "validity_years": null,
+   "requirements": "English: either the study option (4 full years of study in Australia, Canada, Ireland, New Zealand, the UK or the USA, including the initial teacher education qualification and its supervised teaching practice) or an Academic IELTS Test Report Form taken at a test centre (IELTS One Skill Retake accepted; no PTE, TOEFL, Cambridge or online tests). Teacher registration is not required for the skills assessment but is needed to teach in Australia. A non-authentic IELTS result brings a 3-year ban.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments"
+    },
+    {
+     "label": "Application process and processing time",
+     "url": "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments/application-process"
+    },
+    {
+     "label": "Fees",
+     "url": "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments/fees"
+    },
+    {
+     "label": "English language proficiency",
+     "url": "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments/application-process/english-language-proficiency"
+    }
+   ],
+   "source_urls": [
+    "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments/application-process",
+    "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments/application-process/application-faqs",
+    "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments/fees",
+    "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments/after-the-assessment",
+    "https://www.aitsl.edu.au/teacher-migration-services/skills-assessments/application-process/english-language-proficiency"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "NAATI",
+   "name": "National Accreditation Authority for Translators and Interpreters Ltd",
+   "url": "https://www.naati.com.au/",
+   "aliases": [
+    "National Accreditation Authority for Translators and Interpreters"
+   ],
+   "assesses": "Translator (272413) and Interpreter (272412): the skills assessment is NAATI certification gained by passing a NAATI certification test (Recognised Practising credentials are not eligible). After certification NAATI can also give an opinion on overseas translating or interpreting qualifications and on skilled employment in the last ten years, for points. NAATI says skills assessments are generally open only to applicants sponsored by an employer or nominated by a state or territory.",
+   "processing_text": "Not published for skills assessments: the outcome depends on sitting and passing a certification test.",
+   "processing_min_days": null,
+   "processing_max_days": null,
+   "priority_text": "Not published.",
+   "fee_text": "2026-27 fees incl. GST: Certified Translator test $605 per direction; Certified Provisional Interpreter test $660 and Certified Interpreter test $440 (both are needed to become a Certified Interpreter); test review $275. Migration assessment of educational qualifications and skilled employment $500 per application. Credentialed Community Language (CCL) test $814.",
+   "fee_aud": null,
+   "validity_text": "The expiry date is on the outcome letter; NAATI skills assessments are generally valid for three years and are extended on successful recertification.",
+   "validity_years": 3,
+   "requirements": "Pass the NAATI certification test for the credential (translator or interpreter). The qualifications and employment assessment needs the Assessment of Educational Qualifications and Skilled Employment form with supporting documents.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://www.naati.com.au/migration-assessments/"
+    },
+    {
+     "label": "Fees",
+     "url": "https://www.naati.com.au/resources/fees"
+    }
+   ],
+   "source_urls": [
+    "https://www.naati.com.au/migration-assessments/",
+    "https://www.naati.com.au/resources/fees"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "APharmC",
+   "name": "Australian Pharmacy Council Limited",
+   "url": "https://www.pharmacycouncil.org.au/",
+   "aliases": [
+    "Australian Pharmacy Council",
+    "APC"
+   ],
+   "assesses": "Pharmacists, in two parts: an eligibility check of the pharmacy qualification and registration, then an exam where required (CAOP for the Competency Stream: recognised degrees and registration in Canada, Ireland, the UK or the USA; OPRA for the Knowledge Stream: degrees from other countries). International students from accredited Australian or New Zealand degrees and New Zealand registered pharmacists have their own streams. A Skills Assessment Outcome is then issued for Home Affairs.",
+   "processing_text": "Eligibility check: APC aims to respond within 5 working days of receiving all documents, but asks applicants to allow up to 4 weeks. The exams run in scheduled windows, so the full time to an outcome depends on the exam date.",
+   "processing_min_days": 5,
+   "processing_max_days": 20,
+   "priority_text": "Not published.",
+   "fee_text": "Fees (AUD, non-refundable): eligibility check $810; Skills Assessment Outcome $300; updated skills assessment $610; optional work experience reference $200. Exams: CAOP $2,100 per attempt; OPRA $2,245 per attempt. No fee for appeals.",
+   "fee_aud": 810,
+   "validity_text": "APC says Home Affairs sets how long a Skills Assessment Outcome stays valid for a visa; APC cannot change it.",
+   "validity_years": null,
+   "requirements": "No certified documents or proof of English competency are needed for the eligibility check; non-English documents need English translations. Registration with the Pharmacy Board of Australia through Ahpra is separate.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://www.pharmacycouncil.org.au/pharmacist/skills-assessment/"
+    },
+    {
+     "label": "Fees",
+     "url": "https://www.pharmacycouncil.org.au/pharmacist/skills-assessment-fees/"
+    },
+    {
+     "label": "Knowledge Stream (processing time)",
+     "url": "https://www.pharmacycouncil.org.au/pharmacist/skills-assessment/knowledge-stream/"
+    }
+   ],
+   "source_urls": [
+    "https://www.pharmacycouncil.org.au/pharmacist/skills-assessment/",
+    "https://www.pharmacycouncil.org.au/pharmacist/skills-assessment-fees/",
+    "https://www.pharmacycouncil.org.au/pharmacist/skills-assessment/knowledge-stream/",
+    "https://www.pharmacycouncil.org.au/pharmacist/skills-assessment/international-student-stream/"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "AIQS",
+   "name": "The Australian Institute of Quantity Surveyors",
+   "url": "https://www.aiqs.com.au/",
+   "aliases": [
+    "Australian Institute of Quantity Surveyors"
+   ],
+   "assesses": "Quantity Surveyor: the qualification first (at least a bachelor's degree at AQF level 7 in quantity surveying or an allied discipline), then work experience gained after the qualification or membership. Routes: Qualifications Only (Australian AIQS-accredited degree); Pathway 1 (accredited Australian degree plus 1 year); Pathway 2 (other Australian degree plus 2 years); Pathway 3 (approved overseas degree plus 2 years); Pathway 4 (AIQS or equivalent member plus 1 year). Only the pathways that include work experience support a permanent visa application.",
+   "processing_text": "AIQS aims to complete assessments within two months of an application being sent for assessment; complex applications can take longer.",
+   "processing_min_days": null,
+   "processing_max_days": null,
+   "priority_text": "Not published.",
+   "fee_text": "Qualifications Only $555 (ex. GST); Pathways 1 to 4 $655 (ex. GST); reassessment $350 (ex. GST); appeal $400 (ex. GST). Withdrawal before assessment refunds less a $110 administration fee.",
+   "fee_aud": 655,
+   "validity_text": "2 years from the date on the assessment letter; a later letter replaces it and restarts the 2 years. Reassessment within 24 months costs the reassessment fee.",
+   "validity_years": 2,
+   "requirements": "Pathway 3 and 4 applicants: an English test accepted by Home Affairs, taken no more than two years before applying, with at least IELTS 6 (or equivalent) in each of speaking, reading, listening and writing; passport holders of exempt countries (including Australia, Canada and New Zealand) are exempt. Certified documents and a recent passport photo.",
+   "links": [
+    {
+     "label": "Assessment overview and fees",
+     "url": "https://www.aiqs.com.au/migration-skills-assessments"
+    },
+    {
+     "label": "Migration Skills Assessment Policy (processing time, English)",
+     "url": "https://www.aiqs.com.au/about-aiqs/governance/migration-policy"
+    }
+   ],
+   "source_urls": [
+    "https://www.aiqs.com.au/migration-skills-assessments",
+    "https://www.aiqs.com.au/about-aiqs/governance/migration-policy"
+   ],
+   "as_at": "2026-10-10"
+  },
+  {
+   "short": "APS",
+   "name": "Australian Psychological Society Limited",
+   "url": "https://psychology.org.au/",
+   "aliases": [
+    "Australian Psychological Society"
+   ],
+   "assesses": "Psychologist qualifications: whether overseas study is comparable to an APAC-accredited six-year sequence of study in psychology (content, structure and competencies, not just years), or whether the applicant holds unconditional general registration with Ahpra. Clinical, Educational and Organisational Psychologist outcomes need the matching Ahpra area of practice endorsement; otherwise the outcome is Psychologist nec. Employment is assessed separately (Statement of Skilled Employment).",
+   "processing_text": "Approximately 12 weeks; may increase with demand or requests for more information. Reassessments take the same time.",
+   "processing_min_days": 60,
+   "processing_max_days": 60,
+   "priority_text": "Not published.",
+   "fee_text": "Skilled migration assessment $1,527 incl. GST (applying in Australia) or $1,388 (applying from outside Australia, GST not applicable). Statement of Skilled Employment $1,020 / $927; reassessment $350. Incomplete applications are withdrawn and $300 is retained.",
+   "fee_aud": 1527,
+   "validity_text": "Not published on the APS assessment pages.",
+   "validity_years": null,
+   "requirements": "English test taken within two years of lodging: IELTS Academic overall 7 with 7 in listening, reading and speaking and 6.5 in writing, or PTE Academic; at-home or online tests are not accepted. Exempt if all psychology training was in English in Australia, New Zealand, Ireland, the UK, Canada or the USA (training in South Africa now needs a test). Registration with Ahpra (provisional, then general after a transitional program) is separate and needed to practise.",
+   "links": [
+    {
+     "label": "Assessment overview",
+     "url": "https://psychology.org.au/about-us/what-we-do/assessments/assessment-overseas-qualifications/skilled-migration"
+    },
+    {
+     "label": "Fees",
+     "url": "https://psychology.org.au/about-us/what-we-do/assessments/assessment-overseas-qualifications/assessment-fees"
+    },
+    {
+     "label": "Processing time, English and FAQs",
+     "url": "https://psychology.org.au/about-us/what-we-do/assessments/assessment-overseas-qualifications"
+    }
+   ],
+   "source_urls": [
+    "https://psychology.org.au/about-us/what-we-do/assessments/assessment-overseas-qualifications/skilled-migration",
+    "https://psychology.org.au/about-us/what-we-do/assessments/assessment-overseas-qualifications/assessment-fees",
+    "https://psychology.org.au/about-us/what-we-do/assessments/assessment-overseas-qualifications"
+   ],
+   "as_at": "2026-10-10"
+  }
+ ]
+}
