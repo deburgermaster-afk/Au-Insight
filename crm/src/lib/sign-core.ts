@@ -162,6 +162,8 @@ async function finalize(r: SignRequest) {
     const today = signedAt.toLocaleDateString("en-CA", { timeZone: "Australia/Sydney" });
     await db.update(s.matters).set({ consumerGuideAt: today }).where(and(eq(s.matters.id, r.matterId), sql`${s.matters.consumerGuideAt} is null`));
   }
+  // A signed scholarship offer means the student accepted it.
+  if (r.templateKey === "scholarship-offer") await db.update(s.scholarshipAwards).set({ status: "accepted" }).where(and(eq(s.scholarshipAwards.signRequestId, r.id), eq(s.scholarshipAwards.status, "offered")));
   await db.insert(s.activities).values({ agencyId: r.agencyId, clientId: r.clientId, matterId: r.matterId, kind: "document", title: `Signed by everyone: ${r.title}`, body: `${signers.map((x) => `${x.label}: ${x.signedName ?? x.name}`).join(" · ")}. The signed PDF is in the client's documents.`, actorName: client.signedName ?? client.name });
   await db.insert(s.auditLog).values({ agencyId: r.agencyId, actorId: null, actorName: client.signedName ?? client.name, action: "sign", entity: "sign_request", entityId: r.id, detail: { signers: signers.map((x) => ({ label: x.label, ip: x.ip })) } });
   const [m] = r.matterId ? await db.select({ assignedTo: s.matters.assignedTo }).from(s.matters).where(eq(s.matters.id, r.matterId)) : [];

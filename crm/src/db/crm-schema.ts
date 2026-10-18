@@ -782,8 +782,85 @@ export const institutions = pgTable("institutions", {
   contactEmail: text("contact_email"),
   commissionRate: numeric("commission_rate"), // % of first-year tuition
   agreementExpiry: date("agreement_expiry"),
+  /** Partnership: a signed agency agreement with the institution (commission, scholarships, fee collection). */
+  partner: boolean("partner").default(false).notNull(),
+  agreementStart: date("agreement_start"),
+  agreementRef: text("agreement_ref"),
+  /** The agency may collect tuition on the institution's behalf and remit it. */
+  collectsTuition: boolean("collects_tuition").default(false).notNull(),
+  remitDays: integer("remit_days"), // days to remit collected tuition, per the agreement
+  bankDetails: text("bank_details"), // for remittances
+  website: text("website"),
+  notes: text("notes"),
   ...stamps,
 });
+
+/** A scholarship the agency can offer under a partner institution's agreement (or fund itself). */
+export const scholarships = pgTable("scholarships", {
+  id: id(),
+  agencyId: agency(),
+  institutionId: text("institution_id").references(() => institutions.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  kind: text("kind").notNull().default("percent"), // percent | amount
+  value: numeric("value").notNull(),
+  appliesTo: text("applies_to").notNull().default("first_year"), // first_year | full_course | first_semester | one_off
+  funding: text("funding").notNull().default("institution"), // institution | agency | shared
+  eligibility: text("eligibility"),
+  conditions: text("conditions"), // e.g. maintain 65% average, full-time enrolment
+  maxAwards: integer("max_awards"),
+  closesAt: date("closes_at"),
+  active: boolean("active").default(true).notNull(),
+  ...stamps,
+});
+
+/** A scholarship offered to a student for an application; accepted by signing the offer letter. */
+export const scholarshipAwards = pgTable(
+  "scholarship_awards",
+  {
+    id: id(),
+    agencyId: agency(),
+    scholarshipId: text("scholarship_id")
+      .notNull()
+      .references(() => scholarships.id, { onDelete: "cascade" }),
+    applicationId: text("application_id").references(() => studentApplications.id, { onDelete: "set null" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    amount: numeric("amount").notNull(), // dollar value of the award
+    status: text("status").notNull().default("offered"), // offered | accepted | declined | revoked
+    signRequestId: text("sign_request_id"),
+    awardedBy: text("awarded_by"),
+    awardedByName: text("awarded_by_name"),
+    ...stamps,
+  },
+  (t) => [index("scholarship_awards_client_idx").on(t.agencyId, t.clientId)],
+);
+
+/** Tuition the agency collects from a student on the institution's behalf, billed as an invoice and remitted. */
+export const tuitionPayments = pgTable(
+  "tuition_payments",
+  {
+    id: id(),
+    agencyId: agency(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    applicationId: text("application_id").references(() => studentApplications.id, { onDelete: "set null" }),
+    institutionId: text("institution_id").references(() => institutions.id, { onDelete: "set null" }),
+    invoiceId: text("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+    period: text("period").notNull(), // "Semester 1, 2027"
+    kind: text("kind").notNull().default("tuition"), // tuition | enrolment | materials | oshc | other
+    gross: numeric("gross").notNull(), // fee before scholarship
+    scholarship: numeric("scholarship").notNull().default("0"),
+    amount: numeric("amount").notNull(), // what the student pays
+    status: text("status").notNull().default("billed"), // billed | paid | remitted | refunded
+    remittedAt: date("remitted_at"),
+    remittedRef: text("remitted_ref"),
+    createdBy: text("created_by"),
+    ...stamps,
+  },
+  (t) => [index("tuition_payments_agency_idx").on(t.agencyId, t.status), index("tuition_payments_client_idx").on(t.clientId)],
+);
 
 export const studentApplications = pgTable("student_applications", {
   id: id(),

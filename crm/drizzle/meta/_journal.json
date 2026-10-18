@@ -162,6 +162,13 @@
       "when": 1792327866547,
       "tag": "0022_signers_bundles_templates_times",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792357075113,
+      "tag": "0023_scholarships_tuition",
+      "breakpoints": true
     }
   ]
 }

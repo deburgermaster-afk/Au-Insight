@@ -11,8 +11,8 @@ const Ctx = createContext<{ close: () => void } | null>(null);
 export const useConfigure = () => useContext(Ctx);
 
 /** The "Configure" button on a settings summary, opening the real settings in a popup. */
-export function Configure({ title, description, label = "Configure", size = "md", variant = "default", children }: { title: string; description?: string; label?: string; size?: "md" | "lg" | "xl"; variant?: "default" | "outline"; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function Configure({ title, description, label = "Configure", size = "md", variant = "default", defaultOpen = false, children }: { title: string; description?: string; label?: string; size?: "md" | "lg" | "xl"; variant?: "default" | "outline"; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>

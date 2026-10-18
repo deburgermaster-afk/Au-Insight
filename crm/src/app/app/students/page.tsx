@@ -17,6 +17,9 @@ import { appStages, appTone, commissionTone, stageLabel } from "@/lib/education"
 import { AppMenu, CommissionMenu, CourseFinder, NewApplication, NewInstitution } from "./students-client";
 import { ReleaseLetter, TransferCourse } from "@/components/edit/course-transfer";
 import { EditRecord } from "@/components/edit/edit-record";
+import { PartnerButton, ScholarshipsPanel, TuitionPanel } from "@/components/edu/student-finance";
+import { db, schema as sx } from "@/db";
+import { desc as descOp, eq as eqOp } from "drizzle-orm";
 import { getEditOptions } from "@/lib/edit-data";
 import { plainValues } from "@/lib/record-specs";
 import { getCtx } from "@/lib/session";
@@ -29,6 +32,26 @@ async function Students() {
   await connection();
   const [{ apps, institutions }, pickers, editOptions, ctx] = await Promise.all([getEducation(), getPickers(), getEditOptions(), getCtx()]);
   const byId = new Map(apps.map((a) => [a.id, a]));
+  const [scholarships, awards, payments] = await Promise.all([
+    db.select().from(sx.scholarships).where(eqOp(sx.scholarships.agencyId, ctx.agencyId)).orderBy(descOp(sx.scholarships.createdAt)),
+    db
+      .select({ a: sx.scholarshipAwards, signStatus: sx.signRequests.status, first: sx.clients.firstName, last: sx.clients.lastName })
+      .from(sx.scholarshipAwards)
+      .innerJoin(sx.clients, eqOp(sx.clients.id, sx.scholarshipAwards.clientId))
+      .leftJoin(sx.signRequests, eqOp(sx.signRequests.id, sx.scholarshipAwards.signRequestId))
+      .where(eqOp(sx.scholarshipAwards.agencyId, ctx.agencyId))
+      .orderBy(descOp(sx.scholarshipAwards.createdAt)),
+    db
+      .select({ t: sx.tuitionPayments, first: sx.clients.firstName, last: sx.clients.lastName, inst: sx.institutions.name, number: sx.invoices.number, paid: sx.invoices.paid, total: sx.invoices.total })
+      .from(sx.tuitionPayments)
+      .innerJoin(sx.clients, eqOp(sx.clients.id, sx.tuitionPayments.clientId))
+      .leftJoin(sx.institutions, eqOp(sx.institutions.id, sx.tuitionPayments.institutionId))
+      .leftJoin(sx.invoices, eqOp(sx.invoices.id, sx.tuitionPayments.invoiceId))
+      .where(eqOp(sx.tuitionPayments.agencyId, ctx.agencyId))
+      .orderBy(descOp(sx.tuitionPayments.createdAt)),
+  ]);
+  const finApps = apps.filter((a) => !["rejected", "withdrawn"].includes(a.status)).map((a) => ({ id: a.id, clientName: a.student, course: a.course, institutionId: a.institutionId, tuitionFee: a.tuitionFee, status: a.status, intake: a.intake }));
+  const finInsts = institutions.map((i) => ({ id: i.id, name: i.name, partner: i.partner, commissionRate: i.commissionRate, agreementStart: i.agreementStart, agreementExpiry: i.agreementExpiry, agreementRef: i.agreementRef, collectsTuition: i.collectsTuition, remitDays: i.remitDays, bankDetails: i.bankDetails, contactName: i.contactName, contactEmail: i.contactEmail, website: i.website, notes: i.notes }));
   const insts = institutions.map((i) => ({ id: i.id, name: i.name }));
   const live = apps.filter((a) => !["rejected", "withdrawn"].includes(a.status));
   const sum = (st: string) => apps.filter((a) => a.commissionStatus === st).reduce((t, a) => t + commissionOf(a), 0);
@@ -59,6 +82,8 @@ async function Students() {
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
           <TabsTrigger value="commissions">Commissions</TabsTrigger>
           <TabsTrigger value="institutions">Institutions</TabsTrigger>
+          <TabsTrigger value="scholarships">Scholarships</TabsTrigger>
+          <TabsTrigger value="tuition">Tuition &amp; fees</TabsTrigger>
           <TabsTrigger value="courses">Course finder</TabsTrigger>
         </TabsList>
         <TabsContent value="pipeline">
@@ -181,7 +206,10 @@ async function Students() {
                       </p>
                     </div>
                     <span className="flex items-center gap-1">
+                      {i.partner ? <Pill t="violet">Partner</Pill> : null}
+                      {i.collectsTuition ? <Pill t="blue">Collects fees</Pill> : null}
                       {i.commissionRate ? <Pill t="green">{Number(i.commissionRate)}%</Pill> : null}
+                      <PartnerButton inst={finInsts.find((x) => x.id === i.id)!} />
                       <EditRecord entity="institution" id={i.id} values={plainValues(i)} options={editOptions} caps={ctx.caps} canDelete={ctx.caps.includes("team")} />
                     </span>
                   </div>
@@ -210,6 +238,21 @@ async function Students() {
             })}
             {!institutions.length ? <p className="rounded-2xl border p-8 text-center text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">No partner institutions yet.</p> : null}
           </div>
+        </TabsContent>
+        <TabsContent value="scholarships">
+          <ScholarshipsPanel
+            scholarships={scholarships.map((x) => ({ ...x, value: String(x.value) }))}
+            awards={awards.map((x) => ({ id: x.a.id, scholarshipId: x.a.scholarshipId, clientName: `${x.first} ${x.last}`, course: byId.get(x.a.applicationId ?? "")?.course ?? null, amount: String(x.a.amount), status: x.a.status, signStatus: x.signStatus, signRequestId: x.a.signRequestId }))}
+            apps={finApps}
+            institutions={finInsts}
+          />
+        </TabsContent>
+        <TabsContent value="tuition">
+          <TuitionPanel
+            payments={payments.map((x) => ({ id: x.t.id, clientName: `${x.first} ${x.last}`, institution: x.inst, course: byId.get(x.t.applicationId ?? "")?.course ?? null, period: x.t.period, kind: x.t.kind, gross: String(x.t.gross), scholarship: String(x.t.scholarship), amount: String(x.t.amount), status: x.t.status, invoiceNumber: x.number, invoicePaid: x.paid == null ? null : String(x.paid), invoiceTotal: x.total == null ? null : String(x.total), remittedAt: x.t.remittedAt, remittedRef: x.t.remittedRef }))}
+            apps={finApps}
+            institutions={finInsts}
+          />
         </TabsContent>
         <TabsContent value="courses">
           <CourseFinder clients={pickers.clients} institutions={insts} />

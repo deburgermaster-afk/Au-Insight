@@ -1,18 +1,25 @@
-import { Download } from "lucide-react";
 import { bytes, fileKind, fileUrl } from "@/components/mail/file-icon";
 import { PortalUpload } from "@/components/portal/upload";
 import { requireClient } from "@/lib/client-auth";
 import { portalDocuments } from "@/lib/client-data";
 import { dmy } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { type Folder, FolderView } from "@/components/portal/folders";
 
 export const metadata = { title: "Files" };
 
 export default async function Documents() {
   const c = await requireClient();
   const rows = await portalDocuments(c);
-  const groups = [...new Set(rows.map((r) => r.ref ?? "General"))];
-  const mine = rows.filter((r) => r.d.source === "portal").length;
+  const mine = rows.filter((r) => r.d.source === "portal" && r.d.category !== "Signed").length;
+  // Folders by document type (category), like a drive: identity, education, signed forms…
+  const palette = ["#0ea5e9", "#7c3aed", "#f97316", "#10b981", "#e11d48", "#14b8a6", "#6366f1", "#d97706"];
+  const byCat = new Map<string, Folder>();
+  for (const { d, matter } of rows) {
+    const cat = d.category || fileKind(d.mimeType ?? "", d.name).label || "Other";
+    if (!byCat.has(cat)) byCat.set(cat, { key: cat, name: cat, mark: cat.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join(""), color: palette[byCat.size % palette.length], items: [] });
+    byCat.get(cat)!.items.push({ id: d.id, title: d.name, sub: `${matter ? `${matter} · ` : ""}${dmy(d.createdAt)}${d.sizeBytes ? ` · ${bytes(d.sizeBytes)}` : ""}${d.source === "portal" ? " · from you" : ""}`, state: d.source === "portal" && d.category !== "Signed" ? "paid" : "doc", href: d.storageKey ? fileUrl(d.storageKey, d.name) : undefined, external: true });
+  }
+  const folders = [...byCat.values()];
   return (
     <div className="grid gap-3">
       <div className="flex items-end justify-between gap-2 px-0.5 pt-1">
@@ -24,40 +31,7 @@ export default async function Documents() {
         </div>
         <PortalUpload agencyId={c.client.agencyId} clientId={c.client.id} label="Upload" variant="default" size="sm" />
       </div>
-      {groups.map((g) => {
-        const list = rows.filter((r) => (r.ref ?? "General") === g);
-        return (
-          <section key={g} className="overflow-hidden rounded-xl border bg-card">
-            <p className="flex items-center justify-between border-b bg-muted/30 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
-              <span className="truncate">{list[0].matter ? `${list[0].matter} · ${g}` : g}</span>
-              <span>{list.length}</span>
-            </p>
-            <ul className="divide-y">
-              {list.map(({ d }) => {
-                const k = fileKind(d.mimeType ?? "", d.name);
-                return (
-                  <li key={d.id}>
-                    <a href={d.storageKey ? fileUrl(d.storageKey, d.name) : undefined} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 active:bg-muted/50">
-                      <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg", k.tone)}>
-                        <k.Icon className="size-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px]">{d.name}</span>
-                        <span className="block truncate text-[11px] text-muted-foreground">
-                          {d.category ?? k.label} · {dmy(d.createdAt)}
-                          {d.sizeBytes ? ` · ${bytes(d.sizeBytes)}` : ""}
-                          {d.source === "portal" ? " · from you" : ""}
-                        </span>
-                      </span>
-                      {d.storageKey ? <Download className="size-4 shrink-0 text-muted-foreground" /> : null}
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        );
-      })}
+      <FolderView folders={folders} filters={[{ key: "all", label: "All", states: ["doc", "paid"] }, { key: "mine", label: "From me", states: ["paid"] }, { key: "agency", label: "From agency", states: ["doc"] }]} empty="No files here." />
       {!rows.length ? <p className="rounded-xl border border-dashed p-8 text-center text-xs text-muted-foreground">No files yet. Upload passports, certificates and anything your agent asks for.</p> : null}
       <p className="px-1 text-center text-[11px] text-muted-foreground">Files are stored privately in Australia and shared only with {c.agency.name}.</p>
     </div>

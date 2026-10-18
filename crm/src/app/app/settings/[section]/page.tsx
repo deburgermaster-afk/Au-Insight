@@ -217,13 +217,14 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
   if (slug === "workflow") {
     const w = p?.workflow ?? {};
     const opts = await getEditOptions();
-    const cfg = (title: string, node: React.ReactNode, size: "lg" | "xl" = "xl") =>
+    const cfg = (title: string, node: React.ReactNode, size: "lg" | "xl" = "xl", open = false) =>
       admin ? (
-        <Configure title={title} size={size}>
+        <Configure title={title} size={size} defaultOpen={open}>
           {node}
         </Configure>
       ) : null;
     const custom = Object.keys(w.checklists ?? {});
+    const visaParam = typeof sp.visa === "string" ? sp.visa : undefined;
     const priced = Object.entries(w.fees ?? {});
     const who = (id: string) => opts.staff.find((x) => x.value === id)?.label ?? "someone who left";
     body =
@@ -273,7 +274,7 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
           title="Document checklists"
           description="The checklist each new case starts with. Lodgely's checklists are used for any visa you haven't customised."
           status={<Pill tone={custom.length ? "ok" : "muted"}>{custom.length ? `${custom.length} customised` : "Using Lodgely's"}</Pill>}
-          action={cfg("Document checklists", <ChecklistEditor workflow={w} initialVisa={custom[0]} />)}
+          action={cfg("Document checklists", <ChecklistEditor workflow={w} initialVisa={visaParam ?? custom[0]} />, "xl", Boolean(visaParam))}
           rows={custom.map((code) => ({ label: `${code} · ${allVisas.find((v) => v.code === code)?.name ?? ""}`, value: `${w.checklists![code].length} documents` }))}
         />
       );

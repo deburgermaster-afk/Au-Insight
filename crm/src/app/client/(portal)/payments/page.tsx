@@ -1,10 +1,9 @@
-import { ChevronRight } from "lucide-react";
-import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { requireClient } from "@/lib/client-auth";
 import { portalPayments } from "@/lib/client-data";
 import { aud, dmy } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { type Folder, FolderView } from "@/components/portal/folders";
+import { db, schema as s } from "@/db";
+import { eq as eqOp, inArray } from "drizzle-orm";
 
 export const metadata = { title: "Payments" };
 
@@ -14,6 +13,21 @@ export default async function Payments() {
   const total = invoices.reduce((t, r) => t + Number(r.i.total), 0);
   const paid = invoices.reduce((t, r) => t + Number(r.i.paid), 0);
   const owing = total - paid;
+  // Folders: the agency's own fees, and tuition paid to each institution through the agency.
+  const tuition = invoices.length ? await db.select({ invoiceId: s.tuitionPayments.invoiceId, inst: s.institutions.name }).from(s.tuitionPayments).leftJoin(s.institutions, eqOp(s.institutions.id, s.tuitionPayments.institutionId)).where(inArray(s.tuitionPayments.invoiceId, invoices.map((r) => r.i.id))) : [];
+  const instOf = new Map(tuition.map((t) => [t.invoiceId, t.inst ?? "Institution"]));
+  const today = new Date().toISOString().slice(0, 10);
+  const palette = ["#7c3aed", "#0ea5e9", "#f97316", "#10b981", "#e11d48", "#14b8a6"];
+  const mark = (n: string) => n.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "•";
+  const groups = new Map<string, Folder>();
+  for (const { i, matter } of invoices) {
+    const name = instOf.get(i.id) ?? `${c.agency.name} fees`;
+    const left = Number(i.total) - Number(i.paid);
+    const state = left <= 0.005 ? "paid" : i.dueAt && i.dueAt < today ? "overdue" : "due";
+    if (!groups.has(name)) groups.set(name, { key: name, name: instOf.has(i.id) ? name : "Agency fees", mark: mark(instOf.has(i.id) ? name : c.agency.name), color: palette[groups.size % palette.length], items: [] });
+    groups.get(name)!.items.push({ id: i.id, title: i.number, sub: `${instOf.has(i.id) ? "Tuition" : (matter ?? "General")} · ${state === "paid" ? "paid" : `due ${dmy(i.dueAt)}`}`, right: aud(left > 0 ? left : i.total, 2), rightSub: left > 0 ? `of ${aud(i.total, 2)}` : "paid", state, href: `/client/payments/${i.id}` });
+  }
+  const folders = [...groups.values()];
   return (
     <div className="grid gap-3">
       <h1 className="px-0.5 pt-1 text-lg font-semibold tracking-tight">Payments</h1>
@@ -29,38 +43,8 @@ export default async function Payments() {
         </div>
       </section>
 
-      <section className="grid gap-1.5">
-        <h2 className="px-0.5 text-xs font-medium text-muted-foreground">Invoices</h2>
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-          {invoices.map(({ i, matter }) => {
-            const left = Number(i.total) - Number(i.paid);
-            const overdue = left > 0 && i.dueAt && i.dueAt < new Date().toISOString().slice(0, 10);
-            return (
-              <li key={i.id}>
-                <Link href={`/client/payments/${i.id}`} className="flex items-center gap-2.5 px-3 py-2.5 active:bg-muted/50">
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-[13px] font-medium">
-                      {i.number}
-                      <Badge variant={left <= 0 ? "secondary" : overdue ? "destructive" : "outline"} className={cn("h-4 px-1.5 text-[10px]", left <= 0 && "text-emerald-500")}>
-                        {left <= 0 ? "Paid" : overdue ? "Overdue" : Number(i.paid) > 0 ? "Part paid" : "Due"}
-                      </Badge>
-                    </span>
-                    <span className="block truncate text-[11px] text-muted-foreground">
-                      {matter ?? "General"} · due {dmy(i.dueAt)}
-                    </span>
-                  </span>
-                  <span className="text-right">
-                    <span className="block text-[13px] font-medium tabular-nums">{aud(left > 0 ? left : i.total, 2)}</span>
-                    <span className="block text-[10px] text-muted-foreground">{left > 0 ? `of ${aud(i.total, 2)}` : "total"}</span>
-                  </span>
-                  <ChevronRight className="size-4 text-muted-foreground" />
-                </Link>
-              </li>
-            );
-          })}
-          {!invoices.length ? <li className="p-6 text-center text-xs text-muted-foreground">No invoices yet.</li> : null}
-        </ul>
-      </section>
+      <FolderView folders={folders} filters={[{ key: "all", label: "All", states: ["paid", "due", "overdue"] }, { key: "paid", label: "Paid", states: ["paid"] }, { key: "unpaid", label: "Unpaid", states: ["due", "overdue"] }]} empty="Nothing here." />
+
 
       {receipts.length ? (
         <section className="grid gap-1.5">

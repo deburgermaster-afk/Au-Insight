@@ -8,6 +8,7 @@ import { db, schema as s } from "@/db";
 import type { SignField, SignSigner } from "@/db/crm-schema";
 import type { ActionResult } from "@/lib/actions";
 import { agencyTemplate, agencyTemplates } from "@/lib/agency-templates";
+import { scholarshipOffer } from "@/lib/consent-templates";
 import { clientSession } from "@/lib/client-auth";
 import { recommendFor, type TemplatePick } from "@/lib/consent-rank";
 import { agencyTag } from "@/lib/data";
@@ -50,7 +51,7 @@ async function meta() {
  * just uploaded, or a PDF already in the client's documents. Sets up the signers, finds the fields
  * and returns a draft for the agent to check before sending.
  */
-export async function createSignDraft(input: { clientId: string; matterId?: string | null; origin: "template" | "upload" | "file"; templateKey?: string; templateKeys?: string[]; documentId?: string; upload?: { key: string; name: string }; ai?: boolean; signers?: SignerInput }): Promise<ActionResult & { draft?: SignDraft }> {
+export async function createSignDraft(input: { clientId: string; matterId?: string | null; origin: "template" | "upload" | "file"; templateKey?: string; templateKeys?: string[]; documentId?: string; upload?: { key: string; name: string }; ai?: boolean; signers?: SignerInput; extraVars?: Record<string, string>; title?: string }): Promise<ActionResult & { draft?: SignDraft }> {
   try {
     const ctx = await requireCap("clients");
     const [c] = await db.select().from(s.clients).where(and(eq(s.clients.agencyId, ctx.agencyId), eq(s.clients.id, input.clientId)));
@@ -82,15 +83,16 @@ export async function createSignDraft(input: { clientId: string; matterId?: stri
     let bundle: string[] | null = null;
     if (input.origin === "template") {
       const keys = (input.templateKeys?.length ? input.templateKeys : [input.templateKey ?? ""]).slice(0, 12);
-      const list = (await Promise.all(keys.map((k) => agencyTemplate(ctx.agencyId, k)))).filter((t): t is NonNullable<typeof t> => Boolean(t));
+      const list = (await Promise.all(keys.map(async (k) => (k === scholarshipOffer.key ? scholarshipOffer : agencyTemplate(ctx.agencyId, k))))).filter((t): t is NonNullable<typeof t> => Boolean(t));
       if (!list.length) return { ok: false, error: "Template not found." };
-      const vars = await consentVars(ctx.agencyId, c.id, matterId, ctx.userId);
+      // Letters made from student data (e.g. a scholarship offer) add their own values.
+      const vars = { ...(await consentVars(ctx.agencyId, c.id, matterId, ctx.userId)), ...(input.extraVars ?? {}) };
       // The agent countersigns only the forms that call for it.
       const r = await renderBundle(list, vars, extra, (t) => Boolean(t.countersign));
       bytes = r.bytes;
       fields = r.fields;
       pages = r.pages;
-      title = list.length === 1 ? list[0].title : keys.join(",") === NEW_CLIENT_PACK.join(",") ? "New client pack" : `${list.length} consent forms`;
+      title = input.title ? input.title.slice(0, 200) : list.length === 1 ? list[0].title : keys.join(",") === NEW_CLIENT_PACK.join(",") ? "New client pack" : `${list.length} consent forms`;
       if (list.length > 1) bundle = list.map((t) => t.key);
       method = "template";
     } else {

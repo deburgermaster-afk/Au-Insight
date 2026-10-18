@@ -421,6 +421,31 @@ I consent to {agencyLegal} using my testimonial and the outcome of my matter in 
   },
 ];
 
+/** Letters made from student data (not in the consent library): filled with extra values when sent. */
+export const scholarshipOffer: ConsentTemplate = {
+  key: "scholarship-offer",
+  title: "Scholarship offer",
+  group: "Application",
+  summary: "Offer of a scholarship under the agency's agreement with the institution; the student accepts by signing.",
+  countersign: true,
+  body: `## Offer
+{agencyLegal} is pleased to offer {client} the {scholarshipName} for study at {institution}.
+
+Course: {course}{intakeText}. Value: {scholarshipValue} ({appliesToText}), applied as a reduction of the tuition fees payable.
+
+## Funding
+{fundingText}
+
+## Conditions
+{conditions}
+
+The scholarship is conditional on the student accepting the offer of a place, paying the remaining tuition fees when due, holding a valid student visa, and enrolling full-time. It has no cash value, can't be transferred, and ends if the student withdraws, transfers to another provider or course, or doesn't meet the conditions above.
+
+## Accepting
+By signing, the student accepts the scholarship on these terms and authorises {agencyLegal} to share their enrolment and academic progress with {institution} to administer it.`,
+  checkboxes: [{ id: "conditions", label: "I have read and accept the scholarship conditions.", required: true }],
+};
+
 export const consentByKey = (key: string) => consentTemplates.find((t) => t.key === key);
 export const consentGroups = [...new Set(consentTemplates.map((t) => t.group))];
 

@@ -637,6 +637,118 @@ export const visas: Visa[] = [
   },
 ];
 
+
+// ── Fuller checklists ──
+// Forms and evidence every lodged application needs, and documents specific to each visa, added to
+// the starting checklists above. Agencies edit their own copy in Settings → Workflow → Checklists.
+const APPLICATION: ChecklistTemplate = [
+  { category: "Application", label: "Form 956 (Appointment of a registered migration agent) signed by the applicant" },
+  { category: "Application", label: "Completed application form / ImmiAccount application reviewed and signed off by the client" },
+  { category: "Application", label: "Visa application charge payment method confirmed" },
+  { category: "Application", label: "Previous visa refusals, cancellations or breaches disclosed (decision records)", required: false },
+];
+const SPECIFIC: Record<string, ChecklistTemplate> = {
+  "500": [
+    { category: "Enrolment", label: "Letter of offer and signed acceptance of offer" },
+    { category: "Enrolment", label: "Evidence of tuition fee payment (receipt from the provider or agency)" },
+    { category: "Enrolment", label: "Scholarship or sponsorship letter", required: false },
+    { category: "Qualifications", label: "Academic transcripts and completion certificates for previous study" },
+    { category: "Genuine Student", label: "Explanation of any study gaps, with employment evidence" },
+    { category: "Genuine Student", label: "Ties to home country: family, property, employment offers on return" },
+    { category: "Financial", label: "Bank statements (3+ months) showing funds for 12 months' living costs, tuition and travel" },
+    { category: "Financial", label: "Sponsor's income evidence (tax returns, payslips) and relationship to the student", required: false },
+    { category: "Financial", label: "Education loan sanction letter", required: false },
+    { category: "Guardian", label: "Form 1229 (consent for a child under 18) if travelling without both parents", required: false },
+  ],
+  "590": [{ category: "Accommodation", label: "Evidence of accommodation and welfare arrangements for the student" }],
+  "485": [
+    { category: "Character", label: "Australian Federal Police check (applied for before lodging)" },
+    { category: "Study", label: "Course completion letter dated within the last 6 months" },
+    { category: "English", label: "English test taken within 3 years before lodging (score for the stream)" },
+  ],
+  "189": [
+    { category: "SkillSelect", label: "SkillSelect invitation letter" },
+    { category: "SkillSelect", label: "EOI summary matching every claim at invitation" },
+    { category: "Points", label: "Age, English, employment, study and partner points evidence (as claimed in the EOI)" },
+  ],
+  "190": [
+    { category: "SkillSelect", label: "SkillSelect invitation letter and EOI summary" },
+    { category: "Nomination", label: "State or territory nomination approval" },
+    { category: "Nomination", label: "Commitment to live and work in the nominating state" },
+  ],
+  "491": [
+    { category: "SkillSelect", label: "SkillSelect invitation letter and EOI summary" },
+    { category: "Nomination", label: "State nomination approval or eligible relative sponsorship (Form 1277)" },
+    { category: "Regional", label: "Evidence of an intended address in a designated regional area" },
+  ],
+  "482": [
+    { category: "Nomination", label: "Nomination approval (TRN) with matching occupation and salary" },
+    { category: "Employment", label: "Employment contract at or above the Core Skills income threshold" },
+    { category: "Employment", label: "Evidence of 1 year's relevant work experience in the last 5 years" },
+    { category: "English", label: "English test (IELTS 5.0 overall or equivalent) unless exempt" },
+  ],
+  "186": [
+    { category: "Employment", label: "TRT: evidence of 2 years with the sponsor on a 482/457 (payslips, tax records)", required: false },
+    { category: "Skills", label: "Direct Entry: positive skills assessment and 3 years' relevant experience", required: false },
+    { category: "English", label: "Competent English evidence or exemption" },
+  ],
+  "494": [{ category: "Regional", label: "Position located in a designated regional area" }],
+  "820/801": [
+    { category: "Sponsor", label: "Form 40SP (sponsorship for a partner to migrate) completed in ImmiAccount" },
+    { category: "Relationship", label: "Form 47SP details: relationship history, how you met, living arrangements" },
+    { category: "Relationship", label: "Photos together over time, with dates and places" },
+    { category: "Relationship", label: "801 stage: updated relationship evidence for the last 2 years", required: false },
+  ],
+  "309/100": [
+    { category: "Sponsor", label: "Form 40SP (sponsorship for a partner to migrate)" },
+    { category: "Relationship", label: "Photos together over time, with dates and places" },
+    { category: "Relationship", label: "Evidence of contact while living apart (calls, messages, visits)" },
+  ],
+  "300": [
+    { category: "Relationship", label: "Notice of Intended Marriage lodged with an authorised celebrant" },
+    { category: "Relationship", label: "Evidence you have met in person as adults" },
+  ],
+  "143": [{ category: "Assurance", label: "Assurance of Support and bond (Services Australia)" }],
+  "870": [
+    { category: "Sponsor", label: "Approved parent sponsor (sponsor application approved first)" },
+    { category: "Health", label: "Health insurance for the whole stay" },
+  ],
+  "600": [
+    { category: "Travel", label: "Travel itinerary and purpose of visit" },
+    { category: "Financial", label: "Bank statements showing funds for the trip" },
+    { category: "Ties", label: "Employment letter with approved leave, or study enrolment" },
+    { category: "Sponsor", label: "Invitation letter and sponsor's documents (Sponsored Family stream)", required: false },
+    { category: "Travel", label: "Previous travel history (passport stamps, previous visas)", required: false },
+  ],
+  "417": [{ category: "Financial", label: "Evidence of about AUD 5,000 for initial stay and a return ticket or funds for one" }],
+  "462": [
+    { category: "Eligibility", label: "Government letter of support (where required for your country)" },
+    { category: "Education", label: "Evidence of the education requirement" },
+  ],
+  "188": [
+    { category: "Nomination", label: "State or territory nomination" },
+    { category: "Business", label: "Business and personal assets, net worth statements" },
+  ],
+  "858": [{ category: "Talent", label: "Form 1000 nomination and evidence of an internationally recognised record of achievement" }],
+  "866": [
+    { category: "Claims", label: "Detailed statement of protection claims" },
+    { category: "Claims", label: "Country information and any evidence supporting the claims" },
+  ],
+  CIT: [
+    { category: "Citizenship", label: "Citizenship test appointment and result" },
+    { category: "Identity", label: "Identity declaration signed by an eligible person, with a certified photo" },
+  ],
+  "010": [{ category: "Application", label: "Acknowledgement of the substantive application and the Bridging A grant notice (granted automatically)" }],
+  ART: [{ category: "Time limit", label: "Date of notification of the decision and the review time limit calculated" }],
+};
+
+for (const v of visas) {
+  const big = v.checklist.length >= 3 && !["ART", "SA", "MIN", "CANC", "NOM", "SBS", "PI", "444", "601", "651", "771", "988"].includes(v.code);
+  const extraItems = SPECIFIC[v.code] ?? [];
+  const seen = new Set(v.checklist.map((i) => i.label));
+  v.checklist = [...(big ? APPLICATION : []), ...v.checklist, ...extraItems.filter((i) => !seen.has(i.label))];
+}
+
 export const visaCategories = [...new Set(visas.map((v) => v.category))];
 
 export function visaByCode(code: string): Visa | undefined {

@@ -202,7 +202,12 @@ export default async function VisaPage({ params }: PageProps<"/app/visas/[code]"
               </div>
             ))}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">A starting checklist. Each matter gets its own copy you can edit, then send to the client with a private upload link.</p>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            Lodgely&apos;s starting checklist. Each matter gets its own copy you can edit, then send to the client with a private upload link.
+            <Link href={`/app/settings/workflow?tab=checklists&visa=${encodeURIComponent(v.code)}`} className="font-medium text-primary hover:underline">
+              Edit your agency&apos;s checklist for {v.code} →
+            </Link>
+          </p>
         </TabsContent>
         <TabsContent value="processing">
           <Section title="Global processing times" bodyClassName="p-0">

@@ -31,13 +31,21 @@ export default async function Invoice({ params }: PageProps<"/client/payments/[i
   const live = providers.filter((x) => x.enabled && x.status === "active");
   const cards = live.filter((x) => x.provider !== "zeller").map((x) => ({ key: x.provider, name: PROVIDERS[x.provider as ProviderKey]?.name ?? x.provider, test: x.mode === "test" }));
   const zellerOn = live.some((x) => x.provider === "zeller");
+  const [tuition] = await db.select({ id: s.tuitionPayments.id }).from(s.tuitionPayments).where(eq(s.tuitionPayments.invoiceId, i.id));
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between print:hidden">
         <Link href="/client/payments" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-3.5" /> Payments
         </Link>
-        <PrintButton />
+        <span className="flex items-center gap-2">
+          {tuition ? (
+            <a href={`/api/tuition/${tuition.id}/receipt`} target="_blank" rel="noreferrer" className="rounded-full border px-3 py-1 text-xs font-medium">
+              Tuition receipt
+            </a>
+          ) : null}
+          <PrintButton />
+        </span>
       </div>
 
       <section className="overflow-hidden rounded-xl border bg-card">
