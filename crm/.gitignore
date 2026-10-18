@@ -48,3 +48,4 @@ next-env.d.ts
 cloudflare-env.d.ts
 scripts/_q.mts
 scripts/_mksess.mts
+scripts/_dns_test.mts

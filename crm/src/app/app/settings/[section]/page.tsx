@@ -10,6 +10,7 @@ import { AiMailCard } from "@/components/mail-ai/controls";
 import { DomainCard } from "@/components/mail/domain-card";
 import { AgencyForm } from "@/components/settings/agency-form";
 import { LogoUpload } from "@/components/settings/logo-upload";
+import { cloudflareConnector, cloudflareTokenUrl } from "@/lib/dns-connect";
 import { AppearancePicker, ThemeValue } from "@/components/settings/appearance";
 import { Configure } from "@/components/settings/configure";
 import { AiDocsConsent } from "@/components/ai/docs-toggle";
@@ -438,6 +439,7 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
     if (tab === "domain") {
       const records = p?.mailDomainRecords ?? [];
       const ok = records.filter((r) => r.status === "verified").length;
+      const cfConn = admin ? await cloudflareConnector(ctx.agencyId) : null;
       const verified = p?.mailDomainStatus === "verified";
       body = (
         <Summary
@@ -465,6 +467,7 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
                   via={p?.mailDomainVia ?? null}
                   suggested={host(p?.website) ?? host(p?.email)}
                   resendConnected={Boolean(st.resend)}
+                  cloudflare={{ connected: Boolean(cfConn), account: cfConn?.account ?? null, tokenUrl: cloudflareTokenUrl() }}
                 />
               </Configure>
             ) : null

@@ -27,7 +27,31 @@ const base: Record<Position, Cap[]> = {
   hr: ["payroll", "team", "mail", "files"],
 };
 
-export function capsFor(role: Role, position: Position): Cap[] {
+/** Each feature an agency can switch on or off for a role, and the pages it opens. */
+export const features: { cap: Cap; label: string; about: string; pages: string[] }[] = [
+  { cap: "clients", label: "Clients & cases", about: "Client records, matters, employers, e-sign and the case pipeline.", pages: ["Clients", "Matters", "Employers", "E-sign"] },
+  { cap: "immigration", label: "Immigration work", about: "Advice, lodging and immigration fields. Also needs a current MARN, as the Migration Act requires.", pages: ["Lodge", "Visa decisions", "Case review"] },
+  { cap: "education", label: "Students & education", about: "Course advice, offers, CoEs, scholarships, tuition and commissions.", pages: ["Students"] },
+  { cap: "billing", label: "Billing & trust", about: "Invoices, payments, the client trust account and receipts.", pages: ["Billing & trust"] },
+  { cap: "reports", label: "Reports", about: "Practice analytics and exports.", pages: ["Reports"] },
+  { cap: "mail", label: "Inbox", about: "Shared and personal mailboxes, sending and the AI mail assistant.", pages: ["Inbox"] },
+  { cap: "files", label: "Documents & files", about: "Client documents, uploads and the agency drive.", pages: ["Documents", "Files"] },
+  { cap: "payroll", label: "HR & payroll", about: "Staff records, leave, timesheets and pay runs.", pages: ["HR & payroll"] },
+  { cap: "team", label: "Team & admin", about: "Invite staff, change access, handovers and the audit log.", pages: ["Team", "Audit log"] },
+];
+export const allCaps = features.map((f) => f.cap);
+export const defaultCaps = (position: Position): Cap[] => [...(base[position] ?? base.consultant)];
+
+/**
+ * A person's features: their custom role's when they have one, otherwise their position's; owners
+ * always have everything. (Immigration is then limited to people with a current MARN.)
+ */
+export function capsFor(role: Role, position: Position, custom?: string[] | null): Cap[] {
+  if (custom && role !== "owner") {
+    const caps = custom.filter((c): c is Cap => allCaps.includes(c as Cap));
+    // Admins keep team access so a role change can never lock the agency out of its own settings.
+    return role === "admin" && !caps.includes("team") ? [...caps, "team"] : caps;
+  }
   const caps = new Set(base[position] ?? base.consultant);
   if (role === "owner" || role === "admin") for (const c of ["team", "payroll", "billing", "reports", "clients", "mail", "files"] as Cap[]) caps.add(c);
   if (role === "supervisor") caps.add("reports");

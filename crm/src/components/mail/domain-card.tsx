@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { addMailDomain, checkMailDomain, dnsHost, removeMailDomain } from "@/lib/domain-actions";
+import { AutoDns } from "./auto-dns";
 import { cn } from "@/lib/utils";
 
 type Rec = { record: string; name: string; type: string; value: string; priority?: number; status: string };
@@ -61,7 +62,7 @@ function useAutoVerify(active: boolean, onVerified: () => void) {
 }
 
 /** Email & domain → Domain: send and receive as you@youragency.com.au instead of the shared domain. */
-export function DomainCard({ domain, status, records, checkedAt, sharedDomain, canRemove, canEdit, via, suggested, resendConnected }: { domain: string | null; status: string | null; records: Rec[] | null; checkedAt: string | null; sharedDomain: string | null; canRemove: boolean; canEdit: boolean; via: string | null; suggested: string | null; resendConnected: boolean }) {
+export function DomainCard({ domain, status, records, checkedAt, sharedDomain, canRemove, canEdit, via, suggested, resendConnected, cloudflare }: { domain: string | null; status: string | null; records: Rec[] | null; checkedAt: string | null; sharedDomain: string | null; canRemove: boolean; canEdit: boolean; via: string | null; suggested: string | null; resendConnected: boolean; cloudflare?: { connected: boolean; account: string | null; tokenUrl: string } }) {
   const [name, setName] = useState(suggested ?? "");
   const [pending, start] = useTransition();
   const [host, setHost] = useState<{ name: string; url: string | null } | null>(null);
@@ -176,10 +177,12 @@ export function DomainCard({ domain, status, records, checkedAt, sharedDomain, c
         ) : null}
       </div>
 
+      {cloudflare && canEdit ? <AutoDns connected={cloudflare.connected} account={cloudflare.account} tokenUrl={cloudflare.tokenUrl} host={host?.name ?? null} hasDomain={Boolean(domain)} verified={verified} /> : null}
+
       {domain && records?.length && !verified ? (
         <div className="overflow-hidden rounded-2xl border bg-card">
           <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
-            <p className="text-[13px] font-medium">DNS records to add</p>
+            <p className="text-[13px] font-medium">{cloudflare?.connected ? "DNS records (set up automatically)" : "Or add the records yourself"}</p>
             <Button size="sm" variant="ghost" className="rounded-full" onClick={copyAll}>
               <ClipboardCopy /> Copy all
             </Button>

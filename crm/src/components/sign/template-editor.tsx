@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Eye, EyeOff, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, Plus, Redo2, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CONSENT_VARS, type ConsentTemplate, consentGroups } from "@/lib/consent-templates";
 import { resetTemplate, saveTemplate, setTemplateHidden, type TemplateInput } from "@/lib/template-actions";
 import { LogoUpload } from "@/components/settings/logo-upload";
+import { useHistory, useUndoKeys } from "@/components/undo/use-history";
 import { PdfPages } from "./pdf-pages";
 
 const BLANK = `## About this consent
@@ -22,7 +23,7 @@ This consent covers the matter above only. I can withdraw it at any time in writ
 /** Edit an agency's wording for a consent form (or write its own), with a live PDF preview. */
 export function TemplateEditor({ templateKey, initial, original, brand }: { templateKey: string; initial: (ConsentTemplate & { disabled?: boolean }) | null; original: ConsentTemplate | null; brand: { hasLogo: boolean; agencyName: string } }) {
   const router = useRouter();
-  const [v, setV] = useState<TemplateInput>({
+  const history = useHistory<TemplateInput>({
     title: initial?.title ?? "",
     group: (initial?.group ?? "Engagement") as TemplateInput["group"],
     summary: initial?.summary ?? "",
@@ -32,6 +33,9 @@ export function TemplateEditor({ templateKey, initial, original, brand }: { temp
     initials: Boolean(initial?.initials),
     countersign: Boolean(initial?.countersign),
   });
+  const { value: v, set: setV, undo, redo, canUndo, canRedo } = history;
+  const panel = useRef<HTMLElement>(null);
+  useUndoKeys(panel, undo, redo);
   const [preview, setPreview] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [logoVer, setLogoVer] = useState(0);
@@ -74,7 +78,7 @@ export function TemplateEditor({ templateKey, initial, original, brand }: { temp
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <section className="grid content-start gap-3 rounded-xl border bg-card p-4">
+      <section ref={panel} className="grid content-start gap-3 rounded-xl border bg-card p-4">
         <Link href="/app/sign" className="flex items-center gap-1 text-xs text-muted-foreground">
           <ArrowLeft className="size-3.5" /> E-sign
         </Link>
@@ -82,6 +86,14 @@ export function TemplateEditor({ templateKey, initial, original, brand }: { temp
           <h1 className="text-lg font-semibold">{templateKey === "new" ? "New consent template" : "Edit consent template"}</h1>
           {initial?.edited ? <span className="rounded-full bg-sky-500/12 px-2 py-0.5 text-[11px] text-sky-600">Your wording</span> : null}
           {initial?.disabled ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">Hidden from the library</span> : null}
+          <span className="ml-auto flex gap-1">
+            <Button type="button" size="icon" variant="outline" className="size-8" aria-label="Undo" title="Undo (⌘Z)" disabled={!canUndo} onClick={undo}>
+              <Undo2 />
+            </Button>
+            <Button type="button" size="icon" variant="outline" className="size-8" aria-label="Redo" title="Redo (⇧⌘Z)" disabled={!canRedo} onClick={redo}>
+              <Redo2 />
+            </Button>
+          </span>
         </div>
         <label className="grid gap-1 text-[13px]">
           <span className="text-muted-foreground">Title</span>

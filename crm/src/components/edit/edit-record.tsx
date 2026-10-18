@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { EditOptions } from "@/lib/edit-data";
+import { undoable } from "@/components/undo/undo";
 import { addRecord, deleteRecord, saveRecord } from "@/lib/record-actions";
 import { type EntityKey, type FieldSpec, SPECS } from "@/lib/record-specs";
 import { cn } from "@/lib/utils";
@@ -143,7 +144,7 @@ export function EditRecord({
             start(async () => {
               const r = adding ? await addRecord(entity, parentId!, f) : await saveRecord(entity, id!, f);
               if (!r.ok) return void toast.error(r.error);
-              toast.success(adding ? "Added" : "Saved");
+              undoable(r.undo, `${adding ? "added" : "edited"} ${spec.label}`, adding ? "Added" : "Saved");
               setOpen(false);
               router.refresh();
             });
@@ -174,7 +175,7 @@ export function EditRecord({
                   start(async () => {
                     const r = await deleteRecord(entity, id);
                     if (!r.ok) return void toast.error(r.error);
-                    toast.success("Removed");
+                    undoable(r.undo, `removed ${spec.label}`, "Removed");
                     setOpen(false);
                     router.refresh();
                   })

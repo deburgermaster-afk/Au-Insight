@@ -346,7 +346,7 @@ export async function listTeam() {
 async function teamFor(agencyId: string) {
   const [members, invitations] = await Promise.all([
     db
-      .select({ id: s.member.id, role: s.member.role, joined: s.member.createdAt, userId: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image, position: s.staffProfiles.position, title: s.staffProfiles.title, marn: s.staffProfiles.marn, marnExpiry: s.staffProfiles.marnExpiry, qeac: s.staffProfiles.qeac })
+      .select({ id: s.member.id, role: s.member.role, joined: s.member.createdAt, userId: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image, position: s.staffProfiles.position, roleId: s.staffProfiles.roleId, title: s.staffProfiles.title, marn: s.staffProfiles.marn, marnExpiry: s.staffProfiles.marnExpiry, qeac: s.staffProfiles.qeac })
       .from(s.member)
       .innerJoin(s.user, eq(s.user.id, s.member.userId))
       .leftJoin(s.staffProfiles, and(eq(s.staffProfiles.userId, s.member.userId), eq(s.staffProfiles.agencyId, s.member.organizationId)))

@@ -2,7 +2,7 @@ import { ArrowRightLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { connection } from "next/server";
-import { BadgeCheck, CircleAlert, Mail, ShieldCheck } from "lucide-react";
+import { BadgeCheck, CircleAlert, Mail, Plus, ShieldCheck } from "lucide-react";
 import { Suspense } from "react";
 import { label, Pill, type Tone } from "@/components/app/badges";
 import { FadeIn, ProgressBar, Stagger, StaggerItem } from "@/components/app/motion";
@@ -15,6 +15,11 @@ import { listTeam } from "@/lib/data";
 import { dmy } from "@/lib/format";
 import { marnCurrent, positionLabel, positions } from "@/lib/permissions";
 import { canAtLeast, getCtx } from "@/lib/session";
+import { and, eq } from "drizzle-orm";
+import { db, schema as s } from "@/db";
+import { workDomain } from "@/lib/mail";
+import { defaultCaps, type Position } from "@/lib/permissions";
+import { AccessMatrix, AccessSelect, RoleEditor, type RoleRow, WorkEmail } from "./roles-client";
 import { CancelInvite, InviteDialog, RoleSelect } from "./team-client";
 
 export const metadata = { title: "Team" };
@@ -34,6 +39,19 @@ async function Team() {
   await connection();
   const [{ members, invitations }, ctx] = await Promise.all([listTeam(), getCtx()]);
   const canEdit = canAtLeast(ctx.role, "admin");
+  const [roleRows, boxes, wd] = await Promise.all([
+    db.select().from(s.agencyRoles).where(eq(s.agencyRoles.agencyId, ctx.agencyId)).orderBy(s.agencyRoles.createdAt),
+    db.select({ userId: s.mailboxes.userId, address: s.mailboxes.address }).from(s.mailboxes).where(and(eq(s.mailboxes.agencyId, ctx.agencyId), eq(s.mailboxes.kind, "personal"))),
+    workDomain(ctx.agencyId, ctx.agencySlug).catch(() => null),
+  ]);
+  const roles: RoleRow[] = roleRows.map((r) => ({ id: r.id, name: r.name, description: r.description, color: r.color, caps: r.caps, people: members.filter((m) => m.roleId === r.id).length }));
+  const defaults = Object.fromEntries(positions.map((p) => [p.key, defaultCaps(p.key as Position)]));
+  const suffix = wd ? wd.address("x").replace(/^x/, "") : null;
+  // A member's work address: on the agency's own domain when it has one, else the shared one.
+  const workOf = (userId: string) => {
+    const mine = boxes.filter((b) => b.userId === userId).map((b) => b.address);
+    return (suffix ? mine.find((a) => a.endsWith(suffix)) : null) ?? null;
+  };
   const max = Math.max(1, ...members.map((m) => m.openMatters));
   const tiers = order.map((r) => ({ role: r, people: members.filter((m) => m.role === r) })).filter((t) => t.people.length);
   return (
@@ -45,7 +63,7 @@ async function Team() {
               <ArrowRightLeft /> Handover & swaps
             </Link>
           </Button>
-          <InviteDialog />
+          <InviteDialog roles={roles.map((r) => ({ id: r.id, name: r.name }))} mailSuffix={suffix} />
         </HeaderActions>
       ) : null}
       <FadeIn>
@@ -103,14 +121,18 @@ async function Team() {
                       <span className="text-muted-foreground">QEAC {m.qeac}</span>
                     ) : null}
                   </p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <WorkEmail userId={m.userId} address={workOf(m.userId)} suggestion={m.name.split(" ")[0] ?? ""} canEdit={canEdit} />
+                  </p>
                 </div>
               </div>
               <div className="col-span-2 row-start-2 flex items-center gap-2 sm:col-span-1 sm:row-start-auto">
                 <ProgressBar value={m.openMatters / max} />
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{m.openMatters} open</span>
               </div>
-              <div className="justify-self-end">
+              <div className="flex flex-col items-end gap-1 justify-self-end">
                 <RoleSelect memberId={m.id} role={m.role} canEdit={canEdit && m.userId !== ctx.userId} />
+                {m.role !== "owner" ? <AccessSelect userId={m.userId} roleId={m.roleId ?? null} roles={roles} positionName={positionLabel(m.position ?? "consultant")} canEdit={canEdit} /> : <span className="text-xs text-muted-foreground">All features</span>}
               </div>
             </StaggerItem>
           ))}
@@ -128,6 +150,23 @@ async function Team() {
             ))}
           </div>
         ) : null}
+      </Section>
+      <Section
+        title={`Roles & access · ${roles.length} custom`}
+        action={
+          canEdit ? (
+            <RoleEditor
+              defaults={defaults}
+              trigger={
+                <Button size="xs" variant="outline">
+                  <Plus /> New role
+                </Button>
+              }
+            />
+          ) : undefined
+        }
+      >
+        <AccessMatrix roles={roles} defaults={defaults} canEdit={canEdit} />
       </Section>
       <Section title="Positions and what they can do">
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

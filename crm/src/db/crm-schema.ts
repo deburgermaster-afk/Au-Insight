@@ -435,7 +435,22 @@ export const invitePositions = pgTable("invite_positions", {
   agencyId: agency(),
   position: text("position").notNull(),
   marn: text("marn"),
+  /** Custom access role chosen at invite (agency_roles.id), and the work address to create on joining. */
+  roleId: text("role_id"),
+  workEmail: text("work_email"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/** An agency's own access role: a named set of features (capabilities) assigned to staff instead of their position's defaults. */
+export const agencyRoles = pgTable("agency_roles", {
+  id: id(),
+  agencyId: agency(),
+  name: text("name").notNull(),
+  description: text("description"),
+  color: text("color").default("#6d5efc").notNull(),
+  caps: text("caps").array().notNull(),
+  createdByName: text("created_by_name"),
+  ...stamps,
 });
 
 export const staffProfiles = pgTable("staff_profiles", {
@@ -446,6 +461,8 @@ export const staffProfiles = pgTable("staff_profiles", {
     .references(() => user.id, { onDelete: "cascade" }),
   /** principal | migration_agent | education_agent | consultant | reception | accounts | hr */
   position: text("position").default("consultant").notNull(),
+  /** A custom access role (agency_roles.id); when set its features replace the position's defaults. */
+  roleId: text("role_id"),
   title: text("title"),
   phone: text("phone"),
   managerId: text("manager_id"),

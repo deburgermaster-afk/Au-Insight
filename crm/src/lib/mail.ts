@@ -26,7 +26,7 @@ export async function resend<T>(path: string, init?: RequestInit, token?: string
 // the agency's slug: ayesha.harbour-migration-x7k2@domain (personal) and
 // harbour-migration-x7k2@domain (shared). Inbound mail is routed by exact address.
 
-const local = (v: string) =>
+export const local = (v: string) =>
   v
     .toLowerCase()
     .normalize("NFKD")
@@ -64,6 +64,52 @@ export async function ensureMailboxes(c: { agencyId: string; agencySlug: string;
       .where(and(eq(s.messages.agencyId, c.agencyId), sql`${s.messages.mailbox} not in (select ${s.mailboxes.address} from ${s.mailboxes} where ${s.mailboxes.agencyId} = ${c.agencyId})`));
   }
   return db.select().from(s.mailboxes).where(eq(s.mailboxes.agencyId, c.agencyId));
+}
+
+/** Where a new work address goes: the agency's own domain once verified, else the shared domain. */
+export async function workDomain(agencyId: string, slug: string) {
+  const [p] = await db.select({ domain: s.agencyProfile.mailDomain, status: s.agencyProfile.mailDomainStatus }).from(s.agencyProfile).where(eq(s.agencyProfile.agencyId, agencyId));
+  if (p?.domain && p.status === "verified") return { own: true, domain: p.domain, address: (name: string) => `${local(name).replace(/-/g, ".")}@${p.domain}` };
+  const shared = mailDomain();
+  return shared ? { own: false, domain: shared, address: (name: string) => `${local(name).replace(/-/g, ".")}.${slug}@${shared}` } : null;
+}
+
+/**
+ * Gives a staff member a personal work mailbox (e.g. sam@youragency.com.au). Picks the next free
+ * address if the wanted one is taken. Returns the address, or null when email isn't set up.
+ */
+export async function createWorkMailbox(c: { agencyId: string; slug: string; userId: string; name: string; wanted?: string | null }) {
+  const d = await workDomain(c.agencyId, c.slug);
+  if (!d) return null;
+  const mine = await db.select({ address: s.mailboxes.address }).from(s.mailboxes).where(and(eq(s.mailboxes.agencyId, c.agencyId), eq(s.mailboxes.userId, c.userId)));
+  const existing = mine.find((m) => m.address.endsWith(d.own ? `@${d.domain}` : `.${c.slug}@${d.domain}`));
+  if (existing) return existing.address;
+  const first = c.wanted?.trim() || c.name.split(" ")[0] || "staff";
+  const tries = [first, c.name, `${first}${c.name.split(" ").at(-1)?.[0] ?? ""}`, ...[2, 3, 4, 5].map((n) => `${first}${n}`)];
+  for (const t of tries) {
+    const address = d.address(t);
+    const [taken] = await db.select({ id: s.mailboxes.id }).from(s.mailboxes).where(eq(s.mailboxes.address, address));
+    if (taken) continue;
+    await db.insert(s.mailboxes).values({ agencyId: c.agencyId, address, name: c.name, userId: c.userId, kind: "personal" }).onConflictDoNothing();
+    return address;
+  }
+  return null;
+}
+
+/** After the agency's domain is verified: every member gets name@domain, and the team gets info@. */
+export async function ensureTeamMailboxes(agencyId: string) {
+  const [org] = await db.select({ slug: s.organization.slug, name: s.organization.name }).from(s.organization).where(eq(s.organization.id, agencyId));
+  if (!org) return [];
+  const d = await workDomain(agencyId, org.slug);
+  if (!d?.own) return [];
+  await db.insert(s.mailboxes).values({ agencyId, address: `info@${d.domain}`, name: org.name, kind: "shared" }).onConflictDoNothing();
+  const people = await db.select({ userId: s.member.userId, name: s.user.name }).from(s.member).innerJoin(s.user, eq(s.user.id, s.member.userId)).where(eq(s.member.organizationId, agencyId));
+  const made: string[] = [];
+  for (const m of people) {
+    const a = await createWorkMailbox({ agencyId, slug: org.slug, userId: m.userId, name: m.name });
+    if (a) made.push(a);
+  }
+  return made;
 }
 
 // ── Sending ──────────────────────────────────────────────────────────────────────────────────

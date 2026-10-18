@@ -6,6 +6,8 @@ import { Crumbs } from "@/components/app/crumbs";
 import { UserMenu } from "@/components/app/user-menu";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UndoButtons, UndoShortcuts } from "@/components/undo/undo";
+import { NavProgress } from "@/components/app/nav-progress";
 import { getNavData } from "@/lib/data";
 import { getCtx } from "@/lib/session";
 
@@ -31,6 +33,7 @@ const agency = (
 export default function AppLayout({ children }: LayoutProps<"/app">) {
   return (
     <SidebarProvider>
+      <NavProgress />
       <AppSidebar
         agency={agency}
         nav={getNavData()}
@@ -46,6 +49,10 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
           <Crumbs agency={agency} />
           <div id="header-actions" className="ml-auto flex min-w-0 items-center gap-1.5 overflow-x-auto [&_button]:shrink-0" />
           <div className="flex shrink-0 items-center gap-1.5 border-l pl-2">
+            <UndoShortcuts />
+            <span className="hidden items-center gap-1.5 sm:flex">
+              <UndoButtons />
+            </span>
             <Link href="/app/inbox" aria-label="Inbox" className="grid size-8 place-items-center rounded-lg border bg-card text-muted-foreground transition hover:text-foreground">
               <Mail className="size-4" />
             </Link>

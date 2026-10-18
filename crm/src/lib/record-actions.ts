@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { db, schema as s } from "@/db";
 import type { ActionResult } from "@/lib/actions";
@@ -159,9 +159,9 @@ export async function saveRecord(entity: EntityKey, id: string, form: FormData):
     if (where.clientId || where.matterId) {
       await db.insert(s.activities).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, clientId: where.clientId, matterId: where.matterId, kind: "system", title: `${spec.label.replace(/^\w/, (c) => c.toUpperCase())} updated`, body: lines.join("\n") });
     }
-    await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "update", entity, entityId: id, detail: { changes, summary: lines } });
+    const [log] = await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "update", entity, entityId: id, detail: { changes, summary: lines } }).returning({ id: s.auditLog.id });
     updateTag(agencyTag(ctx.agencyId));
-    return { ok: true, id };
+    return { ok: true, id, undo: log.id };
   } catch (e) {
     return fail(e);
   }
@@ -188,9 +188,9 @@ export async function addRecord(entity: EntityKey, parentId: string, form: FormD
       if (!c) return { ok: false, error: "Client not found." };
       const [r] = await db.insert(s.dependants).values({ agencyId: ctx.agencyId, clientId: parentId, ...(values as { fullName: string; relationship: string }) }).returning({ id: s.dependants.id });
       await db.insert(s.activities).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, clientId: parentId, kind: "system", title: "Family member added", body: `${values.fullName} (${values.relationship})` });
-      await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "create", entity, entityId: r.id });
+      const [log] = await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "create", entity, entityId: r.id }).returning({ id: s.auditLog.id });
       updateTag(agencyTag(ctx.agencyId));
-      return { ok: true, id: r.id };
+      return { ok: true, id: r.id, undo: log.id };
     }
     const [m] = await db.select({ id: s.matters.id, clientId: s.matters.clientId }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, parentId)));
     if (!m) return { ok: false, error: "Case not found." };
@@ -199,9 +199,9 @@ export async function addRecord(entity: EntityKey, parentId: string, form: FormD
       .insert(s.checklistItems)
       .values({ agencyId: ctx.agencyId, matterId: parentId, category: (values.category as string) ?? "Other", label: values.label as string, required: (values.required as boolean) ?? true, note: (values.note as string) ?? null, sort: (last.at(-1)?.sort ?? 0) + 1 })
       .returning({ id: s.checklistItems.id });
-    await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "create", entity, entityId: r.id });
+    const [log] = await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "create", entity, entityId: r.id }).returning({ id: s.auditLog.id });
     updateTag(agencyTag(ctx.agencyId));
-    return { ok: true, id: r.id };
+    return { ok: true, id: r.id, undo: log.id };
   } catch (e) {
     return fail(e);
   }
@@ -225,9 +225,9 @@ export async function deleteRecord(entity: EntityKey, id: string): Promise<Actio
     const where = await timelineOf(entity, row);
     const label = String(row.title ?? row.label ?? row.fullName ?? row.name ?? "");
     if (where.clientId || where.matterId) await db.insert(s.activities).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, clientId: where.clientId, matterId: where.matterId, kind: "system", title: `${spec.label.replace(/^\w/, (c) => c.toUpperCase())} removed`, body: label });
-    await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "delete", entity, entityId: id, detail: { snapshot: JSON.parse(JSON.stringify(row)) } });
+    const [log] = await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "delete", entity, entityId: id, detail: { snapshot: JSON.parse(JSON.stringify(row)) } }).returning({ id: s.auditLog.id });
     updateTag(agencyTag(ctx.agencyId));
-    return { ok: true };
+    return { ok: true, undo: log.id };
   } catch (e) {
     return fail(e);
   }
@@ -293,6 +293,72 @@ export async function voidInvoice(id: string, reason: string): Promise<ActionRes
     await db.insert(s.activities).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, clientId: inv.clientId, matterId: inv.matterId, kind: "invoice", title: `Invoice ${inv.number} voided`, body: reason.trim() });
     updateTag(agencyTag(ctx.agencyId));
     return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * Undo: reverses one audited change to a record. An edit puts the old values back (fields changed
+ * again since are left alone), an add is removed, a removal is restored from its snapshot. The
+ * reversal is itself audited, and its id is returned so it can be redone the same way.
+ */
+export async function undoAudit(auditId: string): Promise<ActionResult> {
+  try {
+    const ctx = await requireRole("staff");
+    const [log] = await db.select().from(s.auditLog).where(and(eq(s.auditLog.agencyId, ctx.agencyId), eq(s.auditLog.id, auditId)));
+    if (!log) return { ok: false, error: "Nothing to undo." };
+    const entity = log.entity as EntityKey;
+    const spec = SPECS[entity];
+    if (!spec || !(entity in TABLES) || !log.entityId) return { ok: false, error: "This change can't be undone here." };
+    const detail = (log.detail ?? {}) as { changes?: Record<string, [string | null, string | null]>; snapshot?: Row };
+
+    if (log.action === "update" && detail.changes) {
+      const row = await loadRow(entity, ctx.agencyId, log.entityId);
+      if (!row) return { ok: false, error: "That record no longer exists." };
+      const f = new FormData();
+      let n = 0;
+      for (const [k, [before, after]] of Object.entries(detail.changes)) {
+        const fld = spec.fields.find((x) => x.key === k);
+        if (!fld) continue;
+        // Skip a field someone has changed again since: undo shouldn't overwrite newer work.
+        const numeric = fld.type === "money" || fld.type === "number";
+        const now = fld.stamp ? (row[k] ? new Date(row[k] as string).toISOString().slice(0, 10) : null) : numeric && row[k] != null ? String(Number(row[k])) : norm(row[k]);
+        if (now !== after) continue;
+        if (fld.type === "boolean") {
+          f.set(`${k}__shown`, "1");
+          if (before === "true") f.set(k, "on");
+        } else f.set(k, before ?? "");
+        n++;
+      }
+      if (!n) return { ok: false, error: "Those fields have been changed again since, so there's nothing to undo." };
+      return saveRecord(entity, log.entityId, f);
+    }
+
+    if (log.action === "create" || log.action === "restore") return deleteRecord(entity, log.entityId);
+
+    if (log.action === "delete" && detail.snapshot) {
+      if (!DELETABLE.has(entity)) return { ok: false, error: "This can't be restored." };
+      if (spec.cap && !ctx.caps.includes(spec.cap)) return { ok: false, error: `Your role can't restore ${spec.label}s.` };
+      const snap = detail.snapshot;
+      if (snap.agencyId !== ctx.agencyId) return { ok: false, error: "Nothing to undo." };
+      const t = TABLES[entity];
+      // JSON turned dates into strings: give timestamp columns real dates again.
+      const cols = getTableColumns(t) as Record<string, { columnType: string }>;
+      const values: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(snap)) {
+        if (!(k in cols)) continue;
+        values[k] = v != null && cols[k].columnType === "PgTimestamp" ? new Date(v as string) : v;
+      }
+      await db.insert(t).values(values as never).onConflictDoNothing();
+      const where = await timelineOf(entity, snap);
+      const label = String(snap.title ?? snap.label ?? snap.fullName ?? snap.name ?? "");
+      if (where.clientId || where.matterId) await db.insert(s.activities).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, clientId: where.clientId, matterId: where.matterId, kind: "system", title: `${spec.label.replace(/^\w/, (c) => c.toUpperCase())} restored`, body: label });
+      const [r] = await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "restore", entity, entityId: log.entityId, detail: { from: auditId } }).returning({ id: s.auditLog.id });
+      updateTag(agencyTag(ctx.agencyId));
+      return { ok: true, id: log.entityId, undo: r.id };
+    }
+    return { ok: false, error: "This change can't be undone." };
   } catch (e) {
     return fail(e);
   }

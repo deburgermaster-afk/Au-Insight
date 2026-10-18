@@ -12,7 +12,8 @@ import { lodgeBlocked } from "@/lib/signoff";
 import { checklistFor, feesFor } from "@/lib/workflow";
 import { pickAssignee, workflowFor } from "@/lib/workflow-server";
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
+/** `undo` is an audit entry id that undoAudit() can reverse (and the reversal returns one to redo). */
+export type ActionResult = { ok: true; id?: string; undo?: string } | { ok: false; error: string };
 
 const fail = (e: unknown): ActionResult => ({ ok: false, error: e instanceof Error ? e.message : String(e) });
 const blank = (v: FormDataEntryValue | null) => {

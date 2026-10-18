@@ -64,7 +64,8 @@ async function resolveCtx(): Promise<Ctx> {
   }
   const position = profile.position as Position;
   const registered = (position === "principal" || position === "migration_agent") && marnCurrent(profile.marn, profile.marnExpiry);
-  const caps = capsFor(role, position).filter((c) => c !== "immigration" || registered);
+  const custom = await roleCaps(active.agencyId, profile.roleId);
+  const caps = capsFor(role, position, custom).filter((c) => c !== "immigration" || registered);
   return {
     userId: session.user.id,
     name: session.user.name,
@@ -78,6 +79,13 @@ async function resolveCtx(): Promise<Ctx> {
     caps,
     registered,
   };
+}
+
+/** The features of a custom role (null when the person has none, or it was deleted). */
+async function roleCaps(agencyId: string, roleId: string | null | undefined) {
+  if (!roleId) return null;
+  const [r] = await db.select({ caps: schema.agencyRoles.caps }).from(schema.agencyRoles).where(and(eq(schema.agencyRoles.agencyId, agencyId), eq(schema.agencyRoles.id, roleId)));
+  return r?.caps ?? null;
 }
 
 const rank: Record<Role, number> = { client: 0, staff: 1, agent: 2, supervisor: 3, admin: 4, owner: 5 };
@@ -122,5 +130,5 @@ export async function memberCtx(agencyId: string, userId: string): Promise<Ctx |
   const [profile] = await db.select().from(schema.staffProfiles).where(and(eq(schema.staffProfiles.agencyId, agencyId), eq(schema.staffProfiles.userId, userId)));
   const position = (profile?.position ?? (role === "owner" || role === "admin" ? "principal" : role === "agent" ? "migration_agent" : "consultant")) as Position;
   const registered = (position === "principal" || position === "migration_agent") && marnCurrent(profile?.marn ?? null, profile?.marnExpiry ?? null);
-  return { userId, name: row.userName, email: row.email, image: row.image ?? null, agencyId, agencyName: row.name, agencySlug: row.slug, role, position, caps: capsFor(role, position).filter((c) => c !== "immigration" || registered), registered };
+  return { userId, name: row.userName, email: row.email, image: row.image ?? null, agencyId, agencyName: row.name, agencySlug: row.slug, role, position, caps: capsFor(role, position, await roleCaps(agencyId, profile?.roleId)).filter((c) => c !== "immigration" || registered), registered };
 }

@@ -5,7 +5,8 @@ import { updateTag } from "next/cache";
 import { db, schema as s } from "@/db";
 import type { ActionResult } from "@/lib/actions";
 import { agencyTag } from "@/lib/data";
-import { ensureMailboxes, mailEnabled, resend } from "@/lib/mail";
+import { ensureMailboxes, ensureTeamMailboxes, mailEnabled, resend } from "@/lib/mail";
+import { autoConfigure, cloudflareConnector } from "@/lib/dns-connect";
 import { asAgency, resendConnector } from "@/lib/resend-connect";
 import { type ResendDomain, saveDomain } from "@/lib/resend-setup";
 import { requireRole } from "@/lib/session";
@@ -53,7 +54,15 @@ export async function addMailDomain(name: string): Promise<ActionResult> {
       await acc.call(`/domains/${d.id}/verify`, { method: "POST" }).catch(() => null);
     }
     await saveDomain(ctx.agencyId, d, acc.via);
-    if (d.status === "verified") await ensureMailboxes(ctx);
+    if (d.status === "verified") await ensureMailboxes(ctx).then(() => ensureTeamMailboxes(ctx.agencyId));
+    else if (await cloudflareConnector(ctx.agencyId)) {
+      // Fully automatic when Cloudflare is connected: write the records and verify straight away.
+      const r = await autoConfigure(ctx.agencyId).catch(() => null);
+      if (r && "steps" in r) {
+        await acc.call(`/domains/${d.id}/verify`, { method: "POST" }).catch(() => null);
+        await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "update", entity: "dns", entityId: r.zone, detail: { steps: r.steps, auto: true } });
+      }
+    }
     await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "create", entity: "mail_domain", entityId: d.id, detail: { domain, via: acc.via } });
     updateTag(agencyTag(ctx.agencyId));
     return { ok: true, id: d.status };
@@ -80,7 +89,7 @@ export async function checkMailDomain(opts: { quick?: boolean } = {}): Promise<A
     }
     const d = await acc.call<ResendDomain>(`/domains/${p.id}`);
     await saveDomain(ctx.agencyId, d, acc.via);
-    if (d.status === "verified") await ensureMailboxes(ctx);
+    if (d.status === "verified") await ensureMailboxes(ctx).then(() => (p.status !== "verified" ? ensureTeamMailboxes(ctx.agencyId) : []));
     if (d.status !== p.status || !opts.quick) updateTag(agencyTag(ctx.agencyId));
     return { ok: true, id: d.status };
   } catch (e) {
