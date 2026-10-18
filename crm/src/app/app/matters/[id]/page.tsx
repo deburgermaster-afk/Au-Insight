@@ -31,6 +31,7 @@ import { aud, daysUntil, dmy, fullName, relativeDays } from "@/lib/format";
 import { visaByCode } from "@/lib/visas";
 import { FileSignature } from "lucide-react";
 import { CaseReview } from "@/components/ai/case-review";
+import { AskFile } from "@/components/ai/ask-file";
 import { PredictedTimeline } from "@/components/app/predicted-timeline";
 import { SignList } from "@/components/sign/sign-list";
 import { latestCaseReview } from "@/lib/case-review";
@@ -146,6 +147,9 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="grid content-start gap-4">
           <CaseReview clientId={client.id} matterId={m.id} initial={review?.result ?? null} finishedAt={review?.finishedAt?.toISOString() ?? null} aiOn={aiDocs} />
+          <Section title="Ask this file">
+            <AskFile matterId={m.id} enabled={aiDocs} />
+          </Section>
           <Section
             title="Document checklist"
             action={

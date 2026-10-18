@@ -17,6 +17,8 @@ export default {
     };
     // Hourly: signature reminders (the route itself only emails during Sydney business hours).
     if (at.getUTCMinutes() < 10) run("/api/cron/sign-reminders", "sign-reminders");
+    // Overnight case reviews: every run from 14:00 to 19:59 UTC (midnight to 6am Sydney, AEST/AEDT).
+    if (at.getUTCHours() >= 14 && at.getUTCHours() < 20) run("/api/cron/case-reviews", "case-reviews");
     // Daily mail sync, usage alerts and domain checks (was the Vercel cron at 20:17 UTC).
     if (at.getUTCHours() === 20 && at.getUTCMinutes() < 10) {
       const req = new Request("https://lodgely.internal/api/cron/mail-sync", { headers: { authorization: `Bearer ${env.CRON_SECRET}` } });

@@ -169,9 +169,11 @@ export async function sendSignRequest(id: string, input: { title: string; messag
     if (!r) return { ok: false, error: "Request not found." };
     if (r.status !== "draft") return { ok: false, error: "This request was already sent." };
     const [c] = await db.select().from(s.clients).where(eq(s.clients.id, r.clientId));
-    const signers = signersOf(r, `${c.firstName} ${c.lastName}`);
+    let signers = signersOf(r, `${c.firstName} ${c.lastName}`);
     const ids = new Set(signers.map((x) => x.id));
     const fields = z.array(fieldSchema).min(1, "Add at least one field.").max(200).parse(input.fields).filter((f) => f.page <= r.pages).map((f) => ({ ...f, signer: f.signer && ids.has(f.signer) ? f.signer : "client" }));
+    // A countersign with no fields placed (e.g. on an uploaded PDF) is dropped rather than blocking the send.
+    signers = signers.filter((x) => x.role !== "agent" || fields.some((f) => f.signer === x.id));
     for (const sg of signers) {
       const mine = fields.filter((f) => f.signer === sg.id);
       if (!mine.some((f) => f.type === "signature" || f.type === "initials")) return { ok: false, error: `Add a signature field for ${sg.label === "Client" ? "the client" : sg.label.toLowerCase()} (${sg.name}).` };
@@ -334,5 +336,41 @@ export async function recommendTemplates(clientId: string, matterId: string | nu
     return { ok: true, ...r, picks: r.picks.filter((p) => keys.has(p.key)) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Staff: fill the PDF form's text boxes from the client record (rules, then AI), on a draft. */
+export async function prefillDraft(id: string): Promise<ActionResult & { filled?: { name: string; value: string; by: "rule" | "ai" }[]; fields?: SignField[] }> {
+  try {
+    const ctx = await requireCap("clients");
+    const [r] = await db.select().from(s.signRequests).where(and(eq(s.signRequests.agencyId, ctx.agencyId), eq(s.signRequests.id, id), eq(s.signRequests.status, "draft")));
+    if (!r) return { ok: false, error: "Draft not found." };
+    const [c] = await db.select().from(s.clients).where(eq(s.clients.id, r.clientId));
+    const dmy = (d: string | null) => (d ? d.split("-").reverse().join("/") : null);
+    const { prefillPdf } = await import("@/lib/form-prefill");
+    const out = await prefillPdf(new Uint8Array(await fileBytes(r.sourceKey)), {
+      familyName: c.lastName,
+      givenNames: c.firstName,
+      fullName: `${c.firstName} ${c.lastName}`,
+      dateOfBirth: dmy(c.dateOfBirth),
+      passportNumber: c.passportNumber,
+      passportExpiry: dmy(c.passportExpiry),
+      countryOfBirth: c.countryOfBirth,
+      nationality: c.nationality,
+      email: c.email,
+      phone: c.phone,
+      address: c.address,
+      city: c.city,
+      state: c.state,
+      gender: c.gender,
+      currentVisa: c.currentVisa,
+      occupation: c.occupation,
+    }, r.fields);
+    if (!out.filled.length) return { ok: false, error: "No form boxes could be filled from the client record." };
+    const stored = await putFile(`agency/${ctx.agencyId}/client/${c.id}/signing/${safeName(r.title)} (prefilled).pdf`, Buffer.from(out.bytes), "application/pdf");
+    await db.update(s.signRequests).set({ sourceKey: stored.pathname, sourceHash: sha256(out.bytes), fields: out.fields, events: sql`${s.signRequests.events} || ${JSON.stringify([ev("created", ctx.name, `prefilled ${out.filled.length} boxes`)])}::jsonb` }).where(eq(s.signRequests.id, id));
+    return { ok: true, filled: out.filled, fields: out.fields };
+  } catch (e) {
+    return fail(e);
   }
 }

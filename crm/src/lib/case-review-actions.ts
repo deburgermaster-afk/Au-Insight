@@ -3,7 +3,9 @@
 import { and, eq, lt } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { db, schema as s } from "@/db";
-import type { CaseReviewResult } from "@/db/crm-schema";
+import { z } from "zod";
+import type { CaseFlag, CaseReviewResult } from "@/db/crm-schema";
+import type { ActionResult } from "@/lib/actions";
 import { aiReview, gatherCase, ruleReview } from "@/lib/case-review";
 import { agencyTag } from "@/lib/data";
 import { runDocCheck } from "@/lib/doc-check";
@@ -75,5 +77,61 @@ export async function finishCaseReview(reviewId: string): Promise<{ ok: true; re
     const msg = e instanceof Error ? e.message : String(e);
     await db.update(s.caseReviews).set({ status: "failed", stage: null, error: msg.slice(0, 500), finishedAt: new Date() }).where(eq(s.caseReviews.id, reviewId));
     return { ok: false, error: msg };
+  }
+}
+
+const flagSchema = z.object({ level: z.enum(["critical", "warning", "info"]), area: z.string().max(60), title: z.string().max(200), detail: z.string().max(1000), fix: z.string().max(500).optional() });
+
+/** Staff: turn an AI review flag into a task on the case (assigned to the matter's agent). */
+export async function flagToTask(clientId: string, matterId: string | null, flag: CaseFlag): Promise<ActionResult> {
+  try {
+    const ctx = await requireCap("clients");
+    const f = flagSchema.parse(flag);
+    const [c] = await db.select({ id: s.clients.id, assignedTo: s.clients.assignedTo }).from(s.clients).where(and(eq(s.clients.agencyId, ctx.agencyId), eq(s.clients.id, clientId)));
+    if (!c) return { ok: false, error: "Client not found." };
+    const [m] = matterId ? await db.select({ assignedTo: s.matters.assignedTo }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId))) : [];
+    const days = f.level === "critical" ? 2 : f.level === "warning" ? 7 : 14;
+    const due = new Date(Date.now() + days * 864e5);
+    const [t] = await db
+      .insert(s.tasks)
+      .values({ agencyId: ctx.agencyId, title: (f.fix ? `${f.title}: ${f.fix}` : f.title).slice(0, 200), description: `${f.area} · from the AI case review\n\n${f.detail}${f.fix ? `\n\nFix: ${f.fix}` : ""}`, priority: f.level === "critical" ? "urgent" : f.level === "warning" ? "high" : "normal", dueAt: due, assignedTo: m?.assignedTo ?? c.assignedTo ?? ctx.userId, clientId, matterId, createdBy: ctx.userId })
+      .returning({ id: s.tasks.id });
+    await db.insert(s.activities).values({ agencyId: ctx.agencyId, clientId, matterId, kind: "task", title: `Task from AI review: ${f.title}`, actorId: ctx.userId, actorName: ctx.name });
+    updateTag(agencyTag(ctx.agencyId));
+    return { ok: true, id: t.id };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Staff: email the client asking for what a flag needs (with a portal sign-in link). */
+export async function askClientAboutFlag(clientId: string, matterId: string | null, flag: CaseFlag, note: string): Promise<ActionResult> {
+  try {
+    const ctx = await requireCap("clients");
+    const f = flagSchema.parse(flag);
+    const [c] = await db.select().from(s.clients).where(and(eq(s.clients.agencyId, ctx.agencyId), eq(s.clients.id, clientId)));
+    if (!c?.email) return { ok: false, error: "Add the client's email first." };
+    const { mailEnabled, sendMail } = await import("@/lib/mail");
+    const [box] = mailEnabled() ? await db.select().from(s.mailboxes).where(and(eq(s.mailboxes.agencyId, ctx.agencyId), eq(s.mailboxes.kind, "shared"))) : [];
+    if (!box) return { ok: false, error: "Email isn't set up for this agency yet (Settings → Email)." };
+    const { createMagicLink } = await import("@/lib/client-auth");
+    const url = await createMagicLink(c.id, ctx.agencyId, ctx.userId, "/client", 72 * 60);
+    const esc = (v: string) => v.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
+    const ask = note.trim() || f.fix || f.title;
+    await sendMail({
+      agencyId: ctx.agencyId,
+      from: { address: box.address, name: ctx.agencyName },
+      to: [c.email],
+      subject: `We need something from you: ${f.title}`.slice(0, 140),
+      html: `<p>Hi ${esc(c.firstName)},</p><p>To keep your application moving, we need your help with one thing:</p><p style="padding:12px 14px;border-left:3px solid #18181b;background:#f4f4f5"><b>${esc(f.title)}</b><br/>${esc(ask)}</p><p>You can upload documents or reply in your client portal.</p><p style="margin:24px 0"><a href="${url}" style="background:#18181b;color:#ffffff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;display:inline-block">Open my portal</a></p><p>Thanks,<br/>${esc(ctx.name)}</p>`,
+      clientId: c.id,
+      matterId: matterId ?? undefined,
+      footer: `Sent by ${ctx.agencyName} via Lodgely`,
+    });
+    await db.insert(s.activities).values({ agencyId: ctx.agencyId, clientId, matterId, kind: "email", title: `Asked the client: ${f.title}`, body: ask, actorId: ctx.userId, actorName: ctx.name });
+    updateTag(agencyTag(ctx.agencyId));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }

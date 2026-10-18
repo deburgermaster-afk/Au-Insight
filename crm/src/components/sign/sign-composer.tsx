@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { SignField } from "@/db/crm-schema";
 import type { ConsentTemplate } from "@/lib/consent-templates";
-import { createSignDraft, redetectFields, sendSignRequest, type SignDraft, voidSignRequest } from "@/lib/sign-actions";
+import { createSignDraft, prefillDraft, redetectFields, sendSignRequest, type SignDraft, voidSignRequest } from "@/lib/sign-actions";
 import { cn } from "@/lib/utils";
 import { PdfPages } from "./pdf-pages";
 import { TemplatePicker } from "./template-picker";
@@ -56,6 +56,7 @@ export function SignComposer({ agencyId, clients, matters, docs, invoices, templ
   const [agentCountersign, setAgentCountersign] = useState(true);
   const [invoiceId, setInvoiceId] = useState("");
   const [placeFor, setPlaceFor] = useState("client");
+  const [pdfVersion, setPdfVersion] = useState(0);
   const [pending, start] = useTransition();
   const fileInput = useRef<HTMLInputElement>(null);
   const drag = useRef<{ id: string; dx: number; dy: number; el: HTMLElement } | null>(null);
@@ -283,6 +284,26 @@ export function SignComposer({ agencyId, clients, matters, docs, invoices, templ
               </select>
             </label>
           ) : null}
+          {draft.formFields ? (
+            <Button
+              size="xs"
+              variant="outline"
+              className="ml-auto border-[var(--chart-2)]/40"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const r = await prefillDraft(draft.id);
+                  if (!r.ok || !r.fields) return void toast.error(r.ok ? "Nothing to fill." : r.error);
+                  setFields(r.fields);
+                  setPdfVersion((v) => v + 1);
+                  setDraft({ ...draft, formFields: 0 });
+                  toast.success(`Filled ${r.filled?.length} form boxes from the client record (${r.filled?.filter((f) => f.by === "ai").length ?? 0} by AI). Check them on the page.`);
+                })
+              }
+            >
+              <Wand2 /> Prefill {draft.formFields} form boxes
+            </Button>
+          ) : null}
           <Button
             size="xs"
             variant="ghost"
@@ -304,7 +325,7 @@ export function SignComposer({ agencyId, clients, matters, docs, invoices, templ
         </div>
         {tool ? <p className="text-xs text-sky-600">Click on the page where the {fieldMeta[tool].label.toLowerCase()} goes.</p> : <p className="text-xs text-muted-foreground">Drag fields to move them; click one to edit. Yellow fields are required.</p>}
         <PdfPages
-          url={`/api/sign/${draft.id}`}
+          url={`/api/sign/${draft.id}?v=${pdfVersion}`}
           onPageClick={(page, x, y) => {
             if (!tool) return setSelected(null);
             const [w, h] = fieldMeta[tool].size;

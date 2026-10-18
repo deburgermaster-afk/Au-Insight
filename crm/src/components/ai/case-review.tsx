@@ -1,13 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { AlertOctagon, AlertTriangle, CheckCircle2, ChevronDown, Info, ListTodo, RefreshCw, Sparkles } from "lucide-react";
+import { AlertOctagon, AlertTriangle, CheckCircle2, ChevronDown, Info, ListTodo, Loader2, Mail, RefreshCw, Sparkles, SquareCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { CaseFlag, CaseReviewResult } from "@/db/crm-schema";
-import { finishCaseReview, reviewReadDocument, startCaseReview } from "@/lib/case-review-actions";
+import { askClientAboutFlag, finishCaseReview, flagToTask, reviewReadDocument, startCaseReview } from "@/lib/case-review-actions";
 import { cn } from "@/lib/utils";
 import { ReadingAnimation } from "./reading";
 
@@ -41,8 +41,14 @@ function Gauge({ value, label }: { value: number; label: string }) {
   );
 }
 
-function Flag({ f }: { f: CaseFlag }) {
+const ASKABLE = /document|checklist|profile|identity|english|skills|relationship|employment|character|health|signature/i;
+
+function Flag({ f, clientId, matterId }: { f: CaseFlag; clientId: string; matterId: string | null }) {
   const [open, setOpen] = useState(false);
+  const [done, setDone] = useState<{ task?: boolean; asked?: boolean }>({});
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState(f.fix ?? "");
+  const [pending, start] = useTransition();
   const L = LEVEL[f.level];
   return (
     <li className={cn("rounded-lg border", L.ring)}>
@@ -63,6 +69,49 @@ function Flag({ f }: { f: CaseFlag }) {
             <div className="grid gap-1 px-2.5 pb-2.5 pl-8 text-xs">
               <p className="text-muted-foreground">{f.detail}</p>
               {f.fix ? <p><span className="font-medium">Fix: </span>{f.fix}</p> : null}
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={pending || done.task}
+                  onClick={() =>
+                    start(async () => {
+                      const r = await flagToTask(clientId, matterId, f);
+                      if (!r.ok) return void toast.error(r.error);
+                      setDone((d) => ({ ...d, task: true }));
+                      toast.success("Task created on the case.");
+                    })
+                  }
+                >
+                  {done.task ? <CheckCircle2 /> : <SquareCheck />} {done.task ? "Task created" : "Create task"}
+                </Button>
+                {ASKABLE.test(`${f.area} ${f.title}`) ? (
+                  <Button size="xs" variant="outline" disabled={pending || done.asked} onClick={() => setAsking(!asking)}>
+                    {done.asked ? <CheckCircle2 /> : <Mail />} {done.asked ? "Client asked" : "Ask client"}
+                  </Button>
+                ) : null}
+              </div>
+              {asking && !done.asked ? (
+                <div className="mt-1 grid gap-1.5 rounded-md border bg-background p-2">
+                  <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="w-full resize-none rounded border bg-transparent p-1.5 text-xs" placeholder="What you need from the client" />
+                  <Button
+                    size="xs"
+                    className="justify-self-end"
+                    disabled={pending}
+                    onClick={() =>
+                      start(async () => {
+                        const r = await askClientAboutFlag(clientId, matterId, f, note);
+                        if (!r.ok) return void toast.error(r.error);
+                        setDone((d) => ({ ...d, asked: true }));
+                        setAsking(false);
+                        toast.success("Emailed the client with a portal link.");
+                      })
+                    }
+                  >
+                    {pending ? <Loader2 className="animate-spin" /> : <Mail />} Send email
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </motion.div>
         ) : null}
@@ -165,7 +214,7 @@ export function CaseReview({ clientId, matterId, initial, finishedAt, aiOn }: { 
                   </div>
                   <ul className="grid gap-1.5">
                     {flags.slice(0, showAll ? 60 : 6).map((f, i) => (
-                      <Flag key={`${f.title}-${i}`} f={f} />
+                      <Flag key={`${f.title}-${i}`} f={f} clientId={clientId} matterId={matterId} />
                     ))}
                   </ul>
                   {flags.length > 6 ? (

@@ -92,7 +92,7 @@ async function formFields(bytes: Uint8Array): Promise<Cand[]> {
         const pg = pages[pi];
         const cb = pg.getCropBox();
         const r = w.getRectangle();
-        out.push({ page: pi + 1, x: clamp((r.x - cb.x) / cb.width), y: clamp(1 - (r.y - cb.y + r.height) / cb.height), w: r.width / cb.width, h: r.height / cb.height, type, label: f.getName().replace(/[_.\[\]0-9]+/g, " ").trim().slice(0, 60) || type, required: type !== "checkbox", source: "detected" });
+        out.push({ page: pi + 1, x: clamp((r.x - cb.x) / cb.width), y: clamp(1 - (r.y - cb.y + r.height) / cb.height), w: r.width / cb.width, h: r.height / cb.height, type, label: f.getName().replace(/[_.\[\]0-9]+/g, " ").trim().slice(0, 60) || type, required: type === "signature", source: "detected" });
       }
     }
   } catch (e) {

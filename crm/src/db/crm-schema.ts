@@ -1341,6 +1341,8 @@ export type CaseReviewResult = {
   nextSteps: string[];
   documentsRead: number;
   documentsChecked: { name: string; verdict: string | null }[];
+  /** Critical flags that weren't in the previous review (overnight reviews). */
+  newCritical?: string[];
 };
 
 /** AI review of a client's profile and documents (for a matter, or the client overall). Latest row per scope wins. */

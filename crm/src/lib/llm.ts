@@ -64,3 +64,30 @@ export async function completeJson<T extends z.ZodType>(schema: T, system: strin
   }
   return null;
 }
+
+/** A plain-text answer (for chat). Returns the text and model, or null when no model answered. */
+export async function completeText(system: string, messages: { role: "user" | "assistant"; content: string }[], opts: { timeoutMs?: number; maxTokens?: number } = {}): Promise<{ text: string; model: string } | null> {
+  const key = process.env.LLM_API_KEY;
+  if (!key) return null;
+  for (const model of MODELS) {
+    try {
+      const res = await fetch(`${BASE}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, messages: [{ role: "system", content: system }, ...messages], temperature: 0.3, max_tokens: opts.maxTokens ?? 1500 }),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
+      });
+      if (!res.ok) {
+        console.error(`llm text: ${model} ${res.status}`);
+        continue;
+      }
+      const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      // Some models think out loud in <think> blocks: keep only the answer.
+      const text = (body.choices?.[0]?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      if (text) return { text, model };
+    } catch (e) {
+      console.error(`llm text: ${model} failed`, e instanceof Error ? e.message : e);
+    }
+  }
+  return null;
+}
