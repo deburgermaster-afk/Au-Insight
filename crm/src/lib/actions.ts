@@ -200,7 +200,7 @@ export async function moveMatter(matterId: string, stage: string): Promise<Actio
 export async function updateMatter(matterId: string, form: FormData): Promise<ActionResult> {
   try {
     const ctx = await requireCap("immigration", "Only a registered migration agent can record lodgement details.");
-    const [cur] = await db.select({ lodgedAt: s.matters.lodgedAt }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)));
+    const [cur] = await db.select({ lodgedAt: s.matters.lodgedAt, outcome: s.matters.outcome }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)));
     if (cur && !cur.lodgedAt && blank(form.get("lodgedAt"))) {
       const blocked = await lodgeBlocked(ctx.agencyId, matterId);
       if (blocked) return { ok: false, error: blocked };
@@ -217,6 +217,12 @@ export async function updateMatter(matterId: string, form: FormData): Promise<Ac
         notes: blank(form.get("notes")),
       })
       .where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)));
+    // A new decision: timeline, next steps, review deadline and the client email.
+    const outcome = blank(form.get("outcome"));
+    if (outcome && outcome !== cur?.outcome) {
+      const { onDecision } = await import("@/lib/decision");
+      await onDecision(ctx, matterId, outcome, blank(form.get("decisionAt"))).catch((e) => console.error("onDecision", e));
+    }
     refresh(ctx);
     return { ok: true };
   } catch (e) {

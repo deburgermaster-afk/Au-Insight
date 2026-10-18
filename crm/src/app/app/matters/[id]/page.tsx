@@ -36,6 +36,7 @@ import { PredictedTimeline } from "@/components/app/predicted-timeline";
 import { SignList } from "@/components/sign/sign-list";
 import { latestCaseReview } from "@/lib/case-review";
 import { fmtMonths, predictTimeline, processingMonths } from "@/lib/visa-timeline";
+import { liveProcessing } from "@/lib/processing-times";
 import { Checklist, ComplianceChecks, MatterDetailsForm, StageStepper } from "./matter-client";
 import { ManageCase } from "@/components/edit/case-manage";
 import { EditRecord } from "@/components/edit/edit-record";
@@ -71,8 +72,9 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
       .orderBy(desc(sch.signRequests.updatedAt))
       .limit(20),
   ]);
-  const milestones = predictTimeline(m);
-  const [p50, p90] = processingMonths(m.visaCode);
+  const live = await liveProcessing(m.visaCode, m.stream);
+  const milestones = predictTimeline(m, live);
+  const [p50, p90] = live ? [live.p50Months, live.p90Months] : processingMonths(m.visaCode);
   const checkOf = new Map(checks.map((c) => [c.documentId, c]));
   const docsWithChecks = data.documents.map((d) => ({ ...d, check: checkOf.get(d.id) ?? null }));
   const [editOptions, pickers] = await Promise.all([getEditOptions(), getPickers()]);
@@ -170,8 +172,8 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
           </Section>
         </div>
         <div className="grid content-start gap-4">
-          <Section title="Predicted timeline" action={<span className="text-[11px] text-muted-foreground">{fmtMonths(p50)}–{fmtMonths(p90)} processing</span>}>
-            <PredictedTimeline items={milestones} processing={`${fmtMonths(p50)} to ${fmtMonths(p90)}`} />
+          <Section title="Predicted timeline" action={<span className="text-[11px] text-muted-foreground">{live ? "Home Affairs: " : ""}{fmtMonths(p50)}–{fmtMonths(p90)}</span>}>
+            <PredictedTimeline items={milestones} processing={live ? `${live.p50} to ${live.p90}${live.stream ? `, ${live.stream}` : ""}` : `${fmtMonths(p50)} to ${fmtMonths(p90)}`} source={live ? { asAt: live.asAt, url: live.sourceUrl } : null} />
           </Section>
           <Section
             title="Signatures"

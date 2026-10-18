@@ -19,6 +19,8 @@ export default {
     if (at.getUTCMinutes() < 10) run("/api/cron/sign-reminders", "sign-reminders");
     // Overnight case reviews: every run from 14:00 to 19:59 UTC (midnight to 6am Sydney, AEST/AEDT).
     if (at.getUTCHours() >= 14 && at.getUTCHours() < 20) run("/api/cron/case-reviews", "case-reviews");
+    // Daily at 19:0x UTC: Home Affairs processing times from Immi Insight.
+    if (at.getUTCHours() === 19 && at.getUTCMinutes() < 10) run("/api/cron/processing-times", "processing-times");
     // Daily mail sync, usage alerts and domain checks (was the Vercel cron at 20:17 UTC).
     if (at.getUTCHours() === 20 && at.getUTCMinutes() < 10) {
       const req = new Request("https://lodgely.internal/api/cron/mail-sync", { headers: { authorization: `Bearer ${env.CRON_SECRET}` } });

@@ -11,12 +11,13 @@ const tone = {
 } as const;
 
 /** The pre-scheduled milestones for a case: actual dates where known, predicted ones otherwise. */
-export function PredictedTimeline({ items, processing }: { items: Milestone[]; processing: string }) {
+export function PredictedTimeline({ items, processing, source, audience = "agent" }: { items: Milestone[]; processing: string; source?: { asAt: string | null; url: string | null } | null; audience?: "agent" | "client" }) {
   return (
     <div className="grid gap-3">
       <ol className="grid">
         {items.map((m, i) => {
-          const t = tone[m.status];
+          // Clients see late steps as "current", not as a warning.
+          const t = tone[audience === "client" && m.status === "overdue" ? "current" : m.status];
           const d = daysUntil(m.date);
           return (
             <li key={m.key} className="relative flex gap-3 pb-4 last:pb-0">
@@ -34,14 +35,27 @@ export function PredictedTimeline({ items, processing }: { items: Milestone[]; p
                 <p className="text-xs text-muted-foreground">
                   {m.detail}
                   {m.status === "current" && !m.actual ? <span className="ml-1 font-medium text-[var(--chart-2)]">{d > 0 ? `In ${d} days.` : d === 0 ? "Due today." : ""}</span> : null}
-                  {m.status === "overdue" ? <span className="ml-1 font-medium text-rose-500">Behind schedule by {-d} days.</span> : null}
+                  {m.status === "overdue" && audience === "agent" ? <span className="ml-1 font-medium text-rose-500">Behind schedule by {-d} days.</span> : null}
                 </p>
               </div>
             </li>
           );
         })}
       </ol>
-      <p className="border-t pt-2 text-[11px] text-muted-foreground">Predicted from this matter&apos;s dates and indicative processing times ({processing}). Check Home Affairs&apos; global processing times before quoting a date to the client.</p>
+      {audience === "client" ? (
+        <p className="border-t pt-2 text-[11px] text-muted-foreground">Estimated dates based on your case and {source ? "the Department of Home Affairs' published processing times" : "typical processing times"} ({processing}). Your agent will keep you updated; the Department decides when.</p>
+      ) : source ? (
+        <p className="border-t pt-2 text-[11px] text-muted-foreground">
+          Predicted from this matter&apos;s dates and Home Affairs&apos; published processing times ({processing}){source.asAt ? `, updated ${dmy(source.asAt)}` : ""}.{" "}
+          {source.url ? (
+            <a href={source.url} target="_blank" rel="noreferrer" className="underline">
+              Source
+            </a>
+          ) : null}
+        </p>
+      ) : (
+        <p className="border-t pt-2 text-[11px] text-muted-foreground">Predicted from this matter&apos;s dates and indicative processing times ({processing}). Check Home Affairs&apos; global processing times before quoting a date to the client.</p>
+      )}
     </div>
   );
 }

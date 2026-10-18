@@ -112,9 +112,10 @@ function afterGrant(code: string): [string, string, number][] {
 }
 
 /** The predicted timeline for a matter, with actual dates where known. */
-export function predictTimeline(m: MatterLike): Milestone[] {
+/** live: Home Affairs' published [50%, 90%] in months, when available; otherwise Lodgely's indicative figures. */
+export function predictTimeline(m: MatterLike, live?: { p50Months: number; p90Months: number } | null): Milestone[] {
   const v = visaByCode(m.visaCode);
-  const [p50, p90] = processingMonths(m.visaCode);
+  const [p50, p90] = live ? [live.p50Months, live.p90Months] : processingMonths(m.visaCode);
   const today = new Date();
   // A matter opened after work began (e.g. imported) starts at its earliest recorded date.
   const start = [m.agreementSignedAt, m.consumerGuideAt, m.lodgedAt].filter((d): d is string => Boolean(d)).map(day).reduce((a, b) => (b < a ? b : a), day(m.createdAt));
@@ -126,10 +127,13 @@ export function predictTimeline(m: MatterLike): Milestone[] {
   out.push({ key: "agreement", label: "Service agreement and Consumer Guide", detail: "Signed agreement with fee estimate; Consumer Guide given.", date: agreed ?? iso(addDays(start, 7)), actual: Boolean(agreed) });
 
   const pre = preLodgement(v);
-  for (const [label, detail, d] of pre) out.push({ key: `pre:${label}`, label, detail, date: iso(addDays(start, d)), actual: false });
-
   const maxPre = Math.max(28, ...pre.map((x) => x[2]));
-  const docsDue = addDays(start, Math.max(28, maxPre - 14));
+  const lodgedDay = m.lodgedAt ? day(m.lodgedAt) : null;
+  // Once lodged, the steps before it happened before it: spread them between engagement and lodgement.
+  const preDate = (d: number) => (lodgedDay ? addDays(start, Math.round((d / (maxPre + 21)) * Math.max(0, differenceInCalendarDays(lodgedDay, start)))) : addDays(start, d));
+  for (const [label, detail, d] of pre) out.push({ key: `pre:${label}`, label, detail, date: iso(preDate(d)), actual: false });
+
+  const docsDue = preDate(Math.max(28, maxPre - 14));
   out.push({ key: "documents", label: "Documents collected", detail: "Every checklist item received and checked.", date: iso(docsDue), actual: false });
 
   const lodged = m.lodgedAt ? day(m.lodgedAt) : null;
@@ -137,17 +141,19 @@ export function predictTimeline(m: MatterLike): Milestone[] {
   const lodgeDate = lodged ?? (plannedLodge < today && stageIdx < 5 ? addDays(today, 14) : plannedLodge);
   out.push({ key: "lodged", label: "Application lodged", detail: "Lodged in ImmiAccount; TRN recorded and acknowledgement sent.", date: iso(lodgeDate), actual: Boolean(lodged) });
 
+  const decided = m.decisionAt ? day(m.decisionAt) : null;
   if (p90 > 0.2) {
-    out.push({ key: "health", label: "Health checks and biometrics", detail: "HAP ID exams and biometrics if requested.", date: iso(addDays(lodgeDate, 14)), actual: false });
+    const health = addDays(lodgeDate, 14);
+    // After a decision these happened before it (or not at all).
+    out.push({ key: "health", label: "Health checks and biometrics", detail: "HAP ID exams and biometrics if requested.", date: iso(decided && health > decided ? addDays(decided, -1) : health), actual: false });
     if (m.rfiDueAt) out.push({ key: "rfi", label: "Further information due", detail: "Respond to the Department's request by this date.", date: m.rfiDueAt, actual: true });
-    else if (p50 >= 2) out.push({ key: "rfi", label: "Possible request for more information", detail: "Many cases get one around the midpoint of processing.", date: iso(addDays(lodgeDate, months(p50 * 0.55))), actual: false });
+    else if (p50 >= 2 && !decided) out.push({ key: "rfi", label: "Possible request for more information", detail: "Many cases get one around the midpoint of processing.", date: iso(addDays(lodgeDate, months(p50 * 0.55))), actual: false });
   }
 
-  const decided = m.decisionAt ? day(m.decisionAt) : null;
   out.push({
     key: "decision",
     label: decided ? `Decision${m.outcome ? `: ${m.outcome}` : ""}` : "Decision expected",
-    detail: decided ? "Decision recorded on the matter." : p90 >= 0.2 ? `Half of applications are decided in about ${fmtMonths(p50)}, 90% in ${fmtMonths(p90)} (indicative).` : "Usually decided within days.",
+    detail: decided ? "Decision recorded on the matter." : p90 >= 0.2 ? `Half of applications are decided in about ${fmtMonths(p50)}, 90% in ${fmtMonths(p90)} (${live ? "Home Affairs' published times" : "indicative"}).` : "Usually decided within days.",
     date: iso(decided ?? addDays(lodgeDate, months(p50))),
     until: decided ? undefined : iso(addDays(lodgeDate, months(p90))),
     actual: Boolean(decided),

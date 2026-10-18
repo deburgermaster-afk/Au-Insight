@@ -15,6 +15,9 @@ import { portalCase } from "@/lib/client-data";
 import { aud, daysUntil, dmy } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { visaByCode } from "@/lib/visas";
+import { PredictedTimeline } from "@/components/app/predicted-timeline";
+import { liveProcessing } from "@/lib/processing-times";
+import { fmtMonths, predictTimeline, processingMonths } from "@/lib/visa-timeline";
 
 export const metadata = { title: "Case" };
 
@@ -39,6 +42,10 @@ export default async function CasePage({ params }: PageProps<"/client/cases/[id]
   const req = d.items.filter((i) => i.required);
   const got = req.filter((i) => !waiting(i.status)).length;
   const groups = [...new Set(d.items.map((i) => i.category))];
+  const live = await liveProcessing(m.visaCode, m.stream);
+  // Plain-language milestones for the client (agent-only steps like compliance are kept, worded simply).
+  const plan = predictTimeline(m, live).map((x) => (x.key === "agreement" ? { ...x, label: "Service agreement signed", detail: "Your agreement with us and the Consumer Guide." } : x));
+  const [p50, p90] = live ? [live.p50Months, live.p90Months] : processingMonths(m.visaCode);
   const facts = [
     { k: "Reference", v: m.reference },
     { k: "Lodged", v: m.lodgedAt ? dmy(m.lodgedAt) : "Not yet" },
@@ -86,12 +93,15 @@ export default async function CasePage({ params }: PageProps<"/client/cases/[id]
       </section>
 
       <Tabs defaultValue={waiting(d.items[0]?.status ?? "") || req.length > got ? "checklist" : "timeline"} className="gap-2">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="checklist" className="text-xs">
             Checklist
           </TabsTrigger>
+          <TabsTrigger value="plan" className="text-xs">
+            What&apos;s next
+          </TabsTrigger>
           <TabsTrigger value="timeline" className="text-xs">
-            Timeline
+            History
           </TabsTrigger>
           <TabsTrigger value="files" className="text-xs">
             Files · {d.docs.length}
@@ -144,6 +154,12 @@ export default async function CasePage({ params }: PageProps<"/client/cases/[id]
           <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed p-3">
             <p className="text-xs text-muted-foreground">Something else for this case?</p>
             <PortalUpload agencyId={c.client.agencyId} clientId={c.client.id} matterId={m.id} label="Upload other" />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="plan">
+          <div className="rounded-xl border bg-card p-3">
+            <PredictedTimeline items={plan} audience="client" processing={live ? `about ${live.p50} for half of applications, ${live.p90} for most` : `about ${fmtMonths(p50)} to ${fmtMonths(p90)}`} source={live ? { asAt: live.asAt, url: live.sourceUrl } : null} />
           </div>
         </TabsContent>
 

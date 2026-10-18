@@ -10,6 +10,7 @@ import { Section } from "@/components/app/section";
 import { CardsSkeleton } from "@/components/app/skeletons";
 import { StatCard } from "@/components/app/stat-card";
 import { Timeline } from "@/components/app/timeline";
+import { CaseHealth } from "@/components/app/case-health";
 import { WithPickers } from "@/components/app/with-pickers";
 import { NewAppointmentDialog, NewMatterDialog, NewTaskDialog } from "@/components/forms/dialogs";
 import { Button } from "@/components/ui/button";
@@ -265,6 +266,9 @@ export default function DashboardPage() {
       />
       <Suspense>
         <SetupNudge />
+      </Suspense>
+      <Suspense>
+        <CaseHealth />
       </Suspense>
       <Suspense fallback={<CardsSkeleton />}>
         <Overview />
