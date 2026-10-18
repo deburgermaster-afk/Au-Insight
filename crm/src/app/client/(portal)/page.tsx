@@ -18,9 +18,10 @@ const waiting = (st: string) => st === "needed" || st === "requested" || st === 
 
 export default async function PortalHome() {
   const c = await requireClient();
-  const [{ matters, items, invoices, appts, recent }, toSign] = await Promise.all([
+  const [{ matters, items, invoices, appts, recent }, toSign, signRequests] = await Promise.all([
     portalHome(c),
     db.select({ id: s.serviceAgreements.id, content: s.serviceAgreements.content }).from(s.serviceAgreements).where(and(eq(s.serviceAgreements.clientId, c.client.id), inArray(s.serviceAgreements.status, ["sent", "viewed"]))),
+    db.select({ id: s.signRequests.id, title: s.signRequests.title, dueAt: s.signRequests.dueAt, n: s.signRequests.fields }).from(s.signRequests).where(and(eq(s.signRequests.clientId, c.client.id), inArray(s.signRequests.status, ["sent", "viewed"]))),
   ]);
   const open = matters.filter((r) => r.m.stage !== "closed");
   const todo = items.filter((i) => i.required && waiting(i.status));
@@ -45,6 +46,21 @@ export default async function PortalHome() {
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">Sign your service agreement</span>
             <span className="block truncate text-[12px] text-muted-foreground">{a.content.matter.visa}</span>
+          </span>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </Link>
+      ))}
+
+      {signRequests.map((r) => (
+        <Link key={r.id} href={`/client/signatures/${r.id}`} className="flex items-center gap-3 rounded-2xl border border-sky-500/40 bg-sky-500/[0.06] p-3.5 transition active:scale-[.98]">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-500">
+            <FileSignature className="size-4.5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">Sign: {r.title}</span>
+            <span className="block truncate text-[12px] text-muted-foreground">
+              {r.n.length} place{r.n.length === 1 ? "" : "s"} to complete{r.dueAt ? ` · by ${dmy(r.dueAt)}` : ""}
+            </span>
           </span>
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>

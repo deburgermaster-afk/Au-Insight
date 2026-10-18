@@ -29,6 +29,12 @@ import { MatterAiToggle } from "@/components/mail-ai/controls";
 import { ReviewDeadlineCard } from "@/components/lodge/review-deadline";
 import { aud, daysUntil, dmy, fullName, relativeDays } from "@/lib/format";
 import { visaByCode } from "@/lib/visas";
+import { FileSignature } from "lucide-react";
+import { CaseReview } from "@/components/ai/case-review";
+import { PredictedTimeline } from "@/components/app/predicted-timeline";
+import { SignList } from "@/components/sign/sign-list";
+import { latestCaseReview } from "@/lib/case-review";
+import { fmtMonths, predictTimeline, processingMonths } from "@/lib/visa-timeline";
 import { Checklist, ComplianceChecks, MatterDetailsForm, StageStepper } from "./matter-client";
 import { ManageCase } from "@/components/edit/case-manage";
 import { EditRecord } from "@/components/edit/edit-record";
@@ -54,6 +60,18 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
     db.select({ on: sch.agencyProfile.aiDocsEnabledAt }).from(sch.agencyProfile).where(eq(sch.agencyProfile.agencyId, ctx.agencyId)),
   ]);
   const aiDocs = Boolean(aiP?.on) && llmEnabled();
+  const [review, signRows] = await Promise.all([
+    latestCaseReview(ctx.agencyId, client.id, m.id),
+    db
+      .select({ r: sch.signRequests, signedKey: sch.documents.storageKey, signedName: sch.documents.name })
+      .from(sch.signRequests)
+      .leftJoin(sch.documents, eq(sch.documents.id, sch.signRequests.documentId))
+      .where(and(eq(sch.signRequests.agencyId, ctx.agencyId), eq(sch.signRequests.matterId, m.id), ne(sch.signRequests.status, "draft")))
+      .orderBy(desc(sch.signRequests.updatedAt))
+      .limit(20),
+  ]);
+  const milestones = predictTimeline(m);
+  const [p50, p90] = processingMonths(m.visaCode);
   const checkOf = new Map(checks.map((c) => [c.documentId, c]));
   const docsWithChecks = data.documents.map((d) => ({ ...d, check: checkOf.get(d.id) ?? null }));
   const [editOptions, pickers] = await Promise.all([getEditOptions(), getPickers()]);
@@ -76,6 +94,11 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
         />
         <ComposeDialog to={client.email ?? ""} clientId={client.id} matterId={m.id} subject={`${m.title} · ${m.reference}`} trigger={<Button size="sm" variant="outline"><Mail /> Email</Button>} />
         <UploadButton agencyId={ctx.agencyId} clientId={client.id} matterId={m.id} label="Upload" />
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/app/sign/new?client=${client.id}&matter=${m.id}`}>
+            <FileSignature /> Send to sign
+          </Link>
+        </Button>
         <Button asChild size="sm" variant="outline">
           <Link href={`/app/matters/${m.id}/lodge`}>
             <PackageCheck /> Lodgement pack
@@ -122,6 +145,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="grid content-start gap-4">
+          <CaseReview clientId={client.id} matterId={m.id} initial={review?.result ?? null} finishedAt={review?.finishedAt?.toISOString() ?? null} aiOn={aiDocs} />
           <Section
             title="Document checklist"
             action={
@@ -142,6 +166,19 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
           </Section>
         </div>
         <div className="grid content-start gap-4">
+          <Section title="Predicted timeline" action={<span className="text-[11px] text-muted-foreground">{fmtMonths(p50)}–{fmtMonths(p90)} processing</span>}>
+            <PredictedTimeline items={milestones} processing={`${fmtMonths(p50)} to ${fmtMonths(p90)}`} />
+          </Section>
+          <Section
+            title="Signatures"
+            action={
+              <Link href={`/app/sign/new?client=${client.id}&matter=${m.id}`} className="text-xs text-primary hover:underline">
+                Send to sign
+              </Link>
+            }
+          >
+            <SignList rows={signRows.map((x) => ({ ...x.r, signedKey: x.signedKey, signedName: x.signedName }))} showClient={false} empty="Consent forms and PDFs sent to the client to sign appear here." />
+          </Section>
           <Section title="Code of Conduct">
             <ComplianceChecks matterId={m.id} guide={m.consumerGuideAt} agreement={m.agreementSignedAt} esign={esign} hasEmail={Boolean(client.email)} />
           </Section>

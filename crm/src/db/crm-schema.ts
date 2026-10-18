@@ -1250,3 +1250,96 @@ export const duplicateDismissals = pgTable(
   },
   (t) => [primaryKey({ columns: [t.agencyId, t.a, t.b] })],
 );
+
+/** A field the signer completes, placed on a PDF page. Coordinates are fractions of the page (0–1, top-left origin). */
+export type SignField = {
+  id: string;
+  page: number; // 1-based
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  type: "signature" | "initials" | "date" | "name" | "text" | "checkbox";
+  label: string;
+  required: boolean;
+  source?: "template" | "detected" | "ai" | "manual";
+};
+export type SignValue = { id: string; value: string }; // signature/initials: PNG data URL; checkbox: "yes" | ""
+export type SignEvent = { at: string; kind: "created" | "sent" | "viewed" | "signed" | "void" | "reminded"; by: string | null; detail?: string };
+
+/**
+ * A document sent to a client to sign: a consent form made from a template, an uploaded PDF, or a
+ * file from the client's folder. The source PDF is frozen (hashed) when it's sent.
+ */
+export const signRequests = pgTable(
+  "sign_requests",
+  {
+    id: id(),
+    agencyId: agency(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    matterId: text("matter_id").references(() => matters.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    message: text("message"),
+    origin: text("origin").notNull(), // template | upload | file
+    templateKey: text("template_key"),
+    sourceDocumentId: text("source_document_id"),
+    sourceKey: text("source_key").notNull(), // R2 key of the PDF the client signs
+    sourceHash: text("source_hash").notNull(),
+    pages: integer("pages").notNull().default(1),
+    fields: jsonb("fields").$type<SignField[]>().notNull(),
+    status: text("status").notNull().default("sent"), // sent | viewed | signed | void
+    events: jsonb("events").$type<SignEvent[]>().notNull().default([]),
+    sentBy: text("sent_by"),
+    sentByName: text("sent_by_name"),
+    dueAt: date("due_at"),
+    viewedAt: timestamp("viewed_at", { withTimezone: true }),
+    signedAt: timestamp("signed_at", { withTimezone: true }),
+    signerName: text("signer_name"),
+    signerEmail: text("signer_email"),
+    signerIp: text("signer_ip"),
+    signerAgent: text("signer_agent"),
+    values: jsonb("values").$type<SignValue[]>(),
+    documentId: text("document_id"), // the signed PDF in the client's documents
+    ...stamps,
+  },
+  (t) => [index("sign_requests_agency_idx").on(t.agencyId, t.status), index("sign_requests_client_idx").on(t.clientId, t.status), index("sign_requests_matter_idx").on(t.matterId)],
+);
+
+export type CaseFlag = { level: "critical" | "warning" | "info"; area: string; title: string; detail: string; fix?: string; document?: string | null; source?: "rule" | "ai" };
+export type CaseReviewResult = {
+  profileScore: number; // 0–100
+  documentScore: number; // 0–100
+  readiness: "not_ready" | "needs_work" | "nearly_ready" | "ready";
+  summary: string;
+  strengths: string[];
+  flags: CaseFlag[];
+  missing: string[];
+  nextSteps: string[];
+  documentsRead: number;
+  documentsChecked: { name: string; verdict: string | null }[];
+};
+
+/** AI review of a client's profile and documents (for a matter, or the client overall). Latest row per scope wins. */
+export const caseReviews = pgTable(
+  "case_reviews",
+  {
+    id: id(),
+    agencyId: agency(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    matterId: text("matter_id").references(() => matters.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("running"), // running | done | failed
+    stage: text("stage"), // what it's reading right now, shown while running
+    result: jsonb("result").$type<CaseReviewResult>(),
+    error: text("error"),
+    model: text("model"),
+    requestedBy: text("requested_by"),
+    requestedByName: text("requested_by_name"),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    ...stamps,
+  },
+  (t) => [index("case_reviews_client_idx").on(t.agencyId, t.clientId, t.createdAt), index("case_reviews_matter_idx").on(t.matterId, t.createdAt)],
+);

@@ -23,6 +23,13 @@ import { getCtx } from "@/lib/session";
 import { fileUrl } from "@/components/mail/file-icon";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getClient } from "@/lib/data";
+import { and as andOp, desc as descOp, eq as eqOp } from "drizzle-orm";
+import { FileSignature } from "lucide-react";
+import { CaseReview } from "@/components/ai/case-review";
+import { SignList } from "@/components/sign/sign-list";
+import { db as dbx, schema as sx } from "@/db";
+import { latestCaseReview } from "@/lib/case-review";
+import { llmEnabled as llmOn } from "@/lib/llm";
 import { ManageClient } from "@/components/edit/case-manage";
 import { EditRecord } from "@/components/edit/edit-record";
 import { EditInvoice } from "@/components/edit/invoice-edit";
@@ -64,6 +71,17 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
   const paid = invoices.reduce((a, i) => a + Number(i.paid), 0);
   const nextDue = invoices.filter((i) => Number(i.total) - Number(i.paid) > 0.005 && i.status !== "void").sort((a, b) => String(a.dueAt).localeCompare(String(b.dueAt)))[0];
   const open = matters.filter((m) => m.stage !== "closed");
+  const [review, signRows, [aiP]] = await Promise.all([
+    latestCaseReview(ctx.agencyId, c.id, null),
+    dbx
+      .select({ r: sx.signRequests, signedKey: sx.documents.storageKey, signedName: sx.documents.name })
+      .from(sx.signRequests)
+      .leftJoin(sx.documents, eqOp(sx.documents.id, sx.signRequests.documentId))
+      .where(andOp(eqOp(sx.signRequests.agencyId, ctx.agencyId), eqOp(sx.signRequests.clientId, c.id)))
+      .orderBy(descOp(sx.signRequests.updatedAt))
+      .limit(20),
+    dbx.select({ on: sx.agencyProfile.aiDocsEnabledAt }).from(sx.agencyProfile).where(eqOp(sx.agencyProfile.agencyId, ctx.agencyId)),
+  ]);
 
   return (
     <div className="grid gap-4">
@@ -89,6 +107,11 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
             }
           />
           <UploadButton agencyId={ctx.agencyId} clientId={c.id} label="Upload" />
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/app/sign/new?client=${c.id}`}>
+              <FileSignature /> Send to sign
+            </Link>
+          </Button>
           <PortalMenu clientId={c.id} enabled={c.portalEnabled} hasEmail={Boolean(c.email)} />
           <WithPickers render={(p) => <NewMatterDialog pickers={p} clientId={c.id} />} />
         </HeaderActions>
@@ -130,6 +153,10 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
             ]}
           />
         </Section>
+      </FadeIn>
+
+      <FadeIn delay={0.1}>
+        <CaseReview clientId={c.id} matterId={null} initial={review?.result ?? null} finishedAt={review?.finishedAt?.toISOString() ?? null} aiOn={Boolean(aiP?.on) && llmOn()} />
       </FadeIn>
 
       <FadeIn delay={0.12}>
@@ -393,7 +420,17 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
         </Section>
       </FadeIn>
       </div>
-      <FadeIn delay={0.1} className="xl:sticky xl:top-16">
+      <FadeIn delay={0.1} className="grid gap-4 xl:sticky xl:top-16">
+        <Section
+          title="Signatures"
+          action={
+            <Link href={`/app/sign/new?client=${c.id}`} className="text-xs text-primary hover:underline">
+              Send to sign
+            </Link>
+          }
+        >
+          <SignList rows={signRows.filter((x) => x.r.status !== "draft").map((x) => ({ ...x.r, signedKey: x.signedKey, signedName: x.signedName }))} showClient={false} empty="No documents sent to sign." />
+        </Section>
         <PathwayPanel clientId={c.id} row={pathway} study={studies[0] ? { course: studies[0].a.course, institution: studies[0].inst, status: studies[0].a.status, intake: studies[0].a.intake } : null} />
       </FadeIn>
       </div>
