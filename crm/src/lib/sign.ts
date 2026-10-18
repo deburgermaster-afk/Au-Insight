@@ -34,7 +34,7 @@ export async function consentVars(agencyId: string, clientId: string, matterId: 
     agency: org?.name ?? "",
     agencyLegal: p?.legalName || org?.name || "",
     abn: p?.abn ?? "",
-    agencyAddress: [p?.address, p?.state].filter(Boolean).join(", "),
+    agencyAddress: p?.address && p.state && !p.address.includes(p.state) ? `${p.address}, ${p.state}` : (p?.address ?? p?.state ?? ""),
     agencyEmail: p?.email ?? "",
     agencyPhone: p?.phone ?? "",
     agent: agent.name,

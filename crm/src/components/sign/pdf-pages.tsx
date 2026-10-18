@@ -59,6 +59,15 @@ function Page({ n, size, doc, overlay, onPageClick }: { n: number; size: Size; d
   const canvas = useRef<HTMLCanvasElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(n <= 2);
+  const [cssW, setCssW] = useState(0);
+
+  // Re-render at the exact displayed width (and pixel ratio) whenever the page box resizes.
+  useEffect(() => {
+    if (!box.current) return;
+    const ro = new ResizeObserver(([e]) => setCssW(Math.round(e.contentRect.width)));
+    ro.observe(box.current);
+    return () => ro.disconnect();
+  }, []);
 
   // Render pages as they come near the screen; long PDFs stay light.
   useEffect(() => {
@@ -69,15 +78,14 @@ function Page({ n, size, doc, overlay, onPageClick }: { n: number; size: Size; d
   }, [visible]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !cssW) return;
     let task: { cancel(): void; promise: Promise<void> } | null = null;
     let stop = false;
     (async () => {
       const page = (await doc.getPage(n)) as { getViewport(o: { scale: number }): { width: number; height: number }; render(o: object): { cancel(): void; promise: Promise<void> } };
       const el = canvas.current;
       if (!el || stop) return;
-      const cssW = el.parentElement!.clientWidth || size.w;
-      const scale = (cssW / size.w) * Math.min(2, window.devicePixelRatio || 1);
+      const scale = (cssW / size.w) * Math.min(3, window.devicePixelRatio || 1);
       const vp = page.getViewport({ scale });
       el.width = Math.floor(vp.width);
       el.height = Math.floor(vp.height);
@@ -88,7 +96,7 @@ function Page({ n, size, doc, overlay, onPageClick }: { n: number; size: Size; d
       stop = true;
       task?.cancel();
     };
-  }, [visible, doc, n, size.w]);
+  }, [visible, doc, n, size.w, cssW]);
 
   return (
     <div

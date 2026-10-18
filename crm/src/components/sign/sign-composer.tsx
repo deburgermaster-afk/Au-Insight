@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { SignField } from "@/db/crm-schema";
-import { consentGroups, consentTemplates } from "@/lib/consent-templates";
+import { consentTemplates } from "@/lib/consent-templates";
 import { createSignDraft, redetectFields, sendSignRequest, type SignDraft, voidSignRequest } from "@/lib/sign-actions";
 import { cn } from "@/lib/utils";
 import { PdfPages } from "./pdf-pages";
+import { TemplatePicker } from "./template-picker";
 
 type Client = { id: string; name: string; email: string | null };
 type Matter = { id: string; clientId: string; reference: string; title: string; visaCode: string };
@@ -47,16 +48,13 @@ export function SignComposer({ agencyId, clients, matters, docs, initial }: { ag
   const [message, setMessage] = useState("");
   const [dueAt, setDueAt] = useState("");
   const [pending, start] = useTransition();
-  const [tq, setTq] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const drag = useRef<{ id: string; dx: number; dy: number; el: HTMLElement } | null>(null);
 
   const client = clients.find((c) => c.id === clientId);
   const clientMatters = matters.filter((m) => m.clientId === clientId);
   const clientDocs = docs.filter((d) => d.clientId === clientId);
-  const visa = clientMatters.find((m) => m.id === matterId)?.visaCode;
   const shownClients = useMemo(() => (q ? clients.filter((c) => c.name.toLowerCase().includes(q.toLowerCase())) : clients).slice(0, 8), [clients, q]);
-  const shownTemplates = consentTemplates.filter((t) => !tq || `${t.title} ${t.summary}`.toLowerCase().includes(tq.toLowerCase()));
 
   const begin = (input: Parameters<typeof createSignDraft>[0], kind: "template" | "pdf") => {
     setWorking(kind);
@@ -164,38 +162,15 @@ export function SignComposer({ agencyId, clients, matters, docs, initial }: { ag
 
         <section className={cn("rounded-xl border bg-card p-4", !client && "pointer-events-none opacity-50")}>
           {source === "template" ? (
-            <div className="grid gap-4">
-              <div className="flex items-center gap-2">
-                <p className="text-[13px] font-medium">Choose a consent form</p>
-                <div className="relative ml-auto w-56">
-                  <Search className="absolute left-2.5 top-2 size-4 text-muted-foreground" />
-                  <Input value={tq} onChange={(e) => setTq(e.target.value)} placeholder="Search forms" className="h-8 pl-8" />
-                </div>
-              </div>
-              {consentGroups.map((g) => {
-                const list = shownTemplates.filter((t) => t.group === g);
-                if (!list.length) return null;
-                return (
-                  <div key={g} className="grid gap-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{g}</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {list.map((t) => {
-                        const suggested = visa && t.suggestFor?.includes(visa);
-                        return (
-                          <button key={t.key} type="button" disabled={pending} onClick={() => begin({ clientId, matterId: matterId || null, origin: "template", templateKey: t.key }, "template")} className={cn("group grid gap-1 rounded-lg border p-3 text-left transition hover:border-foreground/30 hover:bg-muted/30", initial.templateKey === t.key && "border-foreground/40")}>
-                            <span className="flex items-start gap-2 text-sm font-medium">
-                              <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                              <span className="flex-1">{t.title}</span>
-                              {suggested ? <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-600">Suggested</span> : null}
-                            </span>
-                            <span className="text-xs text-muted-foreground">{t.summary}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="grid gap-3">
+              <p className="text-[13px] font-medium">Choose a consent form</p>
+              {initial.templateKey && consentTemplates.some((t) => t.key === initial.templateKey) ? (
+                <Button variant="outline" className="h-auto justify-start gap-2 border-[var(--chart-2)]/40 py-2.5 text-left" disabled={pending || !clientId} onClick={() => begin({ clientId, matterId: matterId || null, origin: "template", templateKey: initial.templateKey }, "template")}>
+                  <Wand2 className="text-[var(--chart-2)]" />
+                  <span className="min-w-0 flex-1 truncate">Continue with: {consentTemplates.find((t) => t.key === initial.templateKey)?.title}</span>
+                </Button>
+              ) : null}
+              <TemplatePicker clientId={clientId || undefined} matterId={matterId || undefined} busy={pending} onPick={(key) => begin({ clientId, matterId: matterId || null, origin: "template", templateKey: key }, "template")} />
             </div>
           ) : source === "file" ? (
             <div className="grid gap-2">

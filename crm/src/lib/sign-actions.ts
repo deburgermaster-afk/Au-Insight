@@ -15,6 +15,7 @@ import { mailEnabled, sendMail } from "@/lib/mail";
 import { notifyStaff } from "@/lib/notify";
 import { memberCtx, requireCap } from "@/lib/session";
 import { consentVars } from "@/lib/sign";
+import { recommendFor, type TemplatePick } from "@/lib/consent-rank";
 import { detectSignFields } from "@/lib/sign-detect";
 import { renderConsentPdf, sha256, stampSignedPdf } from "@/lib/sign-pdf";
 
@@ -268,5 +269,15 @@ export async function submitSignature(id: string, input: { name: string; values:
     return { ok: true, id: doc.id };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/** Staff: the consent forms this client's case needs now, most relevant first. */
+export async function recommendTemplates(clientId: string, matterId: string | null): Promise<{ ok: true; picks: TemplatePick[]; done: string[]; method: "ai" | "rules" } | { ok: false; error: string }> {
+  try {
+    const ctx = await requireCap("clients");
+    return { ok: true, ...(await recommendFor(ctx.agencyId, clientId, matterId)) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
