@@ -336,8 +336,14 @@ export async function createAppointment(form: FormData): Promise<ActionResult> {
     const startsAt = new Date(`${date}T${time}:00+10:00`);
     const endsAt = new Date(startsAt.getTime() + minutes * 60_000);
     const clientId = blank(form.get("clientId"));
+    let matterId = blank(form.get("matterId"));
+    if (matterId) {
+      const [m] = await db.select({ id: s.matters.id }).from(s.matters).where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.id, matterId)));
+      if (!m) matterId = null;
+    }
     await db.insert(s.appointments).values({
       agencyId: ctx.agencyId,
+      matterId,
       title: blank(form.get("title")) ?? "Consultation",
       kind: blank(form.get("kind")) ?? "consultation",
       startsAt,
@@ -347,7 +353,7 @@ export async function createAppointment(form: FormData): Promise<ActionResult> {
       staffId: blank(form.get("staffId")) ?? ctx.userId,
       fee: blank(form.get("fee")),
     });
-    if (clientId) await log(ctx, { clientId, kind: "meeting", title: `Appointment booked for ${date} ${time}` });
+    if (clientId) await log(ctx, { clientId, matterId, kind: "meeting", title: `Appointment booked for ${date} ${time}` });
     refresh(ctx);
     return { ok: true };
   } catch (e) {

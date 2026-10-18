@@ -1,12 +1,12 @@
 import { connection } from "next/server";
-import { BookOpen, Building2, CalendarClock, ExternalLink, FileText, FolderOpen, Gavel, History, ListChecks, Mail, MessageSquareText, PackageCheck, PenLine, Receipt, ShieldCheck, SquareCheckBig, UserRound, Wallet } from "lucide-react";
+import { BookOpen, Building2, CalendarClock, CalendarDays, Download, NotebookPen, Users, ExternalLink, FileText, FolderOpen, Gavel, History, ListChecks, Mail, MessageSquareText, PackageCheck, PenLine, Receipt, ShieldCheck, SquareCheckBig, UserRound, Wallet } from "lucide-react";
 import { NewDraft } from "@/components/ai/drafts";
 import { DRAFT_KINDS, kindsFor } from "@/lib/drafting";
 import { llmEnabled } from "@/lib/llm";
 import { HeaderActions } from "@/components/app/header-actions";
 import { SendChecklist } from "@/components/mail/send-checklist";
 import { UploadButton } from "@/components/mail/upload-button";
-import { ComposeDialog, NewInvoiceDialog, RecordPaymentDialog } from "@/components/forms/dialogs";
+import { ComposeDialog, NewAppointmentDialog, NewInvoiceDialog, RecordPaymentDialog } from "@/components/forms/dialogs";
 import { Button } from "@/components/ui/button";
 import { getCtx } from "@/lib/session";
 import Link from "next/link";
@@ -22,7 +22,7 @@ import { Timeline } from "@/components/app/timeline";
 import { WithPickers } from "@/components/app/with-pickers";
 import { NewTaskDialog } from "@/components/forms/dialogs";
 import { getAgencyProfile, getMatter, getPickers } from "@/lib/data";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db, schema as sch } from "@/db";
 import { fileUrl } from "@/components/mail/file-icon";
 import { MatterAiToggle } from "@/components/mail-ai/controls";
@@ -45,6 +45,14 @@ import { getEditOptions } from "@/lib/edit-data";
 import { plainValues } from "@/lib/record-specs";
 import { ChecklistTimelineTabs, MatterWorkspace, type WorkspaceTile } from "@/components/app/matter-workspace";
 import { ClientEmails } from "@/components/mail-ai/insight";
+import { DocumentsPanel } from "@/components/app/matter-panels";
+import { ReviewPayment, TransferToOffice, ZellerLink } from "@/components/billing/payments";
+import { EditInvoice } from "@/components/edit/invoice-edit";
+import { PortalMenu } from "@/components/portal/staff-actions";
+import { time } from "@/lib/format";
+
+/** The time the page is rendered (a request-time read; the page is dynamic). */
+const nowMs = () => Date.now();
 
 async function MatterView({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
@@ -92,6 +100,13 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
     db.select().from(sch.mailInsights).where(and(eq(sch.mailInsights.agencyId, ctx.agencyId), eq(sch.mailInsights.matterId, m.id))).orderBy(desc(sch.mailInsights.createdAt)),
     db.select().from(sch.dependants).where(and(eq(sch.dependants.agencyId, ctx.agencyId), eq(sch.dependants.clientId, client.id))),
   ]);
+  const [appts, trustRows, attempts] = await Promise.all([
+    db.select().from(sch.appointments).where(and(eq(sch.appointments.agencyId, ctx.agencyId), eq(sch.appointments.matterId, m.id))).orderBy(desc(sch.appointments.startsAt)),
+    db.select({ kind: sch.ledger.kind, amount: sch.ledger.amount }).from(sch.ledger).where(and(eq(sch.ledger.agencyId, ctx.agencyId), eq(sch.ledger.account, "trust"), eq(sch.ledger.clientId, client.id))),
+    invoices.length
+      ? db.select().from(sch.paymentAttempts).where(and(eq(sch.paymentAttempts.agencyId, ctx.agencyId), inArray(sch.paymentAttempts.invoiceId, invoices.map((i) => i.id)))).orderBy(desc(sch.paymentAttempts.createdAt))
+      : Promise.resolve([] as (typeof sch.paymentAttempts.$inferSelect)[]),
+  ]);
   const kinds = kindsFor(m.visaCode, m.stage, Boolean(m.rfiDueAt)).map((k) => ({ key: k, ...DRAFT_KINDS[k] }));
   const esign = ag ? { id: ag.id, status: ag.status, createdAt: ag.createdAt, viewedAt: ag.viewedAt, signedAt: ag.signedAt, signerName: ag.signerName, pdf: agDoc?.key ? fileUrl(agDoc.key, agDoc.name) : null } : null;
   const required = checklist.filter((i) => i.required);
@@ -112,39 +127,54 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
       <dd className="text-right">{v ?? "—"}</dd>
     </div>
   );
+  const trust = Math.round(trustRows.reduce((a, r) => a + (r.kind === "receipt" ? 1 : -1) * Number(r.amount), 0) * 100) / 100;
+  const toReview = attempts.filter((a) => a.status === "review");
+  const now = nowMs();
+  const upcoming = appts.filter((a) => +new Date(a.startsAt) >= now).sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
+  const past = appts.filter((a) => +new Date(a.startsAt) < now);
+  const staffName = (id: string | null) => (id ? (editOptions.staff.find((x) => x.value === id)?.label ?? "Former staff") : null);
+  const staffReg = (id: string | null) => Boolean(id && editOptions.staff.find((x) => x.value === id)?.registered);
+  const checklistLabelOf = new Map(checklist.map((i) => [i.id, i.label]));
+  const notes = activities.filter((a) => a.kind === "note");
   const tiles: WorkspaceTile[] = [
     {
       key: "documents",
       label: "Documents",
       icon: <FolderOpen />,
       stat: `${data.documents.length} file${data.documents.length === 1 ? "" : "s"}`,
-      action: <UploadButton agencyId={ctx.agencyId} clientId={client.id} matterId={m.id} label="Upload" />,
-      content: data.documents.length ? (
-        <ul className="grid gap-1.5">
-          {data.documents
+      action: (
+        <span className="flex items-center gap-2">
+          {data.documents.length ? (
+            <Button asChild size="xs" variant="outline">
+              <a href={`/api/matters/${m.id}/pack`}>
+                <Download /> All as ZIP
+              </a>
+            </Button>
+          ) : null}
+          <UploadButton agencyId={ctx.agencyId} clientId={client.id} matterId={m.id} label="Upload" />
+        </span>
+      ),
+      content: (
+        <DocumentsPanel
+          aiDocs={aiDocs}
+          options={editOptions}
+          caps={ctx.caps}
+          docs={data.documents
             .slice()
             .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
-            .map((d) => (
-              <li key={d.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-                <FileText className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1">
-                  {d.storageKey ? (
-                    <a href={fileUrl(d.storageKey, d.name)} target="_blank" rel="noreferrer" className="block truncate hover:underline">
-                      {d.name}
-                    </a>
-                  ) : (
-                    <span className="block truncate">{d.name}</span>
-                  )}
-                  <span className="block text-xs text-muted-foreground" suppressHydrationWarning>
-                    {[d.category, d.source === "portal" ? "from client" : null, relativeDays(d.createdAt)].filter(Boolean).join(" · ")}
-                  </span>
-                </span>
-                {checkOf.get(d.id)?.verdict ? <Pill t={checkOf.get(d.id)!.verdict === "pass" ? "green" : "amber"}>AI {checkOf.get(d.id)!.verdict}</Pill> : null}
-              </li>
-            ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted-foreground">No files yet. Upload here or from a checklist item.</p>
+            .map((d) => ({
+              id: d.id,
+              name: d.name,
+              category: d.category,
+              storageKey: d.storageKey,
+              source: d.source,
+              createdAt: new Date(d.createdAt).toISOString(),
+              expiresAt: d.expiresAt ?? null,
+              checklistLabel: d.checklistItemId ? (checklistLabelOf.get(d.checklistItemId) ?? null) : null,
+              check: checkOf.get(d.id) ?? null,
+              values: plainValues({ name: d.name, category: d.category, expiresAt: d.expiresAt, certified: d.certified, translated: d.translated }),
+            }))}
+        />
       ),
     },
     {
@@ -154,11 +184,16 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
       stat: passportDays != null && passportDays < 180 ? (passportDays < 0 ? "Passport expired" : `Passport ${passportDays}d left`) : fullName(client),
       tone: passportDays != null && passportDays < 180 ? (passportDays < 0 ? "bad" : "warn") : "default",
       action: (
-        <Button asChild size="xs" variant="outline">
-          <Link href={`/app/clients/${client.id}`}>Open client file</Link>
-        </Button>
+        <span className="flex items-center gap-1">
+          <EditRecord entity="client" id={client.id} values={plainValues(client)} options={editOptions} caps={ctx.caps} trigger={<Button size="xs" variant="outline"><PenLine /> Edit</Button>} />
+          <PortalMenu clientId={client.id} enabled={client.portalEnabled} hasEmail={Boolean(client.email)} />
+          <Button asChild size="xs" variant="outline">
+            <Link href={`/app/clients/${client.id}`}>Client file</Link>
+          </Button>
+        </span>
       ),
       content: (
+        <div className="grid gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <dl className="text-sm">
             {fact("Name", fullName(client))}
@@ -174,8 +209,30 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
             {fact("Current visa", client.currentVisa ? `${client.currentVisa}${client.visaExpiry ? ` · exp ${dmy(client.visaExpiry)}` : ""}` : null)}
             {fact("English", client.englishTest ? `${client.englishTest}${client.englishScore ? ` ${client.englishScore}` : ""}` : null)}
             {fact("Occupation", client.occupation ? `${client.occupation}${client.anzsco ? ` (${client.anzsco})` : ""}` : null)}
-            {fact("Family on the file", dependants.length ? dependants.map((d) => `${d.fullName} (${d.relationship})`).join(", ") : "None")}
+            {fact("Client portal", client.portalEnabled ? "On" : "Off")}
           </dl>
+        </div>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Family on the application</p>
+              <EditRecord entity="dependant" parentId={client.id} options={editOptions} caps={ctx.caps} />
+            </div>
+            {dependants.length ? (
+              <ul className="grid gap-1.5">
+                {dependants.map((d) => (
+                  <li key={d.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                    <span className="min-w-0 flex-1">
+                      <span className="block">{d.fullName}</span>
+                      <span className="block text-xs capitalize text-muted-foreground">{[d.relationship, d.dateOfBirth ? `born ${dmy(d.dateOfBirth)}` : null, d.passportNumber ? `passport ${d.passportNumber}` : null].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <EditRecord entity="dependant" id={d.id} values={plainValues(d)} options={editOptions} caps={ctx.caps} canDelete />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No partner or children on the file.</p>
+            )}
+          </div>
         </div>
       ),
     },
@@ -183,16 +240,31 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
       key: "payments",
       label: "Payments",
       icon: <Wallet />,
-      stat: invoices.length ? (owing > 0.005 ? `${aud(owing)} owing` : "Paid up") : quoted ? `${aud(quoted)} quoted` : "No invoices",
-      tone: owing > 0.005 ? "warn" : invoices.length ? "good" : "default",
+      stat: toReview.length ? `${toReview.length} to review` : invoices.length ? (owing > 0.005 ? `${aud(owing)} owing` : "Paid up") : quoted ? `${aud(quoted)} quoted` : "No invoices",
+      tone: toReview.length ? "bad" : owing > 0.005 ? "warn" : invoices.length ? "good" : "default",
       action: <NewInvoiceDialog pickers={pickers} clientId={client.id} matterId={m.id} trigger={<Button size="xs" variant="outline"><Receipt /> New invoice</Button>} />,
       content: (
         <div className="grid gap-3">
-          <div className="grid grid-cols-3 gap-2 text-center">
+          {toReview.length ? (
+            <div className="grid gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+              <p className="text-xs font-medium text-amber-500">Payments from the client portal waiting for your check</p>
+              {toReview.map((a) => (
+                <div key={a.id} className="flex items-center gap-2 text-sm">
+                  <span className="min-w-0 flex-1">
+                    {aud(a.amount, 2)} by {a.provider} for {invoices.find((i) => i.id === a.invoiceId)?.number ?? "an invoice"}
+                    {a.clientNote ? <span className="block truncate text-xs text-muted-foreground">“{a.clientNote}”</span> : null}
+                  </span>
+                  <ReviewPayment id={a.id} amount={Number(a.amount)} proofUrl={a.proofKey ? fileUrl(a.proofKey, a.proofName ?? "proof") : null} isImage={/\.(png|jpe?g|webp|gif)$/i.test(a.proofName ?? "")} />
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className="grid grid-cols-4 gap-2 text-center">
             {[
               ["Invoiced", aud(invoiced, 2)],
               ["Paid", aud(paidSum, 2)],
               ["Owing", aud(Math.max(owing, 0), 2)],
+              ["In trust", aud(trust, 2)],
             ].map(([k, v]) => (
               <div key={k} className="rounded-lg bg-muted/40 px-2 py-2">
                 <p className="text-[11px] text-muted-foreground">{k}</p>
@@ -213,6 +285,8 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
                     </span>
                     <Pill t={invoiceTone[left <= 0.005 ? "paid" : i.status]}>{label(left <= 0.005 ? "paid" : i.status)}</Pill>
                     {left > 0.005 && i.status !== "void" ? <RecordPaymentDialog invoiceId={i.id} outstanding={left} trigger={<Button size="xs" variant="outline">Record payment</Button>} /> : null}
+                    {left > 0.005 && i.status !== "void" && ctx.caps.includes("billing") ? <ZellerLink invoiceId={i.id} value={i.zellerLink} /> : null}
+                    {Number(i.paid) === 0 && i.status !== "void" && ctx.caps.includes("billing") ? <EditInvoice id={i.id} number={i.number} items={i.items} dueAt={i.dueAt} notes={i.notes} /> : null}
                   </li>
                 );
               })}
@@ -220,9 +294,14 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
           ) : (
             <p className="text-sm text-muted-foreground">No invoices for this case yet. Quoted: {aud(quoted)}.</p>
           )}
-          <Link href={`/app/billing/trust/${client.id}`} className="text-xs text-primary hover:underline">
-            Client trust statement →
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            {trust > 0.005 && ctx.caps.includes("billing") ? (
+              <TransferToOffice clientId={client.id} name={fullName(client)} balance={trust} invoices={invoices.filter((i) => Number(i.total) - Number(i.paid) > 0.005 && i.status !== "void").map((i) => ({ id: i.id, number: i.number }))} />
+            ) : null}
+            <Link href={`/app/billing/trust/${client.id}`} className="text-xs text-primary hover:underline">
+              Client trust statement →
+            </Link>
+          </div>
         </div>
       ),
     },
@@ -253,6 +332,119 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
         </ul>
       ) : (
         <p className="text-sm text-muted-foreground">No tasks.</p>
+      ),
+    },
+    {
+      key: "appointments",
+      label: "Appointments",
+      icon: <CalendarDays />,
+      stat: upcoming[0] ? `Next ${dmy(upcoming[0].startsAt)}` : `${appts.length} held`,
+      tone: upcoming[0] ? "good" : "default",
+      action: <NewAppointmentDialog pickers={pickers} clientId={client.id} matterId={m.id} trigger={<Button size="xs" variant="outline"><CalendarDays /> Book</Button>} />,
+      content: appts.length ? (
+        <div className="grid gap-3">
+          {[
+            ["Upcoming", upcoming],
+            ["Past", past],
+          ].map(([title, list]) =>
+            (list as typeof appts).length ? (
+              <div key={title as string}>
+                <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{title as string}</p>
+                <ul className="grid gap-1.5">
+                  {(list as typeof appts).map((a) => (
+                    <li key={a.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{a.title}</span>
+                        <span className="block text-xs text-muted-foreground" suppressHydrationWarning>
+                          {[`${dmy(a.startsAt)} ${time(a.startsAt)}`, a.kind, a.location, staffName(a.staffId)].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      <EditRecord entity="appointment" id={a.id} values={plainValues(a)} options={editOptions} caps={ctx.caps} canDelete />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null,
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No appointments for this case. Book one and it appears in the calendar too.</p>
+      ),
+    },
+    {
+      key: "team",
+      label: "Team",
+      icon: <Users />,
+      stat: staffName(m.assignedTo) ?? "Unassigned",
+      tone: m.assignedTo ? "default" : "warn",
+      action: (
+        <Button asChild size="xs" variant="outline">
+          <Link href="/app/team/handover">Handover</Link>
+        </Button>
+      ),
+      content: (
+        <dl className="text-sm">
+          {fact("Case officer", m.assignedTo ? `${staffName(m.assignedTo)}${staffReg(m.assignedTo) ? " · registered agent" : ""}` : "Unassigned")}
+          {fact("Supervisor", m.supervisorId ? `${staffName(m.supervisorId)}${staffReg(m.supervisorId) ? " · registered agent" : ""}` : "None")}
+          {fact("Client looked after by", staffName(client.assignedTo) ?? "Unassigned")}
+          <p className="mt-3 text-xs text-muted-foreground">Reassign, change the supervisor or move the case with Manage at the top of the page.</p>
+        </dl>
+      ),
+    },
+    ...(employer
+      ? [
+          {
+            key: "sponsor",
+            label: "Sponsor",
+            icon: <Building2 />,
+            stat: employer.name,
+            action: (
+              <span className="flex items-center gap-1">
+                <EditRecord entity="employer" id={employer.id} values={plainValues(employer)} options={editOptions} caps={ctx.caps} trigger={<Button size="xs" variant="outline"><PenLine /> Edit</Button>} />
+                <Button asChild size="xs" variant="outline">
+                  <Link href="/app/employers">Employers</Link>
+                </Button>
+              </span>
+            ),
+            content: (
+              <dl className="text-sm">
+                {Object.entries(plainValues(employer))
+                  .filter(([k, v]) => v != null && v !== "" && !["id", "agencyId", "createdAt", "updatedAt"].includes(k) && typeof v !== "object")
+                  .slice(0, 12)
+                  .map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-4 border-b py-1.5 last:border-0">
+                      <dt className="capitalize text-muted-foreground">{k.replace(/([A-Z])/g, " $1").toLowerCase()}</dt>
+                      <dd className="text-right">{String(v)}</dd>
+                    </div>
+                  ))}
+              </dl>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: "notes",
+      label: "Notes",
+      icon: <NotebookPen />,
+      stat: `${notes.length} note${notes.length === 1 ? "" : "s"}`,
+      content: (
+        <div className="grid gap-4">
+          <NoteComposer clientId={client.id} matterId={m.id} />
+          {notes.length ? (
+            <ul className="grid gap-2">
+              {notes.slice(0, 20).map((n) => (
+                <li key={n.id} className="rounded-lg border px-3 py-2 text-sm">
+                  <p className="whitespace-pre-wrap">{n.body ?? n.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground" suppressHydrationWarning>
+                    {[n.actorName, relativeDays(n.createdAt)].filter(Boolean).join(" · ")}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No notes yet. Notes also show in the timeline.</p>
+          )}
+        </div>
       ),
     },
     {

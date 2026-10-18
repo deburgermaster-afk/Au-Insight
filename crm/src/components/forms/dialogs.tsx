@@ -98,7 +98,7 @@ export function NewTaskDialog({ pickers, clientId, matterId, trigger }: { picker
   );
 }
 
-export function NewAppointmentDialog({ pickers, clientId, trigger }: { pickers: Pickers; clientId?: string; trigger?: ReactNode }) {
+export function NewAppointmentDialog({ pickers, clientId, matterId, trigger }: { pickers: Pickers; clientId?: string; matterId?: string; trigger?: ReactNode }) {
   return (
     <ActionDialog trigger={trigger ?? plus("Book appointment")} title="Book an appointment" action={createAppointment} submitLabel="Book" success="Appointment booked">
       <TextField label="Title" name="title" placeholder="Initial consultation" />
@@ -123,6 +123,7 @@ export function NewAppointmentDialog({ pickers, clientId, trigger }: { pickers: 
       </Row>
       <Row>
         {clientId ? <input type="hidden" name="clientId" value={clientId} /> : <SelectField label="Client" name="clientId" options={opts(pickers.clients)} />}
+        {matterId ? <input type="hidden" name="matterId" value={matterId} /> : null}
         <SelectField label="With" name="staffId" options={opts(pickers.staff)} placeholder="Me" />
       </Row>
       <TextField label="Consultation fee (AUD)" name="fee" type="number" min={0} step="0.01" placeholder="0" />
