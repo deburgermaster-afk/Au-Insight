@@ -46,3 +46,5 @@ next-env.d.ts
 .wrangler/
 .dev.vars*
 cloudflare-env.d.ts
+scripts/_q.mts
+scripts/_mksess.mts

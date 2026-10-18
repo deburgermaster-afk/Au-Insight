@@ -1,6 +1,7 @@
 import "server-only";
 import { PDFDocument, type PDFFont, type PDFPage, rgb, StandardFonts } from "pdf-lib";
 import type { AgreementContent } from "@/db/crm-schema";
+import { drawLogo } from "@/lib/brand";
 
 // The signed copy: the agreement exactly as sent, the client's signature, and an audit trail
 // (who, when, from where, and the fingerprint of the text they saw).
@@ -39,7 +40,7 @@ export type SignedInfo = {
   signaturePng: string | null;
 };
 
-export async function agreementPdf(c: AgreementContent, s: SignedInfo) {
+export async function agreementPdf(c: AgreementContent, s: SignedInfo, logo?: Uint8Array | null) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(safe(c.title));
   pdf.setAuthor(safe(c.agency.legalName ?? c.agency.name));
@@ -95,7 +96,9 @@ export async function agreementPdf(c: AgreementContent, s: SignedInfo) {
     y -= Math.max(1, lines.length) * 13 + 1;
   };
 
-  // Header
+  // Header (logo above the agency name when the agency has one)
+  const logoH = (await drawLogo(pdf, page, logo, M, y, 160, 36)) ? 36 : 0;
+  if (logoH) y -= logoH + 8;
   text(c.agency.legalName ?? c.agency.name, { font: bold, size: 12 });
   text([c.agency.abn ? `ABN ${c.agency.abn}` : null, c.agency.marn ? `MARN ${c.agency.marn}` : null, c.agency.phone, c.agency.email].filter(Boolean).join("  ·  "), { size: 8.5, color: muted, gap: 14 });
   text(c.title, { font: bold, size: 17, gap: 2 });

@@ -169,6 +169,13 @@
       "when": 1792357075113,
       "tag": "0023_scholarships_tuition",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792358741031,
+      "tag": "0024_agency_logo",
+      "breakpoints": true
     }
   ]
 }

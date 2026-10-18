@@ -26,6 +26,10 @@ import { getClient } from "@/lib/data";
 import { and as andOp, desc as descOp, eq as eqOp } from "drizzle-orm";
 import { FileSignature } from "lucide-react";
 import { CaseReview } from "@/components/ai/case-review";
+import { EligibilityCheck } from "@/components/app/eligibility-check";
+import { hasRules } from "@/lib/eligibility";
+import { eligibilityProfile } from "@/lib/eligibility-data";
+import { visas as visaLibrary } from "@/lib/visas";
 import { SignList } from "@/components/sign/sign-list";
 import { db as dbx, schema as sx } from "@/db";
 import { latestCaseReview } from "@/lib/case-review";
@@ -71,7 +75,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
   const paid = invoices.reduce((a, i) => a + Number(i.paid), 0);
   const nextDue = invoices.filter((i) => Number(i.total) - Number(i.paid) > 0.005 && i.status !== "void").sort((a, b) => String(a.dueAt).localeCompare(String(b.dueAt)))[0];
   const open = matters.filter((m) => m.stage !== "closed");
-  const [review, signRows, [aiP]] = await Promise.all([
+  const [review, signRows, [aiP], eligProfile] = await Promise.all([
     latestCaseReview(ctx.agencyId, c.id, null),
     dbx
       .select({ r: sx.signRequests, signedKey: sx.documents.storageKey, signedName: sx.documents.name })
@@ -81,7 +85,10 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
       .orderBy(descOp(sx.signRequests.updatedAt))
       .limit(20),
     dbx.select({ on: sx.agencyProfile.aiDocsEnabledAt }).from(sx.agencyProfile).where(eqOp(sx.agencyProfile.agencyId, ctx.agencyId)),
+    eligibilityProfile(c),
   ]);
+  const eligVisas = visaLibrary.filter((v) => hasRules(v.code)).map((v) => ({ code: v.code, name: v.name }));
+  const eligStart = open.map((m) => m.visaCode).find((v) => hasRules(v)) ?? (eligProfile.currentVisa === "500" ? "485" : eligProfile.currentVisa === "485" ? "189" : "189");
 
   return (
     <div className="grid gap-4">
@@ -157,6 +164,12 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
 
       <FadeIn delay={0.1}>
         <CaseReview clientId={c.id} matterId={null} initial={review?.result ?? null} finishedAt={review?.finishedAt?.toISOString() ?? null} aiOn={Boolean(aiP?.on) && llmOn()} />
+      </FadeIn>
+
+      <FadeIn delay={0.11}>
+        <Section title="Visa eligibility check" bodyClassName="p-3 sm:p-4">
+          <EligibilityCheck clientId={c.id} profile={eligProfile} visas={eligVisas} initialCode={eligStart} aiOn={Boolean(aiP?.on) && llmOn()} />
+        </Section>
       </FadeIn>
 
       <FadeIn delay={0.12}>

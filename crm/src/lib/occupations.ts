@@ -110,3 +110,16 @@ export async function searchCourses(q: string, level?: string) {
   if (level) params.set("level", `eq.${level}`);
   return rest<Course[]>(`edu_courses?${params}`);
 }
+
+export type RoundSummary = { round_date: string; subclass: string; subclass_name: string; invited: number | null; program_year: string | null; source_url: string | null; seen_run: string | null };
+export type RoundCutoff = { subclass: string; occupation: string; anzsco: string; min_points: number | null };
+
+/** SkillSelect invitation rounds, newest first, with the occupation cut-offs of the latest round. */
+export async function invitationRounds() {
+  const rounds = await rest<RoundSummary[]>("skillselect_rounds?order=round_date.desc,subclass.asc&limit=40&select=round_date,subclass,subclass_name,invited,program_year,source_url,seen_run");
+  const latest = rounds[0]?.round_date;
+  const cutoffs = latest ? await rest<RoundCutoff[]>(`skillselect_round_occupations?round_date=eq.${latest}&order=min_points.desc.nullslast,occupation.asc&select=subclass,occupation,anzsco,min_points`) : [];
+  // seen_run is the importer's run id, e.g. skillselect-cf-20261015T125430Z: when the page was last checked.
+  const checked = rounds.map((r) => r.seen_run?.match(/(\d{4})(\d{2})(\d{2})T/)).filter(Boolean).map((m) => `${m![1]}-${m![2]}-${m![3]}`).sort().at(-1) ?? null;
+  return { rounds, latest: latest ?? null, cutoffs, checked };
+}

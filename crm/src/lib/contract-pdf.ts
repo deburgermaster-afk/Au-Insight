@@ -1,4 +1,5 @@
 import "server-only";
+import { drawLogo } from "@/lib/brand";
 import { PDFDocument, type PDFFont, rgb, StandardFonts } from "pdf-lib";
 
 // Signed employment contract: the text exactly as issued, then a signature and audit page.
@@ -34,7 +35,7 @@ function wrap(text: string, font: PDFFont, size: number, width: number) {
 
 const syd = (d: Date) => `${d.toLocaleString("en-AU", { timeZone: "Australia/Sydney", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" })} (Sydney)`;
 
-export async function contractPdf(c: { title: string; body: string; agencyName: string; id: string; hash: string; sentByName: string | null; sentAt: Date | null; signedName: string; signedAt: Date; ip: string | null; agent: string | null; email: string }) {
+export async function contractPdf(c: { title: string; body: string; agencyName: string; id: string; hash: string; sentByName: string | null; sentAt: Date | null; signedName: string; signedAt: Date; ip: string | null; agent: string | null; email: string }, logo?: Uint8Array | null) {
   const doc = await PDFDocument.create();
   doc.setTitle(safe(c.title));
   doc.setProducer("Lodgely");
@@ -43,6 +44,8 @@ export async function contractPdf(c: { title: string; body: string; agencyName: 
   let page = doc.addPage(A4);
   let y = A4[1] - M;
   const width = A4[0] - M * 2;
+  const logoW = await drawLogo(doc, page, logo, M, y, 160, 36);
+  if (logoW) y -= 36 + 14;
   const write = (text: string, f: PDFFont, size: number, color = ink, indent = 0, gap = 4) => {
     for (const l of wrap(safe(text), f, size, width - indent)) {
       if (y < M + size) {

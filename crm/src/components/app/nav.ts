@@ -12,6 +12,7 @@ import {
   FolderTree,
   GraduationCap,
   Inbox,
+  Newspaper,
   LayoutDashboard,
   type LucideIcon,
   ScrollText,
@@ -54,6 +55,7 @@ export const nav: { label: string; items: NavItem[] }[] = [
     label: "Knowledge",
     items: [
       { title: "Occupations", href: "/app/occupations", icon: SearchCheck, keywords: "anzsco eoi skillselect invitations backlog points" },
+      { title: "Immigration updates", href: "/app/updates", icon: Newspaper, keywords: "news changes invitation rounds skillselect announcements" },
       { title: "Visa library", href: "/app/visas", icon: BookOpenCheck, keywords: "subclass checklist requirements" },
       { title: "Points calculator", href: "/app/points", icon: Calculator, keywords: "points test 189 190 491" },
       { title: "Features", href: "/app/features", icon: Sparkles, keywords: "roadmap" },

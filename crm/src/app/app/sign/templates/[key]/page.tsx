@@ -6,6 +6,7 @@ import { PageSkeleton } from "@/components/app/skeletons";
 import { TemplateEditor } from "@/components/sign/template-editor";
 import { agencyTemplates } from "@/lib/agency-templates";
 import { consentByKey } from "@/lib/consent-templates";
+import { getSettings } from "@/lib/data";
 import { getCtx } from "@/lib/session";
 
 export const metadata = { title: "Edit consent template" };
@@ -15,10 +16,10 @@ async function Editor({ params }: { params: Promise<{ key: string }> }) {
   await connection();
   const ctx = await getCtx();
   if (!["admin", "owner"].includes(ctx.role)) return <p className="rounded-xl border p-6 text-sm text-muted-foreground">Only agency admins can edit consent templates.</p>;
-  const all = await agencyTemplates(ctx.agencyId, { includeDisabled: true });
+  const [all, st] = await Promise.all([agencyTemplates(ctx.agencyId, { includeDisabled: true }), getSettings()]);
   const t = key === "new" ? null : all.find((x) => x.key === key);
   if (key !== "new" && !t) notFound();
-  return <TemplateEditor templateKey={key} initial={t ?? null} original={t && !t.custom ? (consentByKey(key) ?? null) : null} />;
+  return <TemplateEditor templateKey={key} initial={t ?? null} original={t && !t.custom ? (consentByKey(key) ?? null) : null} brand={{ hasLogo: Boolean(st.profile?.logoKey), agencyName: st.profile?.legalName || ctx.agencyName }} />;
 }
 
 export default function TemplatePage({ params }: PageProps<"/app/sign/templates/[key]">) {

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CONSENT_VARS, type ConsentTemplate, consentGroups } from "@/lib/consent-templates";
 import { resetTemplate, saveTemplate, setTemplateHidden, type TemplateInput } from "@/lib/template-actions";
+import { LogoUpload } from "@/components/settings/logo-upload";
 import { PdfPages } from "./pdf-pages";
 
 const BLANK = `## About this consent
@@ -19,7 +20,7 @@ I consent to {agencyLegal} ...
 This consent covers the matter above only. I can withdraw it at any time in writing.`;
 
 /** Edit an agency's wording for a consent form (or write its own), with a live PDF preview. */
-export function TemplateEditor({ templateKey, initial, original }: { templateKey: string; initial: (ConsentTemplate & { disabled?: boolean }) | null; original: ConsentTemplate | null }) {
+export function TemplateEditor({ templateKey, initial, original, brand }: { templateKey: string; initial: (ConsentTemplate & { disabled?: boolean }) | null; original: ConsentTemplate | null; brand: { hasLogo: boolean; agencyName: string } }) {
   const router = useRouter();
   const [v, setV] = useState<TemplateInput>({
     title: initial?.title ?? "",
@@ -33,6 +34,7 @@ export function TemplateEditor({ templateKey, initial, original }: { templateKey
   });
   const [preview, setPreview] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [logoVer, setLogoVer] = useState(0);
   const body = useRef<HTMLTextAreaElement>(null);
   const set = <K extends keyof TemplateInput>(k: K, val: TemplateInput[K]) => setV((x) => ({ ...x, [k]: val }));
 
@@ -48,7 +50,7 @@ export function TemplateEditor({ templateKey, initial, original }: { templateKey
       });
     }, 700);
     return () => clearTimeout(t);
-  }, [v]);
+  }, [v, logoVer]);
 
   const insertVar = (k: string) => {
     const el = body.current;
@@ -139,6 +141,12 @@ export function TemplateEditor({ templateKey, initial, original }: { templateKey
             <input type="checkbox" className="accent-foreground" checked={v.countersign} onChange={(e) => set("countersign", e.target.checked)} /> The registered agent countersigns
           </label>
         </div>
+        <details className="rounded-lg border px-3 py-2 text-[13px]" open={!brand.hasLogo}>
+          <summary className="cursor-pointer font-medium">Letterhead logo{brand.hasLogo ? " · set" : ""}</summary>
+          <div className="mt-2">
+            <LogoUpload hasLogo={brand.hasLogo} agencyName={brand.agencyName} canEdit onChange={() => setLogoVer((x) => x + 1)} />
+          </div>
+        </details>
         <div className="flex flex-wrap gap-2">
           <Button onClick={save} disabled={pending} className="rounded-full">
             {pending ? <Loader2 className="animate-spin" /> : <Save />} Save

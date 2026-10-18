@@ -2,6 +2,8 @@
 // starting document checklist. Checklists are templates the agency edits per matter; always confirm
 // against the Home Affairs document checklist for the stream before lodging.
 
+import { MORE_SPECIFIC } from "@/lib/visa-checklists";
+
 export type ChecklistTemplate = { category: string; label: string; required?: boolean }[];
 
 export type Visa = {
@@ -741,6 +743,8 @@ const SPECIFIC: Record<string, ChecklistTemplate> = {
   "010": [{ category: "Application", label: "Acknowledgement of the substantive application and the Bridging A grant notice (granted automatically)" }],
   ART: [{ category: "Time limit", label: "Date of notification of the decision and the review time limit calculated" }],
 };
+
+for (const [code, items] of Object.entries(MORE_SPECIFIC)) SPECIFIC[code] = [...(SPECIFIC[code] ?? []), ...items];
 
 for (const v of visas) {
   const big = v.checklist.length >= 3 && !["ART", "SA", "MIN", "CANC", "NOM", "SBS", "PI", "444", "601", "651", "771", "988"].includes(v.code);

@@ -11,6 +11,7 @@ import { contractText, draftTemplate, importTemplate, reviewTemplate, ruleReview
 import { contractPdf } from "@/lib/contract-pdf";
 import { BUILTIN_TEMPLATES, renderContract, unfilled } from "@/lib/contracts";
 import { agencyTag } from "@/lib/data";
+import { agencyLogo } from "@/lib/brand";
 import { agencyPrefix, putFile } from "@/lib/files";
 import { dmy } from "@/lib/format";
 import { llmEnabled } from "@/lib/llm";
@@ -254,7 +255,7 @@ export async function signContract(id: string, typedName: string, agreed: boolea
     const signedAt = new Date();
     let pdfKey: string | null = null;
     try {
-      const pdf = await contractPdf({ title: c.title, body: c.body, agencyName: ctx.agencyName, id: c.id, hash: c.hash!, sentByName: c.createdByName, sentAt: c.sentAt, signedName: name, signedAt, ip, agent, email: ctx.email });
+      const pdf = await contractPdf({ title: c.title, body: c.body, agencyName: ctx.agencyName, id: c.id, hash: c.hash!, sentByName: c.createdByName, sentAt: c.sentAt, signedName: name, signedAt, ip, agent, email: ctx.email }, await agencyLogo(ctx.agencyId));
       const blob = await putFile(`${agencyPrefix(ctx.agencyId)}contracts/${c.id}.pdf`, pdf, "application/pdf");
       pdfKey = blob.pathname;
     } catch (e) {

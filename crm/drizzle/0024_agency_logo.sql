@@ -1,0 +1,1 @@
+ALTER TABLE "agency_profile" ADD COLUMN "logo_key" text;

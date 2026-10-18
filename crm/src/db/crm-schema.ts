@@ -63,6 +63,8 @@ export const agencyProfile = pgTable("agency_profile", {
   address: text("address"),
   state: text("state"),
   brandColor: text("brand_color").default("#6d5efc"),
+  /** R2 key of the agency logo (PNG or JPG), shown on letterheads, receipts and agreements. */
+  logoKey: text("logo_key"),
   gstRegistered: boolean("gst_registered").default(true).notNull(),
   invoicePrefix: text("invoice_prefix").default("INV").notNull(),
   /** Where clients pay: shown on invoices and in the client portal. */

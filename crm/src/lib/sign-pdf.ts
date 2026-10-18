@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { degrees, PDFDocument, type PDFFont, type PDFPage, rgb, StandardFonts } from "pdf-lib";
 import type { SignField, SignSigner, SignValue } from "@/db/crm-schema";
+import { drawLogo } from "@/lib/brand";
 import { type ConsentTemplate, type ConsentVars, consentSections, fillConsent } from "@/lib/consent-templates";
 
 // PDFs for e-signing: consent forms rendered from templates (with their fields placed exactly), and
@@ -58,7 +59,10 @@ const fieldLine = rgb(0.62, 0.7, 0.86);
 /** A signer besides the client: another person (sponsor, second parent) or the agent countersigning. */
 export type ExtraSigner = { id: string; role: "other" | "agent"; label: string; name: string; marn?: string | null };
 
-export async function renderConsentPdf(t: ConsentTemplate, vars: Partial<ConsentVars>, extra: ExtraSigner[] = []) {
+/** Template variables plus the agency logo (PNG/JPG bytes) for the letterhead. */
+export type PdfVars = Partial<ConsentVars> & { logo?: Uint8Array | null };
+
+export async function renderConsentPdf(t: ConsentTemplate, vars: PdfVars, extra: ExtraSigner[] = []) {
   for (const size of [10, 9.6, 9.2, 8.8, 8.4, 8, 7.6]) {
     const r = await layoutConsent(t, vars, size, extra);
     if (r.pages === 1) return r;
@@ -67,7 +71,7 @@ export async function renderConsentPdf(t: ConsentTemplate, vars: Partial<Consent
 }
 
 /** Several consent forms as one PDF (a "pack"), each starting on its own page; fields keep their page. */
-export async function renderBundle(list: ConsentTemplate[], vars: Partial<ConsentVars>, extra: ExtraSigner[] = [], agentFor: (t: ConsentTemplate) => boolean = (t) => Boolean(t.countersign)) {
+export async function renderBundle(list: ConsentTemplate[], vars: PdfVars, extra: ExtraSigner[] = [], agentFor: (t: ConsentTemplate) => boolean = (t) => Boolean(t.countersign)) {
   const out = await PDFDocument.create();
   out.setTitle(safe(list.map((t) => t.title).join(", ")).slice(0, 200));
   out.setCreator("Lodgely");
@@ -83,7 +87,7 @@ export async function renderBundle(list: ConsentTemplate[], vars: Partial<Consen
   return { bytes: await out.save(), fields, pages: out.getPageCount() };
 }
 
-async function layoutConsent(t: ConsentTemplate, vars: Partial<ConsentVars>, size: number, extra: ExtraSigner[] = []) {
+async function layoutConsent(t: ConsentTemplate, vars: PdfVars, size: number, extra: ExtraSigner[] = []) {
   const [W, H] = A4;
   const MX = 46; // side margin
   const TOP = 44;
@@ -131,10 +135,17 @@ async function layoutConsent(t: ConsentTemplate, vars: Partial<ConsentVars>, siz
 
   // ── Letterhead ──
   const agencyName = vars.agencyLegal || vars.agency || "";
-  page.drawText(safe(agencyName), { x: MX, y: y - 13, size: 13, font: bold, color: ink });
+  const LOGO_H = 34;
+  const logoW = await drawLogo(pdf, page, vars.logo, MX, y + 2, 150, LOGO_H);
+  // With a logo, the agency name sits beside it, centred on the logo's height.
+  const nameX = MX + (logoW ? logoW + 10 : 0);
+  const nameY = logoW ? y + 2 - LOGO_H / 2 - 4.5 : y - 13;
   const contact = [vars.abn ? `ABN ${vars.abn}` : "", vars.agencyAddress ?? "", [vars.agencyPhone, vars.agencyEmail].filter(Boolean).join("  ·  ")].filter(Boolean);
+  const contactW = Math.max(0, ...contact.map((c) => reg.widthOfTextAtSize(safe(c), 7.5)));
+  const nameSz = Math.min(13, Math.max(9, 13 * ((W - MX - contactW - 16 - nameX) / Math.max(1, bold.widthOfTextAtSize(safe(agencyName), 13)))));
+  page.drawText(safe(agencyName), { x: nameX, y: nameY, size: nameSz, font: bold, color: ink });
   contact.forEach((c, i) => rightText(c, y - 7 - i * 9.5, 7.5));
-  y -= Math.max(20, contact.length * 9.5 + 4);
+  y -= Math.max(logoW ? LOGO_H + 2 : 20, contact.length * 9.5 + 4);
   page.drawRectangle({ x: MX, y: y - 1.6, width: width, height: 1.6, color: ink });
   y -= 14;
   para(t.title, { font: bold, size: size + 6, lead: (size + 6) * 1.2, gap: 1 });

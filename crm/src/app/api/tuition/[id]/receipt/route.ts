@@ -4,6 +4,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { db, schema as s } from "@/db";
 import { auth } from "@/lib/auth";
 import { clientSession } from "@/lib/client-auth";
+import { agencyLogo, drawLogo } from "@/lib/brand";
 import { safe } from "@/lib/sign-pdf";
 
 // Official receipt for tuition the agency collected on an institution's behalf: what was billed,
@@ -44,12 +45,14 @@ export async function GET(_req: Request, { params }: RouteContext<"/api/tuition/
   const text = (v: string, x: number, size = 10, font = reg, color = ink) => page.drawText(safe(v), { x, y, size, font, color });
   const right = (v: string, size = 10, font = reg, color = ink) => page.drawText(safe(v), { x: M + W - font.widthOfTextAtSize(safe(v), size), y, size, font, color });
 
+  const logoW = await drawLogo(pdf, page, await agencyLogo(t.agencyId), M, y + 2, 150, 34);
   y -= 13;
-  text(p?.legalName || org?.name || "", M, 13, bold);
+  if (logoW) page.drawText(safe(p?.legalName || org?.name || ""), { x: M + logoW + 10, y: y - 2, size: 12, font: bold, color: ink });
+  else text(p?.legalName || org?.name || "", M, 13, bold);
   right([p?.abn ? `ABN ${p.abn}` : "", p?.phone ?? ""].filter(Boolean).join("  ·  "), 8, reg, muted);
   y -= 11;
   right([p?.address, p?.email].filter(Boolean).join("  ·  "), 8, reg, muted);
-  y -= 12;
+  y -= logoW ? 16 : 12;
   page.drawRectangle({ x: M, y, width: W, height: 1.6, color: ink });
   y -= 30;
   text("Official receipt", M, 18, bold);

@@ -9,6 +9,7 @@ import { buildAgreement, DEFAULT_TERMS, hashContent } from "@/lib/agreement";
 import { agreementPdf } from "@/lib/agreement-pdf";
 import { clientSession, createMagicLink } from "@/lib/client-auth";
 import { agencyTag } from "@/lib/data";
+import { agencyLogo } from "@/lib/brand";
 import { putFile } from "@/lib/files";
 import { mailEnabled, sendMail } from "@/lib/mail";
 import { notifyStaff } from "@/lib/notify";
@@ -109,7 +110,7 @@ export async function signAgreement(id: string, input: { name: string; signature
     const ip = (h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "").split(",")[0].trim() || null;
     const agent = h.get("user-agent")?.slice(0, 300) ?? null;
     const signedAt = new Date();
-    const pdf = await agreementPdf(a.content, { id: a.id, contentHash: a.contentHash, sentByName: a.sentByName, sentAt: a.createdAt, viewedAt: a.viewedAt, signedAt, signerName: name, signerEmail: c.client.email, signerIp: ip, signerAgent: agent, guideAcknowledged: input.guide, signaturePng: input.signature });
+    const pdf = await agreementPdf(a.content, { id: a.id, contentHash: a.contentHash, sentByName: a.sentByName, sentAt: a.createdAt, viewedAt: a.viewedAt, signedAt, signerName: name, signerEmail: c.client.email, signerIp: ip, signerAgent: agent, guideAcknowledged: input.guide, signaturePng: input.signature }, await agencyLogo(a.agencyId));
     const fileName = `Service agreement ${a.content.matter.reference} (signed).pdf`;
     const blob = await putFile(`agency/${a.agencyId}/client/${a.clientId}/agreements/${fileName}`, Buffer.from(pdf), "application/pdf").catch((e) => {
       console.error("agreement pdf store", e);

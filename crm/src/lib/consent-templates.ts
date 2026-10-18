@@ -406,6 +406,257 @@ I understand review applications must be made within strict time limits from the
     textField: { id: "decision", label: "Decision being reviewed and date notified" },
   },
   {
+    key: "statutory-declaration-support",
+    title: "Statutory declaration in support of an application",
+    group: "Application",
+    summary: "A declaration of facts by the client or a supporter (relationship, dependency, name variations) for the Department.",
+    suggestFor: ["820/801", "309/100", "300", "114", "838", "117", "CIT"],
+    body: `${parties}
+
+## Declaration
+I, the person signing below, make this declaration in support of the application above. The facts set out below are true and correct to the best of my knowledge and belief, and are based on my own knowledge unless I say otherwise.
+
+## Facts declared
+The facts are set out in the space provided below, in numbered paragraphs.
+
+## Commonwealth statutory declaration
+I understand that this form is prepared for my convenience and that, where the Department requires a Commonwealth statutory declaration, I must also sign it before an authorised witness. A person who intentionally makes a false statement in a statutory declaration is guilty of an offence under the Statutory Declarations Act 1959.`,
+    textField: { id: "facts", label: "The facts being declared (numbered paragraphs)", required: true },
+    checkboxes: [{ id: "true", label: "The facts I have written are true and correct.", required: true }],
+  },
+  {
+    key: "relationship-statement",
+    title: "Relationship statement (partner visa)",
+    group: "Application",
+    summary: "The couple's joint account of how they met, their commitment and shared life, for Form 47SP/40SP.",
+    suggestFor: ["820/801", "309/100", "300", "461"],
+    countersign: false,
+    body: `${parties}
+
+## Purpose
+This statement accompanies the partner visa application. It covers the four aspects the Department considers: the financial aspects of the relationship, the nature of the household, the social context, and the nature of our commitment to each other.
+
+## Our relationship
+We confirm that the account we have given {agencyLegal} of how we met, when the relationship began, when we started living together (or why we have lived apart), how we share finances and household responsibilities, and our plans for the future is true, and that the statement prepared from it accurately reflects our relationship.
+
+## Both partners sign
+Both the applicant and the sponsor must read and sign this statement. Neither of us has been pressured into the relationship or into making this application.`,
+    checkboxes: [
+      { id: "true", label: "The relationship statement prepared for us is true and complete.", required: true },
+      { id: "free", label: "I am in this relationship and making this application freely.", required: true },
+    ],
+  },
+  {
+    key: "employment-reference",
+    title: "Employment reference request and consent",
+    group: "Third parties",
+    summary: "Authorises the agency to request and verify employment references from current and past employers.",
+    suggestFor: ["189", "190", "491", "186", "482", "494", "SA", "485"],
+    body: `${parties}
+
+## Authority
+I authorise {agencyLegal} to contact my current and former employers named below to request employment references for my skills assessment or visa application, and to verify the details in references I provide (dates, hours, duties and salary).
+
+## What references must show
+I understand a reference must be on the employer's letterhead, signed by a manager or HR, and state my position, the dates of employment, hours per week, salary and main duties. References are checked by assessing authorities and the Department, who may contact employers directly.
+
+## Honesty
+I confirm the employment history I have given is true. Providing a false reference is a serious offence and can lead to refusal, cancellation and a three-year bar under public interest criterion 4020.`,
+    textField: { id: "employers", label: "Employers you may contact (name, contact person, dates)", required: true },
+  },
+  {
+    key: "change-of-circumstances",
+    title: "Change of circumstances notice (Form 1022 / 929)",
+    group: "Application",
+    summary: "The client confirms a change (address, passport, relationship, new child) for the agency to notify the Department.",
+    body: `${parties}
+
+## Change being notified
+I tell {agencyLegal} of the change described below, which happened after my application was lodged. I ask the agency to notify the Department using Form 1022 (Notification of changes in circumstances) or Form 929 (Change of address and/or passport details), as appropriate, and to update my ImmiAccount.
+
+## Why it matters
+I understand I have a legal obligation to tell the Department about changes in my circumstances while my application is being processed, and that failing to do so can affect the outcome. A change in relationship status, a new child, or a new passport may require further documents.`,
+    textField: { id: "change", label: "What changed and when (with new details)", required: true },
+    checkboxes: [{ id: "docs", label: "I will provide documents showing the change (e.g. new passport, birth certificate).", required: true }],
+  },
+  {
+    key: "file-transfer",
+    title: "Authority to transfer file to another agent",
+    group: "Ending",
+    summary: "The client authorises release of their file and documents to a new registered migration agent or lawyer.",
+    countersign: true,
+    body: `${parties}
+
+## Authority to transfer
+I authorise and direct {agencyLegal} to release my file, including my original documents, copies of applications and correspondence with the Department, to the new representative named below.
+
+## Fees and records
+I understand {agencyLegal} must give my documents to me or my new representative in a timely way, whether or not fees are outstanding, and may keep a copy of the file as required by the Code of Conduct. Any unearned money held in the client account will be refunded or transferred as I direct.
+
+## Form 956
+I understand my new representative will lodge a new Form 956 and that the appointment of {agent} ends when the Department is notified.`,
+    textField: { id: "newagent", label: "New representative (name, MARN or lawyer, email)", required: true },
+  },
+  {
+    key: "refund-request",
+    title: "Refund request and acknowledgement",
+    group: "Money",
+    summary: "Records a client's request for a refund of unearned fees or client account money, and how it's paid.",
+    countersign: true,
+    body: `${parties}
+
+## Request
+I request a refund of the amount described below from {agencyLegal}, for the reasons given. I understand the agency will refund any fees paid in advance for services not yet provided, in line with our service agreement and the Code of Conduct.
+
+## Payment details
+The refund will be paid to the account I nominate in writing. The agency will give me a statement showing the money received, services provided, and the amount refunded.
+
+## Government charges
+I understand visa application charges paid to the Department are refunded only in limited circumstances, by the Department, and not by the agency.`,
+    textField: { id: "refund", label: "Amount requested and reason", required: true },
+  },
+  {
+    key: "complaint-acknowledgement",
+    title: "Complaint acknowledgement and handling consent",
+    group: "Ending",
+    summary: "Acknowledges a client complaint and explains the agency's process and the OMARA complaints option.",
+    body: `${parties}
+
+## Your complaint
+{agencyLegal} acknowledges the complaint described below. The agency will investigate it, respond in writing within 14 days where possible, and tell you what will be done to resolve it.
+
+## Your options
+You can also complain to the Office of the Migration Agents Registration Authority (OMARA) at any time. Making a complaint to the agency does not stop you from complaining to OMARA.
+
+## Consent
+I consent to the agency reviewing my file and speaking with the staff involved to investigate my complaint.`,
+    textField: { id: "complaint", label: "Summary of the complaint", required: true },
+  },
+  {
+    key: "guardian-caaw",
+    title: "Welfare arrangements for a student under 18 (CAAW consent)",
+    group: "Application",
+    summary: "Parent consent to the education provider's accommodation and welfare arrangements, or a nominated relative guardian (Form 157N).",
+    suggestFor: ["500", "590"],
+    body: `${parties}
+
+## Arrangement
+As parent or legal guardian of the student, I confirm the student will be under one of these welfare arrangements until they turn 18: living with a parent or legal custodian, living with a relative over 21 nominated on Form 157N, or under accommodation and welfare arranged by the education provider (a Confirmation of Appropriate Accommodation and Welfare letter).
+
+## Consent
+I consent to the arrangement described below and to {agencyLegal} sharing the student's details with the education provider and the nominated guardian to put it in place.
+
+## Changes
+I understand the student must not change their welfare arrangements without the provider's approval, and that the student visa can be cancelled if appropriate arrangements are not maintained.`,
+    textField: { id: "arrangement", label: "Arrangement (CAAW from provider, or guardian's name and relationship)", required: true },
+  },
+  {
+    key: "release-letter",
+    title: "Request for a release letter / provider transfer consent",
+    group: "Third parties",
+    summary: "The student authorises the agency to request a release from their current provider before 6 months of study.",
+    suggestFor: ["500"],
+    body: `${parties}
+
+## Request
+I ask {agencyLegal} to help me request a release letter from my current education provider so I can transfer to the new course described below before completing six months of my principal course.
+
+## What I understand
+I understand my current provider decides whether to release me under its transfer policy and the National Code, that I may need a new Confirmation of Enrolment, and that changing provider or course may affect my visa conditions and the Genuine Student assessment of any future application.
+
+## Information sharing
+I consent to the agency sharing my enrolment details with my current and new providers for this request.`,
+    textField: { id: "transfer", label: "Current provider and course → new provider and course", required: true },
+  },
+  {
+    key: "offer-acceptance",
+    title: "Authority to accept a course offer",
+    group: "Application",
+    summary: "The student authorises the agency to accept a letter of offer and pay the deposit on their behalf.",
+    suggestFor: ["500", "590"],
+    body: `${parties}
+
+## Authority
+I authorise {agencyLegal} to accept, on my behalf, the offer of a place described below, sign the provider's acceptance form where permitted, and pay the deposit from funds I provide.
+
+## Provider terms
+I have read the provider's written agreement, including its refund policy, and understand that the deposit may not be refundable if I withdraw or my visa is refused, except as the provider's policy and the ESOS framework allow.
+
+## Next steps
+I understand that a Confirmation of Enrolment is issued once the provider receives acceptance and payment, and that the CoE is required to lodge my student visa.`,
+    textField: { id: "offer", label: "Provider, course, intake and deposit amount", required: true },
+    checkboxes: [{ id: "refund", label: "I have read the provider's refund policy.", required: true }],
+  },
+  {
+    key: "visitor-invitation",
+    title: "Invitation letter for a visitor",
+    group: "Third parties",
+    summary: "A host in Australia invites a family member or friend to visit and confirms support for the stay.",
+    suggestFor: ["600"],
+    body: `${parties}
+
+## Invitation
+I, the host signing below, invite the visitor named above to visit me in Australia for the period and purpose described below. I am an Australian citizen, permanent resident, or lawful resident, and my contact details are with {agencyLegal}.
+
+## Support
+I will provide accommodation for the visitor during their stay, and support them financially to the extent described below. I understand the visitor must leave Australia before their visa expires, and that a Sponsored Family stream application may require me to give a security bond.
+
+## Truth
+The information in this letter is true. I understand the Department may contact me to confirm it.`,
+    textField: { id: "visit", label: "Relationship, dates, purpose, and support offered", required: true },
+  },
+  {
+    key: "grant-acknowledgement",
+    title: "Visa grant acknowledgement and conditions briefing",
+    group: "Ending",
+    summary: "The client confirms they received the grant notice and understand their visa conditions and expiry.",
+    body: `${parties}
+
+## Grant received
+I confirm {agencyLegal} has given me the grant notice for the visa above and explained what it allows: the visa period, the dates I must first enter by (where relevant), and any travel restrictions.
+
+## Conditions
+I understand the conditions on my visa, as listed in the grant notice and in VEVO, and that breaching a condition can lead to cancellation. I will check my visa details in VEVO and keep a copy of the grant notice.
+
+## What happens next
+I understand my agent's engagement for this matter is now complete, unless we agree otherwise in writing, and that I should seek advice before applying for another visa or travelling if my circumstances change.`,
+    checkboxes: [{ id: "conditions", label: "My visa conditions and expiry have been explained to me.", required: true }],
+  },
+  {
+    key: "dependent-inclusion",
+    title: "Consent to include a family member in the application",
+    group: "Application",
+    summary: "An adult family member (partner or child over 18) consents to being included as a secondary applicant.",
+    body: `${parties}
+
+## Consent
+I, the family member signing below, consent to being included as a secondary applicant in the application above, and to {agencyLegal} acting for me in it.
+
+## Requirements
+I understand that I must meet health and character requirements, provide my own identity and relationship documents, and that a child over 18 must show they are dependent on the main applicant. A false or misleading statement by any applicant can lead to refusal for everyone in the application.
+
+## Information
+I agree to my personal information being collected, used and given to the Department for this application.`,
+    textField: { id: "member", label: "Family member's name, date of birth and relationship", required: true },
+  },
+  {
+    key: "s48-bar-acknowledgement",
+    title: "Acknowledgement of visa restrictions (section 48 bar / no further stay)",
+    group: "Application",
+    summary: "Records that the client has been told about a section 48 bar, 8503 condition, or other restriction affecting their options.",
+    body: `${parties}
+
+## Advice given
+{agent} has advised me that the restriction described below applies to me, and how it limits which visas I can apply for in Australia.
+
+## What I understand
+I understand that a section 48 bar (after a refusal or cancellation while in Australia) or a No Further Stay condition (8503, 8534 or 8535) means I can only apply for certain visas onshore unless the condition is waived, and that any application I make that is not permitted will be invalid.
+
+## My decision
+I have had the chance to ask questions, and I will tell the agency before lodging any application myself.`,
+    textField: { id: "restriction", label: "The restriction and the options discussed", required: true },
+  },
+  {
     key: "marketing",
     title: "Testimonial and marketing consent",
     group: "Privacy & authority",

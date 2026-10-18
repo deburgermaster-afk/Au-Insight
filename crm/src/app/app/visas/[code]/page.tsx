@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { mattersOnVisa } from "@/lib/data";
+import { criteriaFor } from "@/lib/eligibility";
+import { newsFor } from "@/lib/news";
 import { visaProcessing } from "@/lib/occupations";
 import { stages, visaByCode, visas } from "@/lib/visas";
 import { UseVisa } from "./use-visa";
@@ -167,6 +169,33 @@ export default async function VisaPage({ params }: PageProps<"/app/visas/[code]"
                 ))}
               </ol>
             </Section>
+            <div className="grid content-start gap-3">
+            {criteriaFor(v.code).length ? (
+              <Section title="Eligibility screening">
+                <ul className="grid gap-1.5 text-[13px]">
+                  {criteriaFor(v.code).map((c) => (
+                    <li key={c} className="flex gap-2">
+                      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" /> {c}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-[11px] text-muted-foreground">Open a client and use Visa eligibility check to test these against their record, with a points estimate for points-tested visas.</p>
+              </Section>
+            ) : null}
+            {newsFor(v.code).length ? (
+              <Section title="Recent changes">
+                <ul className="grid gap-2 text-[13px]">
+                  {newsFor(v.code).map((n) => (
+                    <li key={n.id}>
+                      <Link href="/app/updates" className="font-medium hover:underline">
+                        {n.title}
+                      </Link>
+                      <p className="text-[12px] text-muted-foreground">{n.summary}</p>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            ) : null}
             <Section title="Streams">
               {v.streams?.length ? (
                 <ul className="grid gap-2">
@@ -180,6 +209,7 @@ export default async function VisaPage({ params }: PageProps<"/app/visas/[code]"
                 <p className="text-sm text-muted-foreground">This visa has a single stream.</p>
               )}
             </Section>
+            </div>
           </div>
         </TabsContent>
         <TabsContent value="checklist">

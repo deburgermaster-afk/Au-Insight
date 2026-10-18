@@ -17,6 +17,7 @@ import { requireCap, requireRole } from "@/lib/session";
 import { consentVars, responsibleAgent } from "@/lib/sign";
 import { emailClient, emailOther, ev, hashToken, newToken, pendingSigners, recordSignature, signersOf } from "@/lib/sign-core";
 import { detectSignFields } from "@/lib/sign-detect";
+import { agencyLogo } from "@/lib/brand";
 import { type ExtraSigner, renderBundle, sha256 } from "@/lib/sign-pdf";
 
 const fail = (e: unknown): ActionResult => ({ ok: false, error: e instanceof Error ? e.message : String(e) });
@@ -86,7 +87,7 @@ export async function createSignDraft(input: { clientId: string; matterId?: stri
       const list = (await Promise.all(keys.map(async (k) => (k === scholarshipOffer.key ? scholarshipOffer : agencyTemplate(ctx.agencyId, k))))).filter((t): t is NonNullable<typeof t> => Boolean(t));
       if (!list.length) return { ok: false, error: "Template not found." };
       // Letters made from student data (e.g. a scholarship offer) add their own values.
-      const vars = { ...(await consentVars(ctx.agencyId, c.id, matterId, ctx.userId)), ...(input.extraVars ?? {}) };
+      const vars = { ...(await consentVars(ctx.agencyId, c.id, matterId, ctx.userId)), ...(input.extraVars ?? {}), logo: await agencyLogo(ctx.agencyId) };
       // The agent countersigns only the forms that call for it.
       const r = await renderBundle(list, vars, extra, (t) => Boolean(t.countersign));
       bytes = r.bytes;

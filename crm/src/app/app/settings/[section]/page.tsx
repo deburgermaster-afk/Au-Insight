@@ -9,6 +9,7 @@ import { PageSkeleton } from "@/components/app/skeletons";
 import { AiMailCard } from "@/components/mail-ai/controls";
 import { DomainCard } from "@/components/mail/domain-card";
 import { AgencyForm } from "@/components/settings/agency-form";
+import { LogoUpload } from "@/components/settings/logo-upload";
 import { AppearancePicker, ThemeValue } from "@/components/settings/appearance";
 import { Configure } from "@/components/settings/configure";
 import { AiDocsConsent } from "@/components/ai/docs-toggle";
@@ -151,8 +152,8 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
       );
     else
       body = (
+        <div className="grid max-w-4xl gap-4">
         <Summary
-          className="max-w-4xl"
           title="Agency details"
           description="On invoices, agreements, the client portal and emails."
           rows={[
@@ -166,6 +167,12 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
           ]}
           action={edit("Agency details", "details")}
         />
+        <Summary title="Logo" status={<Pill tone={p?.logoKey ? "ok" : "muted"}>{p?.logoKey ? "Set" : "Not set"}</Pill>} description="On the letterhead of every PDF: consent forms, letters, receipts, agreements and contracts.">
+          <div className="p-4">
+            <LogoUpload hasLogo={Boolean(p?.logoKey)} agencyName={p?.legalName || ctx.agencyName} canEdit={admin} />
+          </div>
+        </Summary>
+        </div>
       );
   }
 
