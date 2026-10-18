@@ -153,12 +153,13 @@ export function NewEmployerDialog() {
   );
 }
 
-export function NewInvoiceDialog({ pickers, clientId }: { pickers: Pickers; clientId?: string }) {
+export function NewInvoiceDialog({ pickers, clientId, matterId, trigger }: { pickers: Pickers; clientId?: string; matterId?: string; trigger?: ReactNode }) {
   const [lines, setLines] = useState([0]);
   return (
-    <ActionDialog trigger={plus("New invoice")} title="New invoice" action={createInvoice} submitLabel="Create invoice" success="Invoice created" wide>
+    <ActionDialog trigger={trigger ?? plus("New invoice")} title="New invoice" action={createInvoice} submitLabel="Create invoice" success="Invoice created" wide>
       <Row>
         {clientId ? <input type="hidden" name="clientId" value={clientId} /> : <SelectField label="Client" name="clientId" options={opts(pickers.clients)} required />}
+        {matterId ? <input type="hidden" name="matterId" value={matterId} /> : null}
         <TextField label="Due" name="dueAt" type="date" />
       </Row>
       <div className="grid gap-2">
