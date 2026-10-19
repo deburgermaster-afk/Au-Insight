@@ -149,7 +149,7 @@ export const features: { group: string; items: Feature[] }[] = [
   },
   {
     group: "Documents",
-    items: [...live("Document register per client and matter", "Certified and translated flags", "Document expiry dates", "File uploads to Cloudflare R2", "Client upload links"), ...next("Passport OCR", "Document versioning")],
+    items: [...live("Document register per client and matter", "Certified and translated flags", "Document expiry dates", "File uploads to Cloudflare R2", "Client upload links"), ...live("Passport scan: reads the photo page, checks the machine-readable lines, updates or adds the client"), ...next("Document versioning")],
   },
   {
     group: "Team & organisation",

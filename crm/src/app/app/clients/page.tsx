@@ -11,8 +11,14 @@ import { listClients } from "@/lib/data";
 import { getEditOptions } from "@/lib/edit-data";
 import { getCtx } from "@/lib/session";
 import { ClientsTable } from "./clients-table";
+import { PassportScan } from "@/components/passport/scan";
 
 export const metadata = { title: "Clients" };
+
+async function ScanButton() {
+  const ctx = await getCtx();
+  return <PassportScan agencyId={ctx.agencyId} />;
+}
 
 async function Rows({ segment }: { segment?: string }) {
   const ctx = await getCtx();
@@ -46,6 +52,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
                 <GitMerge /> Duplicates
               </Link>
             </Button>
+            <ScanButton />
             <Button size="sm" variant="outline" asChild>
               <Link href="/app/clients/import">
                 <Upload /> Import

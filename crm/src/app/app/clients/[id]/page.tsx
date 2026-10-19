@@ -2,6 +2,7 @@ import { ArrowLeft, Briefcase, Download, Eye, FileText, Mail, Plus, UsersRound }
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import { PassportScan } from "@/components/passport/scan";
 import { OccupationWatchPanel } from "@/components/occupations/watch-panel";
 import { Suspense } from "react";
 import { Guard } from "@/components/app/guard";
@@ -103,6 +104,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
           <p className="truncate text-[13px] text-muted-foreground">{[c.occupation, c.nationality, c.onshore ? "Onshore" : "Offshore"].filter(Boolean).join(" • ")}</p>
         </div>
         <HeaderActions>
+          <PassportScan agencyId={ctx.agencyId} clientId={c.id} current={{ firstName: c.firstName, lastName: c.lastName, passportNumber: c.passportNumber, passportExpiry: c.passportExpiry, dateOfBirth: c.dateOfBirth, nationality: c.nationality, gender: c.gender, countryOfBirth: c.countryOfBirth }} />
           <ClientStageSelect clientId={c.id} stage={c.stage} />
           <ManageClient client={{ id: c.id, name, assignedTo: c.assignedTo }} values={plainValues(c)} options={editOptions} caps={ctx.caps} staff={editOptions.staff} />
           <ComposeDialog
