@@ -34,7 +34,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Mark look-alikes as different people",
       ),
       ...live("Client tags and saved segments", "Filter by tag, visa, expiry, location, source, nationality and case officer", "Bulk tag, bulk email (one email per client) and CSV export"),
-      ...next("Custom fields", "Birthday and anniversary reminders"),
+      ...live("Birthday reminders, with an optional greeting email", "Visa grant anniversaries with the next step (citizenship, RRV, 191, 186 transition)"),
+      ...next("Custom fields"),
     ],
   },
   {
@@ -146,7 +147,7 @@ export const features: { group: string; items: Feature[] }[] = [
   },
   {
     group: "Employers",
-    items: [...live("Employer directory", "ABN and contact details", "SBS approval and expiry", "Matters per employer", "Nomination tracking: program, position, salary, TRN, status and lodge-by date", "Employer page with nominations and sponsored cases"), ...next("Sponsorship obligation reminders", "Labour market testing evidence tracker")],
+    items: [...live("Employer directory", "ABN and contact details", "SBS approval and expiry", "Matters per employer", "Nomination tracking: program, position, salary, TRN, status and lodge-by date", "Employer page with nominations and sponsored cases"), ...live("Sponsorship obligation reminders: SBS, nomination approvals and sponsored workers' visas", "28-day Home Affairs notification tracker"), ...next("Labour market testing evidence tracker")],
   },
   {
     group: "Documents",
