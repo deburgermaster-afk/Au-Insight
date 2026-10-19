@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Composer } from "@/components/mail/composer";
 import { createAppointment, createEmployer, createInvoice, createMatter, createTask, recordPayment } from "@/lib/actions";
 import { stages, visas } from "@/lib/visas";
+import { REPEAT_OPTIONS } from "@/lib/record-specs";
 import { ActionDialog } from "./action-dialog";
 import { AreaField, type Option, Row, SelectField, TextField } from "./fields";
 
@@ -92,6 +93,10 @@ export function NewTaskDialog({ pickers, clientId, matterId, trigger }: { picker
         <TextField label="Due" name="dueAt" type="date" />
         <SelectField label="Priority" name="priority" defaultValue="normal" options={priorityOpts} />
         <SelectField label="Assignee" name="assignedTo" options={opts(pickers.staff)} placeholder="Me" />
+      </Row>
+      <Row>
+        <SelectField label="Repeats" name="repeat" defaultValue="none" options={REPEAT_OPTIONS} />
+        <TextField label="Repeat until (optional)" name="repeatUntil" type="date" />
       </Row>
       {!clientId ? <SelectField label="Client (optional)" name="clientId" options={opts(pickers.clients)} /> : null}
     </ActionDialog>

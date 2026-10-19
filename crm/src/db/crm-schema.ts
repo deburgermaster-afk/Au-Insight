@@ -400,6 +400,11 @@ export const tasks = pgTable(
     clientId: text("client_id").references(() => clients.id, { onDelete: "cascade" }),
     matterId: text("matter_id").references(() => matters.id, { onDelete: "cascade" }),
     createdBy: text("created_by"),
+    /** none | daily | weekly | fortnightly | monthly | quarterly | yearly */
+    repeat: text("repeat").default("none").notNull(),
+    repeatUntil: date("repeat_until"),
+    /** The next occurrence made when this one was done (so re-ticking it doesn't make another). */
+    nextTaskId: text("next_task_id"),
     ...stamps,
   },
   (t) => [index("tasks_agency_idx").on(t.agencyId, t.status, t.dueAt)],

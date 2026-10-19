@@ -1,5 +1,6 @@
 "use client";
 
+import { Repeat } from "lucide-react";
 import { EditRecord } from "@/components/edit/edit-record";
 import type { EditOptions } from "@/lib/edit-data";
 
@@ -30,6 +31,8 @@ type T = {
   clientName: string | null;
   matterId: string | null;
   matterRef: string | null;
+  repeat?: string;
+  repeatUntil?: string | null;
 };
 
 const columns = [
@@ -88,8 +91,13 @@ export function TaskBoard({ tasks, me, options, caps }: { tasks: T[]; me: string
                       <Pill t={overdue(t) ? "red" : priorityTone[t.priority]} className="h-5 px-1.5 text-[10px]">
                         {t.dueAt ? relativeDays(t.dueAt) : label(t.priority)}
                       </Pill>
+                      {t.repeat && t.repeat !== "none" ? (
+                        <span title={`Repeats ${t.repeat}`} className="text-muted-foreground">
+                          <Repeat className="size-3" />
+                        </span>
+                      ) : null}
                       <span className="truncate text-[11px] text-muted-foreground">{t.assignee}</span>
-                      <EditRecord entity="task" id={t.id} values={{ title: t.title, description: t.description, dueAt: t.dueAt ? new Date(t.dueAt).toISOString().slice(0, 10) : null, priority: t.priority, status: t.status, assignedTo: t.assignedTo }} options={options} caps={caps} canDelete />
+                      <EditRecord entity="task" id={t.id} values={{ title: t.title, description: t.description, dueAt: t.dueAt ? new Date(t.dueAt).toISOString().slice(0, 10) : null, priority: t.priority, status: t.status, assignedTo: t.assignedTo, repeat: t.repeat ?? "none", repeatUntil: t.repeatUntil ?? null }} options={options} caps={caps} canDelete />
                       <DropdownMenu>
                         <DropdownMenuTrigger className="ml-auto rounded px-1.5 text-[11px] text-muted-foreground hover:bg-muted">Move</DropdownMenuTrigger>
                         <DropdownMenuContent align="end">

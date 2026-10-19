@@ -8,6 +8,7 @@ import { db, schema as s } from "@/db";
 import { agencyTag } from "@/lib/data";
 import { actionCtx, type Ctx, requireCap, requireRole } from "@/lib/session";
 import { visaByCode } from "@/lib/visas";
+import { repeatTask } from "@/lib/task-repeat";
 import { lodgeBlocked } from "@/lib/signoff";
 import { checklistFor, feesFor } from "@/lib/workflow";
 import { pickAssignee, workflowFor } from "@/lib/workflow-server";
@@ -283,6 +284,8 @@ export async function addChecklistItem(matterId: string, form: FormData): Promis
 
 // ── Tasks and appointments ────────────────────────────────────────────────────────────────────
 
+const REPEATS = ["none", "daily", "weekly", "fortnightly", "monthly", "quarterly", "yearly"] as const;
+
 export async function createTask(form: FormData): Promise<ActionResult> {
   try {
     const ctx = await requireRole("staff");
@@ -301,6 +304,8 @@ export async function createTask(form: FormData): Promise<ActionResult> {
         clientId: blank(form.get("clientId")),
         matterId: blank(form.get("matterId")),
         createdBy: ctx.userId,
+        repeat: z.enum(REPEATS).catch("none").parse(blank(form.get("repeat")) ?? "none"),
+        repeatUntil: blank(form.get("repeatUntil")),
       })
       .returning({ id: s.tasks.id });
     refresh(ctx);
@@ -318,7 +323,10 @@ export async function setTaskStatus(taskId: string, status: string): Promise<Act
       .set({ status: status as typeof s.tasks.$inferInsert.status })
       .where(and(eq(s.tasks.agencyId, ctx.agencyId), eq(s.tasks.id, taskId)))
       .returning();
-    if (t && status === "done") await log(ctx, { clientId: t.clientId, matterId: t.matterId, kind: "task", title: `Task done: ${t.title}` });
+    if (t && status === "done") {
+      await log(ctx, { clientId: t.clientId, matterId: t.matterId, kind: "task", title: `Task done: ${t.title}` });
+      await repeatTask(t);
+    }
     refresh(ctx);
     return { ok: true };
   } catch (e) {

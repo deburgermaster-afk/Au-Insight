@@ -6,6 +6,7 @@ import { db, schema as s } from "@/db";
 import type { ActionResult } from "@/lib/actions";
 import { agencyTag } from "@/lib/data";
 import { type EntityKey, type FieldSpec, SPECS } from "@/lib/record-specs";
+import { repeatTask } from "@/lib/task-repeat";
 import { type Ctx, requireRole } from "@/lib/session";
 
 const fail = (e: unknown): ActionResult => ({ ok: false, error: e instanceof Error ? e.message : String(e) });
@@ -138,6 +139,10 @@ export async function saveRecord(entity: EntityKey, id: string, form: FormData):
     await checkRefs(ctx, set, spec.fields.filter((f) => f.key in set));
     const t = TABLES[entity];
     await db.update(t).set(set).where(and(eq(t.agencyId, ctx.agencyId), eq(t.id, id)));
+    if (entity === "task" && set.status === "done") {
+      const [task] = await db.select().from(s.tasks).where(eq(s.tasks.id, id));
+      if (task) await repeatTask(task);
+    }
     if (entity === "application" && "institutionId" in set && set.institutionId && !("commissionRate" in set)) {
       // A different provider means its commission rate, unless staff typed one.
       const [inst] = await db.select({ rate: s.institutions.commissionRate }).from(s.institutions).where(eq(s.institutions.id, String(set.institutionId)));

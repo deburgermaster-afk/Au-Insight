@@ -40,6 +40,16 @@ export const AQF: Record<number, string> = {
 
 import { LMT_STATUSES, NOMINATION_PROGRAMS, NOMINATION_STATUSES } from "@/lib/nominations";
 
+export const REPEAT_OPTIONS = [
+  { value: "none", label: "Doesn't repeat" },
+  { value: "daily", label: "Every day" },
+  { value: "weekly", label: "Every week" },
+  { value: "fortnightly", label: "Every fortnight" },
+  { value: "monthly", label: "Every month" },
+  { value: "quarterly", label: "Every 3 months" },
+  { value: "yearly", label: "Every year" },
+];
+
 const stages = ["lead", "prospect", "active", "on_hold", "past", "lost"].map((v) => ({ value: v, label: v.replace("_", " ").replace(/^\w/, (c) => c.toUpperCase()) }));
 const priorities = ["low", "normal", "high", "urgent"].map((v) => ({ value: v, label: v.replace(/^\w/, (c) => c.toUpperCase()) }));
 const states = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"].map((v) => ({ value: v, label: v }));
@@ -105,6 +115,8 @@ export const SPECS: Record<EntityKey, EntitySpec> = {
       { key: "priority", label: "Priority", type: "select", options: priorities },
       { key: "status", label: "Status", type: "select", options: ["todo", "doing", "waiting", "done"].map((v) => ({ value: v, label: { todo: "To do", doing: "Doing", waiting: "Waiting", done: "Done" }[v]! })) },
       { key: "assignedTo", label: "Assignee", type: "user" },
+      { key: "repeat", label: "Repeats", type: "select", options: REPEAT_OPTIONS },
+      { key: "repeatUntil", label: "Repeat until", type: "date", hint: "Leave blank to keep repeating." },
     ],
   },
   appointment: {

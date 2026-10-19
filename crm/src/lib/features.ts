@@ -123,7 +123,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Consultation fees on bookings",
       ),
       ...live("Online booking page: appointment types, hours, fees and who takes them", "Clients reschedule or cancel from a private link", "Video consultation links (a private room per booking, or your own Zoom link)", "Calendar invites for Google, Outlook and Apple", "Your appointments in Google, Outlook or Apple Calendar (subscription feed)", "Email reminders the day before (and SMS when Twilio is connected)"),
-      ...next("Recurring tasks", "Two-way calendar sync (busy times from Google and Outlook)"),
+      ...live("Recurring tasks: daily to yearly, with an end date; the next one appears when this one is done"),
+      ...next("Two-way calendar sync (busy times from Google and Outlook)"),
     ],
   },
   {
