@@ -117,9 +117,12 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
       body = (
         <Summary
           className="max-w-4xl"
-          title="Sign-off before lodging"
-          status={<Pill tone={(p?.requireSignoff ?? true) ? "ok" : "muted"}>{(p?.requireSignoff ?? true) ? "Required" : "Optional"}</Pill>}
-          description={(p?.requireSignoff ?? true) ? "A second registered agent approves the lodgement pack before a matter can be marked Lodged." : "Agents can lodge without a second agent's approval. Sign-off can still be requested."}
+          title="Practice rules"
+          description="Rules everyone in the agency works to. Only the owner can change them."
+          rows={[
+            { label: "Sign-off before lodging", value: (p?.requireSignoff ?? true) ? "Required: a second registered agent approves the lodgement pack" : "Optional" },
+            { label: "Two-factor sign-in", value: p?.require2fa ? "Required for every staff member" : "Optional: each person can turn it on under Security", missing: !p?.require2fa },
+          ]}
           action={
             ctx.role === "owner" ? (
               <Configure title="Practice rules" label="Change">
