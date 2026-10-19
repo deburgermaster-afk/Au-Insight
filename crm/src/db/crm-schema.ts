@@ -102,6 +102,9 @@ export const agencyProfile = pgTable("agency_profile", {
   aiDocsEnabledBy: text("ai_docs_enabled_by"),
   /** Agency's own checklists, fees, assignment rules and pick lists (Settings → Workflow). */
   workflow: jsonb("workflow").$type<WorkflowConfig>(),
+  /** Online booking page: on/off and the agency's bookable hours (agency time zone). */
+  bookingEnabled: boolean("booking_enabled").default(false).notNull(),
+  bookingHours: jsonb("booking_hours").$type<BookingHours>(),
   /** Every staff member must set up two-factor sign-in (authenticator app). */
   require2fa: boolean("require_2fa").default(false).notNull(),
   /** Xero / MYOB account codes and whether invoices sync automatically. */
@@ -436,10 +439,61 @@ export const appointments = pgTable(
     staffId: text("staff_id").references(() => user.id, { onDelete: "set null" }),
     fee: numeric("fee"),
     notes: text("notes"),
+    /** booked | cancelled | completed | no_show */
+    status: text("status").default("booked").notNull(),
+    /** staff | online */
+    source: text("source").default("staff").notNull(),
+    bookingTypeId: text("booking_type_id"),
+    videoUrl: text("video_url"),
+    /** Hash of the client's private manage (reschedule / cancel) link. */
+    manageTokenHash: text("manage_token_hash"),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
     ...stamps,
   },
   (t) => [index("appointments_agency_idx").on(t.agencyId, t.startsAt)],
 );
+
+/** Appointment types clients can book online: "Initial consultation, 30 min, $150, video". */
+export const bookingTypes = pgTable(
+  "booking_types",
+  {
+    id: id(),
+    agencyId: agency(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    minutes: integer("minutes").default(30).notNull(),
+    fee: numeric("fee"),
+    /** office | phone | video | choice */
+    mode: text("mode").default("video").notNull(),
+    /** Who takes these bookings; empty means any registered agent. */
+    staffIds: text("staff_ids").array().default(sql`'{}'::text[]`).notNull(),
+    /** A fixed meeting link (e.g. a Zoom room); otherwise each video booking gets its own link. */
+    videoLink: text("video_link"),
+    bufferMinutes: integer("buffer_minutes").default(10).notNull(),
+    minNoticeHours: integer("min_notice_hours").default(12).notNull(),
+    maxDaysAhead: integer("max_days_ahead").default(45).notNull(),
+    /** Raise an invoice for the fee when it's booked, so the client can pay in their portal. */
+    invoiceOnBooking: boolean("invoice_on_booking").default(false).notNull(),
+    active: boolean("active").default(true).notNull(),
+    sort: integer("sort").default(0).notNull(),
+    ...stamps,
+  },
+  (t) => [uniqueIndex("booking_types_agency_slug").on(t.agencyId, t.slug)],
+);
+
+export type BookingHours = Record<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun", [string, string][]>;
+
+/** A private calendar subscription URL per staff member (Google, Outlook, Apple). Token stored hashed. */
+export const calendarFeeds = pgTable("calendar_feeds", {
+  id: id(),
+  agencyId: agency(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  ...stamps,
+});
 
 export const invoices = pgTable(
   "invoices",

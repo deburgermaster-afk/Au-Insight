@@ -39,6 +39,8 @@ import { UsageBars } from "@/components/settings/usage-meter";
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { AccountingForm, ExportForm, SyncNowButton } from "@/components/settings/accounting";
 import { accountingFor } from "@/lib/accounting";
+import { BookingHoursForm, BookingLink, BookingTypes } from "@/components/settings/booking";
+import { DEFAULT_HOURS } from "@/lib/booking";
 import { db, schema as s } from "@/db";
 import { getSettings } from "@/lib/data";
 import { dmy } from "@/lib/format";
@@ -225,6 +227,26 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
           ) : null
         }
       />
+    );
+  }
+
+  if (slug === "booking") {
+    const [org] = await db.select({ slug: s.organization.slug }).from(s.organization).where(eq(s.organization.id, ctx.agencyId));
+    const types = await db.select().from(s.bookingTypes).where(eq(s.bookingTypes.agencyId, ctx.agencyId)).orderBy(s.bookingTypes.sort, s.bookingTypes.name);
+    const opts = await getEditOptions();
+    const base = `${process.env.BETTER_AUTH_URL ?? "https://lodgely.mapcn.workers.dev"}/book/${org?.slug}`;
+    body = (
+      <div className="grid max-w-4xl gap-4">
+        <Summary title="Your booking page" status={<Pill tone={p?.bookingEnabled ? "ok" : "muted"}>{p?.bookingEnabled ? "Taking bookings" : "Off"}</Pill>} description="Share this link on your website, email signature and social media.">
+          <BookingLink url={base} />
+        </Summary>
+        <Summary title="Appointment types" description="Each one has its own length, fee, meeting style and staff.">
+          <BookingTypes rows={types.map((t) => ({ id: t.id, slug: t.slug, name: t.name, description: t.description ?? "", minutes: t.minutes, fee: t.fee == null ? null : Number(t.fee), mode: t.mode as "video", staffIds: t.staffIds, videoLink: t.videoLink ?? "", bufferMinutes: t.bufferMinutes, minNoticeHours: t.minNoticeHours, maxDaysAhead: t.maxDaysAhead, invoiceOnBooking: t.invoiceOnBooking, active: t.active }))} staff={opts.staff.map((x) => ({ id: x.value, name: x.label }))} base={base} canEdit={admin} />
+        </Summary>
+        <Summary title="Hours" description="When clients can book, in Sydney time. Times already booked for a staff member are never offered.">
+          <BookingHoursForm enabled={p?.bookingEnabled ?? false} hours={p?.bookingHours ?? DEFAULT_HOURS} canEdit={admin} />
+        </Summary>
+      </div>
     );
   }
 

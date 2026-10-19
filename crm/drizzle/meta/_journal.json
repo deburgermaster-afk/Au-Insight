@@ -204,6 +204,13 @@
       "when": 1792393417220,
       "tag": "0028_occupation_watch",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792394007639,
+      "tag": "0029_bookings",
+      "breakpoints": true
     }
   ]
 }

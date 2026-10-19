@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { getCtx } from "@/lib/session";
 
@@ -47,7 +47,7 @@ async function dashboardFor(agencyId: string, userId: string) {
     db
       .select({ id: s.appointments.id, title: s.appointments.title, startsAt: s.appointments.startsAt, kind: s.appointments.kind, location: s.appointments.location })
       .from(s.appointments)
-      .where(and(eq(s.appointments.agencyId, agencyId), gte(s.appointments.startsAt, today)))
+      .where(and(eq(s.appointments.agencyId, agencyId), gte(s.appointments.startsAt, today), ne(s.appointments.status, "cancelled")))
       .orderBy(asc(s.appointments.startsAt))
       .limit(6),
     db
@@ -260,7 +260,7 @@ async function appointmentsFor(agencyId: string) {
     .from(s.appointments)
     .leftJoin(s.clients, eq(s.clients.id, s.appointments.clientId))
     .leftJoin(s.user, eq(s.user.id, s.appointments.staffId))
-    .where(eq(s.appointments.agencyId, agencyId))
+    .where(and(eq(s.appointments.agencyId, agencyId), ne(s.appointments.status, "cancelled")))
     .orderBy(asc(s.appointments.startsAt))
     .limit(500);
 }

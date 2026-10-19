@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { EditRecord } from "@/components/edit/edit-record";
 import type { EditOptions } from "@/lib/edit-data";
 
-type A = { id: string; title: string; kind: string; startsAt: Date; endsAt: Date; location: string | null; clientName: string | null; staff: string | null; staffId: string | null; fee: string | null; notes: string | null };
+type A = { id: string; title: string; kind: string; startsAt: Date; endsAt: Date; location: string | null; clientName: string | null; staff: string | null; staffId: string | null; fee: string | null; notes: string | null; videoUrl?: string | null; source?: string };
 
 const kindTone: Record<string, string> = {
   consultation: "bg-primary/15 text-primary",
@@ -140,6 +140,12 @@ function Month({ items, options, caps }: { items: A[]; options: EditOptions; cap
                       <MapPin className="size-3" /> {a.location}
                     </p>
                   ) : null}
+                  {a.videoUrl ? (
+                    <a href={a.videoUrl} target="_blank" rel="noreferrer" className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-xs text-primary hover:bg-primary/15">
+                      Join video call
+                    </a>
+                  ) : null}
+                  {a.source === "online" ? <p className="mt-1 text-[11px] text-muted-foreground">Booked online by the client</p> : null}
                 </motion.div>
               ))
             ) : (

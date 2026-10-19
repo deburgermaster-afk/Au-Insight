@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import type { ClientCtx } from "@/lib/client-auth";
 
@@ -27,7 +27,7 @@ export async function portalHome(c: ClientCtx) {
       .select({ a: s.appointments, staff: s.user.name })
       .from(s.appointments)
       .leftJoin(s.user, eq(s.user.id, s.appointments.staffId))
-      .where(and(eq(s.appointments.agencyId, agencyId), eq(s.appointments.clientId, clientId), gte(s.appointments.startsAt, new Date())))
+      .where(and(eq(s.appointments.agencyId, agencyId), eq(s.appointments.clientId, clientId), gte(s.appointments.startsAt, new Date()), ne(s.appointments.status, "cancelled")))
       .orderBy(asc(s.appointments.startsAt))
       .limit(3),
     timeline(c, null, 6),
