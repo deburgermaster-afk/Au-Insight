@@ -33,7 +33,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Merge duplicates: pick each detail, cases, documents, invoices and payments move across",
         "Mark look-alikes as different people",
       ),
-      ...next("Custom fields", "Client tags and segments", "Birthday and anniversary reminders"),
+      ...live("Client tags and saved segments", "Filter by tag, visa, expiry, location, source, nationality and case officer", "Bulk tag, bulk email (one email per client) and CSV export"),
+      ...next("Custom fields", "Birthday and anniversary reminders"),
     ],
   },
   {
@@ -59,7 +60,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Matter notes and tasks",
       ),
       ...live("Points test calculator (189, 190, 491)", "RFI (s56) deadline tracker with dashboard alerts", "Consumer Guide given (Code s38) on every matter", "Signed service agreement (Code s42) blocks invoicing until recorded", "Lodgement and decision steps limited to agents with a current MARN"),
-      ...next("Supervisor sign-off before lodgement", "ImmiAccount lodgement pack export (PDF bundle)", "AAT/ART review deadlines", "Matter templates per agency", "Bulk stage changes"),
+      ...live("Supervisor sign-off before lodgement", "ImmiAccount lodgement pack export (PDF bundle)", "ART review deadlines"),
+      ...next("Matter templates per agency", "Bulk stage changes"),
     ],
   },
   {
@@ -73,7 +75,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Links to the Home Affairs page for each visa",
         "Search the library from ⌘K",
       ),
-      ...next("Legislative instrument updates feed", "Occupation lists (MLTSSL, STSOL, CSOL) lookup", "Processing-time tracker", "Visa fee calculator"),
+      ...live("Immigration updates feed with sources", "Occupation lists (MLTSSL, STSOL, CSOL) lookup", "Processing-time tracker"),
+      ...next("Visa fee calculator"),
     ],
   },
   {
@@ -101,7 +104,8 @@ export const features: { group: string; items: Feature[] }[] = [
     group: "Mailbox",
     items: [
       ...live("Agency inbox", "Sent, archive and starred folders", "Compose and send email", "Messages filed to clients", "Read / unread state", "Sending through Resend from your agency domain"),
-      ...next("A mailbox for every employee", "Shared mailboxes (info@, admin@)", "Inbound mail routing", "Email templates with merge fields", "Attachments to client documents", "Scheduled send"),
+      ...live("A mailbox for every employee", "Shared mailboxes (info@, admin@)", "Inbound mail routing", "Attachments to client documents"),
+      ...next("Email templates with merge fields", "Scheduled send"),
     ],
   },
   {
@@ -135,16 +139,16 @@ export const features: { group: string; items: Feature[] }[] = [
         "Ledger of every receipt",
         "Billed, collected and outstanding totals",
       ),
-      ...next("Stripe card payments", "Trust account reconciliation report", "Xero and MYOB sync", "Service agreements and Consumer Guide e-sign", "Payment plans", "Refund workflow"),
+      ...live("Stripe card payments", "Trust account reconciliation report", "Xero sync: invoices and payments, automatic every 10 minutes", "MYOB AccountRight import files and invoices CSV", "Service agreements and Consumer Guide e-sign", "Payment plans", "Refund workflow"),
     ],
   },
   {
     group: "Employers",
-    items: [...live("Employer directory", "ABN and contact details", "SBS approval and expiry", "Matters per employer"), ...next("Nomination tracking", "Sponsorship obligation reminders", "Labour market testing evidence tracker")],
+    items: [...live("Employer directory", "ABN and contact details", "SBS approval and expiry", "Matters per employer", "Nomination tracking: program, position, salary, TRN, status and lodge-by date", "Employer page with nominations and sponsored cases"), ...next("Sponsorship obligation reminders", "Labour market testing evidence tracker")],
   },
   {
     group: "Documents",
-    items: [...live("Document register per client and matter", "Certified and translated flags", "Document expiry dates"), ...next("File uploads to Cloudflare R2", "Client upload links", "Passport OCR", "Document versioning")],
+    items: [...live("Document register per client and matter", "Certified and translated flags", "Document expiry dates", "File uploads to Cloudflare R2", "Client upload links"), ...next("Passport OCR", "Document versioning")],
   },
   {
     group: "Team & organisation",
@@ -159,7 +163,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Audit log of every change",
       ),
       ...live("Invite by email with position and MARN", "Positions: principal, MARA agent, education agent, consultant, reception, accounts, HR", "Navigation and actions follow each person's position", "MARN expiry warnings"),
-      ...next("Multiple offices and branches", "Two-factor authentication", "Single sign-on", "Per-role permission editor"),
+      ...live("Per-role permission editor"),
+      ...next("Multiple offices and branches", "Two-factor authentication", "Single sign-on"),
     ],
   },
   {
@@ -359,7 +364,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Fastest PR route from the current visa and course when there's no agency history",
         "Courses that add points, matched to real CRICOS courses",
       ),
-      ...next("Offer letter and CoE upload to the student", "Commission invoices to providers", "Provider portal links"),
+      ...live("Offer letter and CoE upload, shown and emailed to the student"),
+      ...next("Commission invoices to providers", "Provider portal links"),
     ],
   },
   {
