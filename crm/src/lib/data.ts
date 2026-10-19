@@ -423,7 +423,42 @@ async function reportsFor(agencyId: string) {
       .orderBy(sql`1`),
     db.select({ outcome: s.matters.outcome, n: count() }).from(s.matters).where(and(eq(s.matters.agencyId, agencyId), sql`${s.matters.outcome} is not null`)).groupBy(s.matters.outcome),
   ]);
-  return { byVisa, bySource, revenue: byMonth.map((r) => ({ month: r.month, amount: num(r.amount) })), outcomes };
+  const [funnelRows, staffRows] = await Promise.all([
+    // One row per client: how far they got (any matter engaged, lodged, granted).
+    db.execute<{ source: string | null; stage: string; engaged: boolean; lodged: boolean; granted: boolean }>(sql`
+      select c.source, c.stage,
+        exists(select 1 from ${s.matters} m where m.client_id = c.id and m.stage not in ('enquiry','consultation')) as engaged,
+        exists(select 1 from ${s.matters} m where m.client_id = c.id and m.lodged_at is not null) as lodged,
+        exists(select 1 from ${s.matters} m where m.client_id = c.id and m.outcome = 'granted') as granted
+      from ${s.clients} c where c.agency_id = ${agencyId}`),
+    db.execute<{ id: string; name: string; open: number; lodged90: number; granted12: number; refused12: number; tasksDone30: number; overdue: number; meetings30: number; collected90: string }>(sql`
+      select u.id, u.name,
+        (select count(*)::int from ${s.matters} m where m.agency_id = ${agencyId} and m.assigned_to = u.id and m.stage <> 'closed') as open,
+        (select count(*)::int from ${s.matters} m where m.agency_id = ${agencyId} and m.assigned_to = u.id and m.lodged_at >= current_date - 90) as "lodged90",
+        (select count(*)::int from ${s.matters} m where m.agency_id = ${agencyId} and m.assigned_to = u.id and m.outcome = 'granted' and m.decision_at >= current_date - 365) as "granted12",
+        (select count(*)::int from ${s.matters} m where m.agency_id = ${agencyId} and m.assigned_to = u.id and m.outcome = 'refused' and m.decision_at >= current_date - 365) as "refused12",
+        (select count(*)::int from ${s.tasks} t where t.agency_id = ${agencyId} and t.assigned_to = u.id and t.status = 'done' and t.updated_at >= now() - interval '30 days') as "tasksDone30",
+        (select count(*)::int from ${s.tasks} t where t.agency_id = ${agencyId} and t.assigned_to = u.id and t.status <> 'done' and t.due_at < now()) as overdue,
+        (select count(*)::int from ${s.appointments} a where a.agency_id = ${agencyId} and a.staff_id = u.id and a.status <> 'cancelled' and a.starts_at between now() - interval '30 days' and now()) as "meetings30",
+        (select coalesce(sum(l.amount),0)::text from ${s.ledger} l join ${s.invoices} i on i.id = l.invoice_id join ${s.matters} m on m.id = i.matter_id where l.agency_id = ${agencyId} and l.account = 'office' and l.kind = 'receipt' and m.assigned_to = u.id and l.occurred_at >= current_date - 90) as "collected90"
+      from ${s.member} mb join ${s.user} u on u.id = mb.user_id where mb.organization_id = ${agencyId} order by u.name`),
+  ]);
+  const clients = funnelRows.rows;
+  const steps = [
+    { step: "Enquiries", n: clients.length },
+    { step: "Prospects", n: clients.filter((c) => c.stage !== "lead" && c.stage !== "lost").length },
+    { step: "Engaged", n: clients.filter((c) => c.engaged).length },
+    { step: "Lodged", n: clients.filter((c) => c.lodged).length },
+    { step: "Granted", n: clients.filter((c) => c.granted).length },
+  ];
+  const sources = [...new Set(clients.map((c) => c.source ?? "Unknown"))]
+    .map((src) => {
+      const g = clients.filter((c) => (c.source ?? "Unknown") === src);
+      return { source: src, enquiries: g.length, engaged: g.filter((c) => c.engaged).length, lodged: g.filter((c) => c.lodged).length, granted: g.filter((c) => c.granted).length };
+    })
+    .sort((a, b) => b.enquiries - a.enquiries);
+  const staff = staffRows.rows.map((r) => ({ ...r, collected90: num(r.collected90) }));
+  return { byVisa, bySource, revenue: byMonth.map((r) => ({ month: r.month, amount: num(r.amount) })), outcomes, funnel: steps, sources, staff };
 }
 
 /** Badge counts and the capabilities that decide which links the sidebar shows. */

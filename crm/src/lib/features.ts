@@ -378,7 +378,7 @@ export const features: { group: string; items: Feature[] }[] = [
     group: "Insight",
     items: [
       ...live("Dashboard with live counts", "Pipeline by stage chart", "Expiring visas in the next 90 days", "Upcoming appointments", "Recent activity", "Revenue by month", "Matters by visa", "Clients by source", "Outcomes"),
-      ...next("Conversion funnel", "Staff performance report", "Export any report to CSV"),
+      ...live("Conversion funnel: enquiry to grant", "Conversion by lead source", "Staff performance report", "Export any report to CSV"),
     ],
   },
   {
