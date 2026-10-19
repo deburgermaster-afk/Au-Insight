@@ -41,6 +41,8 @@ import { AccountingForm, ExportForm, SyncNowButton } from "@/components/settings
 import { accountingFor } from "@/lib/accounting";
 import { BookingHoursForm, BookingLink, BookingTypes } from "@/components/settings/booking";
 import { DEFAULT_HOURS } from "@/lib/booking";
+import { KeyDatesForm } from "@/components/settings/key-dates";
+import { keyDateDefaults } from "@/lib/key-dates";
 import { db, schema as s } from "@/db";
 import { getSettings } from "@/lib/data";
 import { dmy } from "@/lib/format";
@@ -245,6 +247,16 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
         </Summary>
         <Summary title="Hours" description="When clients can book, in Sydney time. Times already booked for a staff member are never offered.">
           <BookingHoursForm enabled={p?.bookingEnabled ?? false} hours={p?.bookingHours ?? DEFAULT_HOURS} canEdit={admin} />
+        </Summary>
+      </div>
+    );
+  }
+
+  if (slug === "reminders") {
+    body = (
+      <div className="grid max-w-3xl gap-4">
+        <Summary title="Key dates" description="Checked every morning. Each reminder is made once, as a task for the right person.">
+          <KeyDatesForm initial={keyDateDefaults(p?.keyDates)} canEdit={admin} />
         </Summary>
       </div>
     );

@@ -13,11 +13,13 @@ import { PageSkeleton } from "@/components/app/skeletons";
 import { StatCard } from "@/components/app/stat-card";
 import { EditRecord } from "@/components/edit/edit-record";
 import { NewNominationDialog } from "@/components/employers/nominations";
+import { RecordEventDialog, SponsorEvents } from "@/components/employers/obligations";
 import { NominationsTable } from "@/components/employers/nominations-table";
 import { Button } from "@/components/ui/button";
 import { db, schema as s } from "@/db";
 import { getEditOptions } from "@/lib/edit-data";
-import { daysUntil, dmy } from "@/lib/format";
+import { daysUntil, dmy, todayIso } from "@/lib/format";
+import { sponsorTimeline } from "@/lib/key-dates";
 import { nominationsFor, sponsoredMatterOptions } from "@/lib/nomination-data";
 import { OPEN_STATUSES } from "@/lib/nominations";
 import { plainValues } from "@/lib/record-specs";
@@ -31,7 +33,7 @@ async function EmployerView({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await getCtx();
   const [e] = await db.select().from(s.employers).where(and(eq(s.employers.agencyId, ctx.agencyId), eq(s.employers.id, id)));
   if (!e) notFound();
-  const [noms, options, matterOpts, clients, cases] = await Promise.all([
+  const [noms, options, matterOpts, clients, cases, timeline, events] = await Promise.all([
     nominationsFor(ctx.agencyId, id),
     getEditOptions(),
     sponsoredMatterOptions(ctx.agencyId),
@@ -42,7 +44,17 @@ async function EmployerView({ params }: { params: Promise<{ id: string }> }) {
       .innerJoin(s.clients, eq(s.clients.id, s.matters.clientId))
       .where(and(eq(s.matters.agencyId, ctx.agencyId), eq(s.matters.employerId, id)))
       .orderBy(desc(s.matters.updatedAt)),
+    sponsorTimeline(ctx.agencyId, id),
+    db
+      .select({ e: s.sponsorEvents, first: s.clients.firstName, last: s.clients.lastName })
+      .from(s.sponsorEvents)
+      .leftJoin(s.clients, eq(s.clients.id, s.sponsorEvents.clientId))
+      .where(and(eq(s.sponsorEvents.agencyId, ctx.agencyId), eq(s.sponsorEvents.employerId, id)))
+      .orderBy(desc(s.sponsorEvents.occurredOn)),
   ]);
+  const today = todayIso();
+  const workers = [...new Map(cases.map((c) => [c.m.clientId, { id: c.m.clientId, name: `${c.first} ${c.last}` }])).values()];
+  const openEvents = events.filter((r) => !r.e.notifiedOn).length;
   const open = noms.filter((r) => OPEN_STATUSES.includes(r.n.status));
   const approved = noms.filter((r) => r.n.status === "approved");
   const expiring = approved.filter((r) => r.n.approvalExpires && daysUntil(r.n.approvalExpires) <= 60);
@@ -50,6 +62,7 @@ async function EmployerView({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className="grid gap-3">
       <HeaderActions>
+        <RecordEventDialog employerId={e.id} workers={workers} today={today} />
         <NewNominationDialog employerId={e.id} clients={clients} matters={matterOpts} />
       </HeaderActions>
       <div className="flex flex-wrap items-start gap-3 rounded-2xl border bg-card p-5 shadow-xs">
@@ -114,6 +127,52 @@ async function EmployerView({ params }: { params: Promise<{ id: string }> }) {
       </Stagger>
       <Section title="Nominations">
         <NominationsTable rows={noms} options={options} caps={ctx.caps} />
+      </Section>
+      <Section title="Sponsor obligations" action={openEvents ? <Pill t="amber">{`${openEvents} to report to Home Affairs`}</Pill> : null}>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid content-start gap-2">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Coming up</p>
+            {timeline.length ? (
+              <ul className="divide-y rounded-2xl border bg-card">
+                {timeline.map((t) => {
+                  const d = daysUntil(t.date);
+                  const body = (
+                    <>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium">{t.title}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {dmy(t.date)} · {t.detail}
+                        </span>
+                      </span>
+                      <ExpiryPill days={d} />
+                    </>
+                  );
+                  return (
+                    <li key={t.title + t.date}>
+                      {t.href ? (
+                        <Link href={t.href} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/50">
+                          {body}
+                        </Link>
+                      ) : (
+                        <div className="flex items-center gap-3 px-4 py-2.5 text-sm">{body}</div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="rounded-2xl border p-6 text-center text-sm text-muted-foreground">No sponsorship, approval or visa dates yet.</p>
+            )}
+          </div>
+          <div className="grid content-start gap-2">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">28-day notifications</p>
+            <SponsorEvents
+              today={today}
+              canDelete={["owner", "admin"].includes(ctx.role)}
+              rows={events.map(({ e: x, first, last }) => ({ id: x.id, kind: x.kind, worker: first ? `${first} ${last}` : null, clientId: x.clientId, occurredOn: x.occurredOn, notifyBy: x.notifyBy, notifiedOn: x.notifiedOn, reference: x.reference, notes: x.notes, daysLeft: daysUntil(x.notifyBy) }))}
+            />
+          </div>
+        </div>
       </Section>
       <Section title="Sponsored cases">
         {cases.length ? (

@@ -109,8 +109,20 @@ export const agencyProfile = pgTable("agency_profile", {
   require2fa: boolean("require_2fa").default(false).notNull(),
   /** Xero / MYOB account codes and whether invoices sync automatically. */
   accounting: jsonb("accounting").$type<AccountingSettings>(),
+  /** Birthday, grant-anniversary and sponsor-obligation reminders (Settings → Reminders). */
+  keyDates: jsonb("key_dates").$type<KeyDateSettings>(),
   ...stamps,
 });
+
+export type KeyDateSettings = {
+  /** off | task (a task for the case officer) | greet (the task, plus a greeting email to the client) */
+  birthdays?: "off" | "task" | "greet";
+  birthdayMessage?: string;
+  /** A task each year on the day a visa was granted, with a note when it may open a next step. */
+  anniversaries?: "off" | "task";
+  /** Tasks before sponsorship, nomination approvals and sponsored workers' visas expire. */
+  sponsor?: boolean;
+};
 
 export type AccountingSettings = {
   /** Revenue account for professional fees (Xero AU default 200 Sales). */
@@ -290,6 +302,49 @@ export const nominations = pgTable(
     ...stamps,
   },
   (t) => [index("nominations_agency_idx").on(t.agencyId, t.status), index("nominations_employer_idx").on(t.employerId)],
+);
+
+/**
+ * A change a sponsor must tell Home Affairs about within 28 days (Migration Regulations 2.84):
+ * a sponsored worker leaving or not starting, a change in their duties, or a change to the business.
+ */
+export const sponsorEvents = pgTable(
+  "sponsor_events",
+  {
+    id: id(),
+    agencyId: agency(),
+    employerId: text("employer_id")
+      .notNull()
+      .references(() => employers.id, { onDelete: "cascade" }),
+    /** The sponsored worker, when the change is about one. */
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    /** worker_ceased | worker_not_started | duties_changed | business_details | ownership | ceased_trading | other */
+    kind: text("kind").notNull(),
+    occurredOn: date("occurred_on").notNull(),
+    notifyBy: date("notify_by").notNull(),
+    notifiedOn: date("notified_on"),
+    /** Home Affairs receipt or reference for the notification. */
+    reference: text("reference"),
+    notes: text("notes"),
+    taskId: text("task_id"),
+    createdBy: text("created_by"),
+    ...stamps,
+  },
+  (t) => [index("sponsor_events_employer_idx").on(t.employerId), index("sponsor_events_agency_idx").on(t.agencyId, t.notifiedOn)],
+);
+
+/** Reminders already made, so each birthday, anniversary or expiry warning happens once. */
+export const reminderLog = pgTable(
+  "reminder_log",
+  {
+    id: id(),
+    agencyId: agency(),
+    kind: text("kind").notNull(),
+    refId: text("ref_id").notNull(),
+    period: text("period").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("reminder_log_unique").on(t.kind, t.refId, t.period)],
 );
 
 /** A matter: one application or piece of work for a client (a visa, a review, citizenship…). */
