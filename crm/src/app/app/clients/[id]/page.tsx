@@ -2,6 +2,7 @@ import { ArrowLeft, Briefcase, Download, Eye, FileText, Mail, Plus, UsersRound }
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import { OccupationWatchPanel } from "@/components/occupations/watch-panel";
 import { Suspense } from "react";
 import { Guard } from "@/components/app/guard";
 import { clientStageTone, invoiceTone, label, matterStageTone, Pill, priorityTone } from "@/components/app/badges";
@@ -449,6 +450,7 @@ async function ClientView({ params }: { params: Promise<{ id: string }> }) {
         >
           <SignList rows={signRows.filter((x) => x.r.status !== "draft").map((x) => ({ ...x.r, signedKey: x.signedKey, signedName: x.signedName }))} showClient={false} empty="No documents sent to sign." />
         </Section>
+        <OccupationWatchPanel clientId={c.id} anzsco={c.anzsco ?? matters.find((m) => m.anzsco)?.anzsco ?? null} points={matters.map((m) => m.pointsClaimed ?? 0).reduce((a, b) => Math.max(a, b), 0) || null} />
         <PathwayPanel clientId={c.id} row={pathway} study={studies[0] ? { course: studies[0].a.course, institution: studies[0].inst, status: studies[0].a.status, intake: studies[0].a.intake } : null} />
       </FadeIn>
       </div>

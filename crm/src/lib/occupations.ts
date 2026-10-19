@@ -123,3 +123,16 @@ export async function invitationRounds() {
   const checked = rounds.map((r) => r.seen_run?.match(/(\d{4})(\d{2})(\d{2})T/)).filter(Boolean).map((m) => `${m![1]}-${m![2]}-${m![3]}`).sort().at(-1) ?? null;
   return { rounds, latest: latest ?? null, cutoffs, checked };
 }
+
+/** What an occupation watch needs: the title, every round's cut-off, and the latest EOI backlog. */
+export async function watchData(code: string) {
+  const c = (code.match(/\d{6}/) ?? [""])[0];
+  if (!c) return null;
+  const [occ] = await rest<OccupationSummary[]>(`occupations?anzsco=eq.${c}&select=anzsco,title,lists,visa_subclasses,authorities`);
+  if (!occ) return null;
+  const [rounds, eoi] = await Promise.all([
+    rest<RoundRow[]>(`skillselect_round_occupations?anzsco=eq.${c}&order=round_date.desc&select=round_date,subclass,min_points,invited`),
+    rest<Eoi | null>("rpc/occupation_eoi", { method: "POST", body: JSON.stringify({ p_anzsco: c }) }).catch(() => null),
+  ]);
+  return { occupation: occ, rounds, eoi };
+}

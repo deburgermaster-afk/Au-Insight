@@ -223,6 +223,37 @@ export const employers = pgTable("employers", {
   ...stamps,
 });
 
+/**
+ * A client's occupation, watched against SkillSelect: their place in the EOI backlog each month,
+ * and an alert when an invitation round's cut-off reaches their points.
+ */
+export const occupationWatches = pgTable(
+  "occupation_watches",
+  {
+    id: id(),
+    agencyId: agency(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    anzsco: text("anzsco").notNull(),
+    occupation: text("occupation").notNull(),
+    points: integer("points").notNull(),
+    /** 189 | 190 | 491 */
+    subclasses: text("subclasses").array().default(sql`'{189}'::text[]`).notNull(),
+    active: boolean("active").default(true).notNull(),
+    /** Monthly EOI positions: how many submitted EOIs are on the same or more points. */
+    snapshots: jsonb("snapshots").$type<WatchSnapshot[]>().default([]).notNull(),
+    lastRoundSeen: date("last_round_seen"),
+    lastAlertRound: date("last_alert_round"),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    createdBy: text("created_by"),
+    ...stamps,
+  },
+  (t) => [index("occupation_watches_agency_idx").on(t.agencyId, t.active), index("occupation_watches_client_idx").on(t.clientId)],
+);
+
+export type WatchSnapshot = { asAt: string; subclass: string; ahead: number; approx: boolean; submitted: number | null };
+
 /** A nomination lodged by a sponsoring employer for a position (482, 186, 494, labour agreement, 407). */
 export const nominations = pgTable(
   "nominations",

@@ -97,7 +97,7 @@ export const features: { group: string; items: Feature[] }[] = [
         "ANZSCO 2013 and 2022 codes with ABS links",
         "Labour market profile and employment projection",
       ),
-      ...next("Link an occupation to a client and track their rank monthly", "Alerts when a cut-off drops below a client's points"),
+      ...live("Watch a client's occupation: their place in the EOI backlog every month, with the trend", "Alert (task and email to the case officer) when a 189 round's cut-off reaches a client's points"),
     ],
   },
   {
