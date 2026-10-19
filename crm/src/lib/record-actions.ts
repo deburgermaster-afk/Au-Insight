@@ -22,6 +22,7 @@ const TABLES = {
   dependant: s.dependants,
   checklist: s.checklistItems,
   document: s.documents,
+  nomination: s.nominations,
 } as const;
 
 const INT_KEYS = new Set(["aqfLevel", "pointsClaimed"]);
@@ -207,7 +208,7 @@ export async function addRecord(entity: EntityKey, parentId: string, form: FormD
   }
 }
 
-const DELETABLE = new Set<EntityKey>(["task", "appointment", "dependant", "checklist", "employer", "institution"]);
+const DELETABLE = new Set<EntityKey>(["task", "appointment", "dependant", "checklist", "employer", "institution", "nomination"]);
 
 /** Removes a record that's safe to remove. Clients, cases and documents are kept for record keeping. */
 export async function deleteRecord(entity: EntityKey, id: string): Promise<ActionResult> {
@@ -223,7 +224,7 @@ export async function deleteRecord(entity: EntityKey, id: string): Promise<Actio
     const t = TABLES[entity];
     await db.delete(t).where(and(eq(t.agencyId, ctx.agencyId), eq(t.id, id)));
     const where = await timelineOf(entity, row);
-    const label = String(row.title ?? row.label ?? row.fullName ?? row.name ?? "");
+    const label = String(row.title ?? row.label ?? row.fullName ?? row.name ?? row.positionTitle ?? "");
     if (where.clientId || where.matterId) await db.insert(s.activities).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, clientId: where.clientId, matterId: where.matterId, kind: "system", title: `${spec.label.replace(/^\w/, (c) => c.toUpperCase())} removed`, body: label });
     const [log] = await db.insert(s.auditLog).values({ agencyId: ctx.agencyId, actorId: ctx.userId, actorName: ctx.name, action: "delete", entity, entityId: id, detail: { snapshot: JSON.parse(JSON.stringify(row)) } }).returning({ id: s.auditLog.id });
     updateTag(agencyTag(ctx.agencyId));

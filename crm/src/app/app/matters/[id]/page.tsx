@@ -13,7 +13,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Guard } from "@/components/app/guard";
-import { invoiceTone, label, Pill, priorityTone } from "@/components/app/badges";
+import { invoiceTone, label, Pill, priorityTone, type Tone } from "@/components/app/badges";
+import { programLabel, statusOf } from "@/lib/nominations";
 import { NoteComposer, TaskCheck } from "@/components/app/inline-actions";
 import { FadeIn } from "@/components/app/motion";
 import { Section } from "@/components/app/section";
@@ -72,6 +73,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
     db.select({ on: sch.agencyProfile.aiDocsEnabledAt }).from(sch.agencyProfile).where(eq(sch.agencyProfile.agencyId, ctx.agencyId)),
   ]);
   const aiDocs = Boolean(aiP?.on) && llmEnabled();
+  const matterNoms = employer ? await db.select().from(sch.nominations).where(and(eq(sch.nominations.agencyId, ctx.agencyId), eq(sch.nominations.matterId, m.id))).orderBy(desc(sch.nominations.updatedAt)) : [];
   const [review, signRows] = await Promise.all([
     latestCaseReview(ctx.agencyId, client.id, m.id),
     db
@@ -397,16 +399,34 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
             key: "sponsor",
             label: "Sponsor",
             icon: <Building2 />,
-            stat: employer.name,
+            stat: matterNoms.length ? `${employer.name} · nomination ${statusOf(matterNoms[0].status).label.toLowerCase()}` : employer.name,
             action: (
               <span className="flex items-center gap-1">
                 <EditRecord entity="employer" id={employer.id} values={plainValues(employer)} options={editOptions} caps={ctx.caps} trigger={<Button size="xs" variant="outline"><PenLine /> Edit</Button>} />
                 <Button asChild size="xs" variant="outline">
-                  <Link href="/app/employers">Employers</Link>
+                  <Link href={`/app/employers/${employer.id}`}>Open employer</Link>
                 </Button>
               </span>
             ),
             content: (
+              <div className="grid gap-4">
+                {matterNoms.length ? (
+                  <ul className="grid gap-1.5">
+                    {matterNoms.map((n) => (
+                      <li key={n.id} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{n.positionTitle}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {[programLabel(n.program), n.trn ? `TRN ${n.trn}` : null, n.status === "approved" && n.approvalExpires ? `lodge visa by ${dmy(n.approvalExpires)}` : null].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                        <Pill t={statusOf(n.status).tone as Tone}>{statusOf(n.status).label}</Pill>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No nomination linked to this case yet. Add one from the employer&apos;s page.</p>
+                )}
               <dl className="text-sm">
                 {Object.entries(plainValues(employer))
                   .filter(([k, v]) => v != null && v !== "" && !["id", "agencyId", "createdAt", "updatedAt"].includes(k) && typeof v !== "object")
@@ -418,6 +438,7 @@ async function MatterView({ params, searchParams }: { params: Promise<{ id: stri
                     </div>
                   ))}
               </dl>
+              </div>
             ),
           },
         ]

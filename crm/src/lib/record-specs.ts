@@ -21,7 +21,7 @@ export type FieldSpec = {
   stamp?: boolean;
 };
 
-export type EntityKey = "client" | "matter" | "task" | "appointment" | "employer" | "institution" | "application" | "dependant" | "checklist" | "document";
+export type EntityKey = "client" | "matter" | "task" | "appointment" | "employer" | "institution" | "application" | "dependant" | "checklist" | "document" | "nomination";
 
 export type EntitySpec = { label: string; cap?: FieldSpec["cap"]; fields: FieldSpec[] };
 
@@ -37,6 +37,8 @@ export const AQF: Record<number, string> = {
   9: "Master",
   10: "Doctorate",
 };
+
+import { LMT_STATUSES, NOMINATION_PROGRAMS, NOMINATION_STATUSES } from "@/lib/nominations";
 
 const stages = ["lead", "prospect", "active", "on_hold", "past", "lost"].map((v) => ({ value: v, label: v.replace("_", " ").replace(/^\w/, (c) => c.toUpperCase()) }));
 const priorities = ["low", "normal", "high", "urgent"].map((v) => ({ value: v, label: v.replace(/^\w/, (c) => c.toUpperCase()) }));
@@ -130,6 +132,24 @@ export const SPECS: Record<EntityKey, EntitySpec> = {
       { key: "sbsApproved", label: "Approved sponsor", type: "boolean" },
       { key: "sbsExpiry", label: "Sponsorship expiry", type: "date" },
       { key: "annualTurnover", label: "Annual turnover", type: "money" },
+    ],
+  },
+  nomination: {
+    label: "nomination",
+    fields: [
+      { key: "positionTitle", label: "Position", type: "text", required: true, wide: true, group: "Position" },
+      { key: "program", label: "Program", type: "select", required: true, group: "Position", options: NOMINATION_PROGRAMS.map((p) => ({ value: p.value, label: p.label })) },
+      { key: "anzsco", label: "ANZSCO code", type: "text", group: "Position" },
+      { key: "salary", label: "Annual base salary", type: "money", group: "Position", hint: "Check it against the current income threshold and market rate." },
+      { key: "worksite", label: "Worksite", type: "text", group: "Position" },
+      { key: "status", label: "Status", type: "select", required: true, group: "Progress", options: NOMINATION_STATUSES.map((p) => ({ value: p.value, label: p.label })) },
+      { key: "trn", label: "TRN", type: "text", group: "Progress" },
+      { key: "lodgedAt", label: "Lodged", type: "date", group: "Progress" },
+      { key: "decidedAt", label: "Decided", type: "date", group: "Progress" },
+      { key: "approvalExpires", label: "Lodge visa by", type: "date", group: "Progress", hint: "The last day the visa can be lodged against this approval." },
+      { key: "lmt", label: "Labour market testing", type: "select", group: "Progress", options: LMT_STATUSES.map((p) => ({ value: p.value, label: p.label })) },
+      { key: "assignedTo", label: "Case officer", type: "user", group: "Progress" },
+      { key: "notes", label: "Notes", type: "textarea", wide: true, group: "Notes" },
     ],
   },
   institution: {

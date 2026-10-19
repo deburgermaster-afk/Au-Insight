@@ -317,6 +317,8 @@ async function employersFor(agencyId: string) {
     .select({
       employer: s.employers,
       matters: sql<number>`(select count(*)::int from ${s.matters} m where m.employer_id = ${s.employers.id})`,
+      nominations: sql<number>`(select count(*)::int from ${s.nominations} n where n.employer_id = ${s.employers.id})`,
+      openNominations: sql<number>`(select count(*)::int from ${s.nominations} n where n.employer_id = ${s.employers.id} and n.status in ('preparing','lodged','further_info'))`,
     })
     .from(s.employers)
     .where(eq(s.employers.agencyId, agencyId))
