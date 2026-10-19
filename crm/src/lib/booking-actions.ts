@@ -4,7 +4,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { z } from "zod";
 import { db, schema as s } from "@/db";
-import { appBase, bookingAgency, googleCalendarUrl, hashToken, newToken, openSlots, pickStaff, videoRoom } from "@/lib/booking";
+import { appBase, bookingAgency, googleCalendarUrl, hashToken, manageToken, openSlots, pickStaff, videoRoom } from "@/lib/booking";
 import { agencyTag } from "@/lib/data";
 import { aud, dmy, time } from "@/lib/format";
 import { notifyStaff } from "@/lib/notify";
@@ -103,10 +103,12 @@ export async function bookAppointment(agencySlug: string, typeSlug: string, raw:
     }
     const mode = type.mode === "choice" ? (v.mode ?? "video") : type.mode;
     const videoUrl = mode === "video" ? (type.videoLink || videoRoom()) : null;
-    const token = newToken();
+    const apptId = crypto.randomUUID();
+    const token = manageToken(apptId);
     await db
       .insert(s.appointments)
       .values({
+        id: apptId,
         agencyId,
         title: `${type.name}: ${v.name}`,
         kind: "consultation",

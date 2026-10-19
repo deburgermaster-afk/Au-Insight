@@ -1,6 +1,6 @@
 import "server-only";
 import { TZDate } from "@date-fns/tz";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { and, asc, eq, gte, inArray, lt, ne } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import type { BookingHours } from "@/db/crm-schema";
@@ -22,7 +22,11 @@ const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 const BOOKABLE_ROLES = ["owner", "admin", "supervisor", "agent"];
 
 export const hashToken = (t: string) => createHash("sha256").update(t).digest("hex");
-export const newToken = () => randomBytes(24).toString("base64url");
+/**
+ * The client's manage-link token for an appointment, derived from its id with the app secret, so
+ * reminders can include the same link without storing it. Only its hash is kept in the database.
+ */
+export const manageToken = (appointmentId: string) => createHmac("sha256", process.env.BETTER_AUTH_SECRET ?? "lodgely").update(`appt:${appointmentId}`).digest("base64url").slice(0, 32);
 
 /** A unique video room per booking (Jitsi Meet: free, no account needed for clients). */
 export const videoRoom = () => `https://meet.jit.si/Lodgely-${randomBytes(9).toString("base64url").replace(/[^A-Za-z0-9]/g, "")}`;

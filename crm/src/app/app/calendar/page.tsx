@@ -1,4 +1,8 @@
+import { eq } from "drizzle-orm";
 import { Suspense } from "react";
+import { HeaderActions } from "@/components/app/header-actions";
+import { SubscribeCalendar } from "@/components/calendar/subscribe";
+import { db, schema as s } from "@/db";
 import { PageHeader } from "@/components/app/page-header";
 import { TableSkeleton } from "@/components/app/skeletons";
 import { WithPickers } from "@/components/app/with-pickers";
@@ -12,7 +16,15 @@ export const metadata = { title: "Calendar" };
 
 async function Calendar() {
   const [rows, options, ctx] = await Promise.all([listAppointments(), getEditOptions(), getCtx()]);
-  return <MonthCalendar items={rows.map((r) => ({ ...r.appt, clientName: r.clientFirst ? `${r.clientFirst} ${r.clientLast}` : null, staff: r.staff }))} options={options} caps={ctx.caps} />;
+  const [feed] = await db.select({ id: s.calendarFeeds.id }).from(s.calendarFeeds).where(eq(s.calendarFeeds.userId, ctx.userId));
+  return (
+    <>
+      <HeaderActions>
+        <SubscribeCalendar hasFeed={Boolean(feed)} />
+      </HeaderActions>
+      <MonthCalendar items={rows.map((r) => ({ ...r.appt, clientName: r.clientFirst ? `${r.clientFirst} ${r.clientLast}` : null, staff: r.staff }))} options={options} caps={ctx.caps} />
+    </>
+  );
 }
 
 export default function CalendarPage() {
