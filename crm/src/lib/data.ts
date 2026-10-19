@@ -508,7 +508,7 @@ export async function getEducation() {
 async function educationFor(agencyId: string) {
   const [apps, institutions] = await Promise.all([
     db
-      .select({ a: s.studentApplications, first: s.clients.firstName, last: s.clients.lastName, onshore: s.clients.onshore, inst: s.institutions.name, agent: s.user.name })
+      .select({ a: s.studentApplications, first: s.clients.firstName, last: s.clients.lastName, email: s.clients.email, onshore: s.clients.onshore, inst: s.institutions.name, agent: s.user.name })
       .from(s.studentApplications)
       .innerJoin(s.clients, eq(s.clients.id, s.studentApplications.clientId))
       .leftJoin(s.institutions, eq(s.institutions.id, s.studentApplications.institutionId))
@@ -517,7 +517,7 @@ async function educationFor(agencyId: string) {
       .orderBy(desc(s.studentApplications.updatedAt)),
     db.select().from(s.institutions).where(eq(s.institutions.agencyId, agencyId)).orderBy(asc(s.institutions.name)),
   ]);
-  return { apps: apps.map((r) => ({ ...r.a, student: `${r.first} ${r.last}`, onshore: r.onshore, institution: r.inst, agent: r.agent })), institutions };
+  return { apps: apps.map((r) => ({ ...r.a, student: `${r.first} ${r.last}`, studentEmail: r.email, onshore: r.onshore, institution: r.inst, agent: r.agent })), institutions };
 }
 
 /** Everything the settings hub and its pages show. Tokens never leave the server. */

@@ -1,4 +1,4 @@
-import { CircleAlert, GraduationCap, HandCoins, Send, School } from "lucide-react";
+import { CircleAlert, FileText, GraduationCap, HandCoins, Send, School } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -19,7 +19,9 @@ import { ReleaseLetter, TransferCourse } from "@/components/edit/course-transfer
 import { EditRecord } from "@/components/edit/edit-record";
 import { PartnerButton, ScholarshipsPanel, TuitionPanel } from "@/components/edu/student-finance";
 import { db, schema as sx } from "@/db";
-import { desc as descOp, eq as eqOp } from "drizzle-orm";
+import { and as andOp, desc as descOp, eq as eqOp, isNotNull as isNotNullOp } from "drizzle-orm";
+import { AppDocsButton } from "@/components/edu/app-docs";
+import { fileUrl } from "@/components/mail/file-icon";
 import { getEditOptions } from "@/lib/edit-data";
 import { plainValues } from "@/lib/record-specs";
 import { getCtx } from "@/lib/session";
@@ -32,6 +34,13 @@ async function Students() {
   await connection();
   const [{ apps, institutions }, pickers, editOptions, ctx] = await Promise.all([getEducation(), getPickers(), getEditOptions(), getCtx()]);
   const byId = new Map(apps.map((a) => [a.id, a]));
+  const docRows = await db
+    .select({ id: sx.documents.id, name: sx.documents.name, category: sx.documents.category, storageKey: sx.documents.storageKey, applicationId: sx.documents.applicationId })
+    .from(sx.documents)
+    .where(andOp(eqOp(sx.documents.agencyId, ctx.agencyId), isNotNullOp(sx.documents.applicationId)))
+    .orderBy(descOp(sx.documents.createdAt));
+  const appDocs = new Map<string, typeof docRows>();
+  for (const d of docRows) appDocs.set(d.applicationId!, [...(appDocs.get(d.applicationId!) ?? []), d]);
   const [scholarships, awards, payments] = await Promise.all([
     db.select().from(sx.scholarships).where(eqOp(sx.scholarships.agencyId, ctx.agencyId)).orderBy(descOp(sx.scholarships.createdAt)),
     db
@@ -122,7 +131,18 @@ async function Students() {
                             {byId.get(a.transferredFromId)?.institution ? ` (${byId.get(a.transferredFromId)?.institution})` : ""} <ReleaseLetter id={a.id} status={a.releaseLetter} />
                           </p>
                         ) : null}
-                        <div className="mt-2 flex justify-end">
+                        {appDocs.get(a.id)?.length ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {appDocs.get(a.id)!.map((d) => (
+                              <a key={d.id} href={d.storageKey ? fileUrl(d.storageKey, d.name) : undefined} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] hover:bg-muted/70" title={d.name}>
+                                <FileText className="size-3 shrink-0" />
+                                <span className="truncate">{d.category ?? "File"}</span>
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="mt-2 flex justify-end gap-1.5">
+                          <AppDocsButton agencyId={ctx.agencyId} applicationId={a.id} clientId={a.clientId} student={a.student} hasEmail={Boolean(a.studentEmail)} status={a.status} />
                           <TransferCourse app={{ id: a.id, course: a.course, institutionId: a.institutionId, institution: a.institution, status: a.status, aqfLevel: a.aqfLevel, courseStart: a.courseStart, student: a.student, onshore: a.onshore }} institutions={insts} />
                         </div>
                       </div>
