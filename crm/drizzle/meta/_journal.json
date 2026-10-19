@@ -183,6 +183,13 @@
       "when": 1792360811884,
       "tag": "0025_roles_work_email",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792371330284,
+      "tag": "0026_segments_nominations_xero",
+      "breakpoints": true
     }
   ]
 }

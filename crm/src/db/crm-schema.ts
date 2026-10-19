@@ -102,8 +102,21 @@ export const agencyProfile = pgTable("agency_profile", {
   aiDocsEnabledBy: text("ai_docs_enabled_by"),
   /** Agency's own checklists, fees, assignment rules and pick lists (Settings → Workflow). */
   workflow: jsonb("workflow").$type<WorkflowConfig>(),
+  /** Xero / MYOB account codes and whether invoices sync automatically. */
+  accounting: jsonb("accounting").$type<AccountingSettings>(),
   ...stamps,
 });
+
+export type AccountingSettings = {
+  /** Revenue account for professional fees (Xero AU default 200 Sales). */
+  salesAccount?: string;
+  /** Account for disbursements passed on at cost. */
+  disbursementAccount?: string;
+  /** Bank account office receipts are paid into (Xero account code). */
+  bankAccount?: string;
+  /** Push invoices and office receipts to Xero as they happen. */
+  autoSync?: boolean;
+};
 
 export type WorkflowConfig = {
   checklists?: Record<string, { category: string; label: string; required: boolean }[]>;
@@ -145,10 +158,38 @@ export const clients = pgTable(
     assignedTo: text("assigned_to").references(() => user.id, { onDelete: "set null" }),
     notes: text("notes"),
     portalEnabled: boolean("portal_enabled").default(false).notNull(),
+    /** The matching contact in the agency's Xero file. */
+    xeroContactId: text("xero_contact_id"),
     ...stamps,
   },
   (t) => [index("clients_agency_idx").on(t.agencyId, t.stage), index("clients_visa_expiry_idx").on(t.agencyId, t.visaExpiry)],
 );
+
+/** A saved client filter ("segment"): reused for lists, bulk email and exports. */
+export const clientSegments = pgTable("client_segments", {
+  id: id(),
+  agencyId: agency(),
+  name: text("name").notNull(),
+  filters: jsonb("filters").$type<SegmentFilters>().notNull(),
+  createdBy: text("created_by"),
+  createdByName: text("created_by_name"),
+  ...stamps,
+});
+
+export type SegmentFilters = {
+  q?: string;
+  stages?: string[];
+  tags?: string[];
+  /** any: has at least one of the tags; all: has every tag. */
+  tagMode?: "any" | "all";
+  visas?: string[];
+  sources?: string[];
+  nationalities?: string[];
+  location?: "onshore" | "offshore";
+  /** Current visa expires within this many days. */
+  expiryDays?: number;
+  assignedTo?: string[];
+};
 
 /** Family members included in a client's applications. */
 export const dependants = pgTable("dependants", {
@@ -179,6 +220,41 @@ export const employers = pgTable("employers", {
   annualTurnover: numeric("annual_turnover"),
   ...stamps,
 });
+
+/** A nomination lodged by a sponsoring employer for a position (482, 186, 494, labour agreement, 407). */
+export const nominations = pgTable(
+  "nominations",
+  {
+    id: id(),
+    agencyId: agency(),
+    employerId: text("employer_id")
+      .notNull()
+      .references(() => employers.id, { onDelete: "cascade" }),
+    /** The nominee, and the visa application the nomination supports. */
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    matterId: text("matter_id").references(() => matters.id, { onDelete: "set null" }),
+    /** 482_core | 482_specialist | 482_essential | 186_direct | 186_trt | 494 | labour_agreement | 407 */
+    program: text("program").notNull(),
+    positionTitle: text("position_title").notNull(),
+    anzsco: text("anzsco"),
+    /** Annual base salary offered (AUD), checked against the income threshold. */
+    salary: numeric("salary"),
+    worksite: text("worksite"),
+    /** preparing | lodged | further_info | approved | refused | withdrawn | lapsed */
+    status: text("status").default("preparing").notNull(),
+    trn: text("trn"),
+    lodgedAt: date("lodged_at"),
+    decidedAt: date("decided_at"),
+    /** The last day the nominee's visa can be lodged against this approval. */
+    approvalExpires: date("approval_expires"),
+    /** Labour market testing: not_required | needed | in_progress | done */
+    lmt: text("lmt").default("needed").notNull(),
+    assignedTo: text("assigned_to").references(() => user.id, { onDelete: "set null" }),
+    notes: text("notes"),
+    ...stamps,
+  },
+  (t) => [index("nominations_agency_idx").on(t.agencyId, t.status), index("nominations_employer_idx").on(t.employerId)],
+);
 
 /** A matter: one application or piece of work for a client (a visa, a review, citizenship…). */
 export const matters = pgTable(
@@ -265,6 +341,8 @@ export const documents = pgTable(
     checklistItemId: text("checklist_item_id"),
     folderId: text("folder_id"),
     source: text("source"), // upload | email | portal
+    /** Offer letters and CoEs filed against a study application. */
+    applicationId: text("application_id"),
     certified: boolean("certified").default(false).notNull(),
     translated: boolean("translated").default(false).notNull(),
     ...stamps,
@@ -351,6 +429,10 @@ export const invoices = pgTable(
     notes: text("notes"),
     /** A Zeller Pay by Link the agency created for this invoice. */
     zellerLink: text("zeller_link"),
+    /** The invoice in the agency's Xero file, when synced. */
+    xeroId: text("xero_id"),
+    xeroSyncedAt: timestamp("xero_synced_at", { withTimezone: true }),
+    xeroError: text("xero_error"),
     ...stamps,
   },
   (t) => [index("invoices_agency_idx").on(t.agencyId, t.status)],
@@ -371,6 +453,8 @@ export const ledger = pgTable(
     reference: text("reference"),
     occurredAt: date("occurred_at").notNull(),
     memo: text("memo"),
+    /** The payment in Xero, when an office receipt has been synced. */
+    xeroId: text("xero_id"),
     ...stamps,
   },
   (t) => [index("ledger_agency_idx").on(t.agencyId, t.account, t.occurredAt)],

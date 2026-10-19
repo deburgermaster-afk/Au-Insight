@@ -1,3 +1,4 @@
+import { and, asc, eq } from "drizzle-orm";
 import { GitMerge, Plus, Upload } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -5,17 +6,34 @@ import { Guard } from "@/components/app/guard";
 import { PageHeader } from "@/components/app/page-header";
 import { TableSkeleton } from "@/components/app/skeletons";
 import { Button } from "@/components/ui/button";
+import { db, schema as s } from "@/db";
 import { listClients } from "@/lib/data";
+import { getEditOptions } from "@/lib/edit-data";
+import { getCtx } from "@/lib/session";
 import { ClientsTable } from "./clients-table";
 
 export const metadata = { title: "Clients" };
 
-async function Rows() {
-  const rows = await listClients();
-  return <ClientsTable rows={rows} />;
+async function Rows({ segment }: { segment?: string }) {
+  const ctx = await getCtx();
+  const [rows, segments, options] = await Promise.all([
+    listClients(),
+    db.select({ id: s.clientSegments.id, name: s.clientSegments.name, filters: s.clientSegments.filters }).from(s.clientSegments).where(and(eq(s.clientSegments.agencyId, ctx.agencyId))).orderBy(asc(s.clientSegments.name)),
+    getEditOptions(),
+  ]);
+  return (
+    <ClientsTable
+      rows={rows.map((r) => ({ id: r.id, firstName: r.firstName, lastName: r.lastName, email: r.email, phone: r.phone, nationality: r.nationality, passportNumber: r.passportNumber, currentVisa: r.currentVisa, visaExpiry: r.visaExpiry, occupation: r.occupation, stage: r.stage, onshore: r.onshore, matterCount: r.matterCount, assigneeName: r.assigneeName, assignedTo: r.assignedTo, tags: r.tags ?? [], source: r.source }))}
+      segments={segments}
+      tagOptions={options.lists.tags ?? []}
+      staff={options.staff.map((o) => ({ id: o.value, name: o.label }))}
+      initialSegment={segment ?? null}
+    />
+  );
 }
 
-export default function ClientsPage() {
+export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ segment?: string }> }) {
+  const { segment } = await searchParams;
   return (
     <>
       <PageHeader
@@ -42,7 +60,9 @@ export default function ClientsPage() {
         }
       />
       <Suspense fallback={<TableSkeleton />}>
-        <Guard cap="clients"><Rows /></Guard>
+        <Guard cap="clients">
+          <Rows segment={segment} />
+        </Guard>
       </Suspense>
     </>
   );
