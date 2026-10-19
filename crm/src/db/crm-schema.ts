@@ -297,11 +297,42 @@ export const nominations = pgTable(
     approvalExpires: date("approval_expires"),
     /** Labour market testing: not_required | needed | in_progress | done */
     lmt: text("lmt").default("needed").notNull(),
+    /** Why testing isn't needed (an international trade obligation, a labour agreement term…). */
+    lmtExemption: text("lmt_exemption"),
     assignedTo: text("assigned_to").references(() => user.id, { onDelete: "set null" }),
     notes: text("notes"),
     ...stamps,
   },
   (t) => [index("nominations_agency_idx").on(t.agencyId, t.status), index("nominations_employer_idx").on(t.employerId)],
+);
+
+/** One job ad placed for labour market testing, with its evidence (screenshots, invoices, reports). */
+export const lmtAds = pgTable(
+  "lmt_ads",
+  {
+    id: id(),
+    agencyId: agency(),
+    nominationId: text("nomination_id")
+      .notNull()
+      .references(() => nominations.id, { onDelete: "cascade" }),
+    /** workforce_australia | seek | linkedin | indeed | jora | careerone | press | professional | other */
+    platform: text("platform").notNull(),
+    url: text("url"),
+    adTitle: text("ad_title").notNull(),
+    publishedOn: date("published_on").notNull(),
+    endsOn: date("ends_on"),
+    /** What the ad shows, as Home Affairs requires. */
+    showsTitle: boolean("shows_title").default(true).notNull(),
+    showsEmployer: boolean("shows_employer").default(true).notNull(),
+    showsSkills: boolean("shows_skills").default(true).notNull(),
+    showsSalary: boolean("shows_salary").default(false).notNull(),
+    applicants: integer("applicants"),
+    evidence: jsonb("evidence").$type<MailAttachment[]>().default([]).notNull(),
+    notes: text("notes"),
+    createdBy: text("created_by"),
+    ...stamps,
+  },
+  (t) => [index("lmt_ads_nomination_idx").on(t.nominationId)],
 );
 
 /**

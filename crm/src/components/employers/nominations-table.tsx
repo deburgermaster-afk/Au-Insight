@@ -48,7 +48,9 @@ export function NominationsTable({ rows, options, caps, showEmployer }: { rows: 
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Pill t={st.tone as Tone}>{st.label}</Pill>
-                {n.lmt !== "not_required" && n.lmt !== "done" && !["approved", "refused", "withdrawn", "lapsed"].includes(n.status) ? <Pill t="amber">LMT {lmt?.label.toLowerCase()}</Pill> : null}
+                <Link href={`/app/employers/${n.employerId}/lmt/${n.id}`} className="rounded-md hover:opacity-80" title="Labour market testing">
+                  <Pill t={n.lmt === "done" ? "green" : n.lmt === "not_required" ? "gray" : ["approved", "refused", "withdrawn", "lapsed"].includes(n.status) ? "gray" : "amber"}>LMT {lmt?.label.toLowerCase()}</Pill>
+                </Link>
               </div>
               <div className="text-xs text-muted-foreground">
                 {n.status === "approved" && n.approvalExpires ? (

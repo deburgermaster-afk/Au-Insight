@@ -147,7 +147,7 @@ export const features: { group: string; items: Feature[] }[] = [
   },
   {
     group: "Employers",
-    items: [...live("Employer directory", "ABN and contact details", "SBS approval and expiry", "Matters per employer", "Nomination tracking: program, position, salary, TRN, status and lodge-by date", "Employer page with nominations and sponsored cases"), ...live("Sponsorship obligation reminders: SBS, nomination approvals and sponsored workers' visas", "28-day Home Affairs notification tracker"), ...next("Labour market testing evidence tracker")],
+    items: [...live("Employer directory", "ABN and contact details", "SBS approval and expiry", "Matters per employer", "Nomination tracking: program, position, salary, TRN, status and lodge-by date", "Employer page with nominations and sponsored cases"), ...live("Sponsorship obligation reminders: SBS, nomination approvals and sponsored workers' visas", "28-day Home Affairs notification tracker"), ...live("Labour market testing tracker: ads, evidence, rule checks, lodge-by date and a printable summary")],
   },
   {
     group: "Documents",
