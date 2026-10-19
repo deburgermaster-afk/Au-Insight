@@ -182,6 +182,15 @@ async function Billing({ tab }: { tab: string }) {
                           <span className="flex items-center gap-2 font-mono">
                             <Receipt className="size-3.5 text-muted-foreground" />
                             {i.number}
+                            {i.xeroError ? (
+                              <span title={`Xero: ${i.xeroError}`} className="rounded bg-rose-500/12 px-1 py-px font-sans text-[10px] text-rose-500">
+                                Xero error
+                              </span>
+                            ) : i.xeroId ? (
+                              <span title="Synced to Xero" className="rounded bg-sky-500/12 px-1 py-px font-sans text-[10px] text-sky-500">
+                                Xero
+                              </span>
+                            ) : null}
                           </span>
                         </td>
                         <td className="px-4 py-3">

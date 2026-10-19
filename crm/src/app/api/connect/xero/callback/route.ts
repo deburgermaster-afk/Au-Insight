@@ -9,8 +9,8 @@ import { verify } from "@/lib/secure";
 // Xero sends people back here: swap the code for tokens and remember which organisation to post to.
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const back = new URL("/app/settings/payroll?tab=integrations", req.url);
-  const state = verify<{ u: string; a: string; n: string; p: string }>(url.searchParams.get("state") ?? "");
+  const state = verify<{ u: string; a: string; n: string; p: string; b?: string }>(url.searchParams.get("state") ?? "");
+  const back = new URL(state?.b === "accounting" ? "/app/settings/accounting" : "/app/settings/payroll?tab=integrations", req.url);
   const session = await auth.api.getSession({ headers: await headers() });
   if (!state || state.p !== "xero" || !session || session.user.id !== state.u) return NextResponse.redirect((back.searchParams.set("connect_error", "expired"), back));
   const code = url.searchParams.get("code");

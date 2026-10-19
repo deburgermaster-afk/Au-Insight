@@ -147,7 +147,7 @@ export async function ehUpsertEmployee(key: string, businessId: string, employee
 // ---------- Xero (accounting journals) ----------
 
 export const xeroReady = () => Boolean(process.env.XERO_CLIENT_ID && process.env.XERO_CLIENT_SECRET);
-export const XERO_SCOPES = process.env.XERO_SCOPES ?? "openid profile email offline_access accounting.transactions accounting.settings.read";
+export const XERO_SCOPES = process.env.XERO_SCOPES ?? "openid profile email offline_access accounting.transactions accounting.contacts accounting.settings.read";
 
 export async function xeroToken(params: Record<string, string>) {
   const r = await fetch("https://identity.xero.com/connect/token", {

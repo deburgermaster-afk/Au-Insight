@@ -15,6 +15,8 @@ export default {
       const req = new Request(`https://lodgely.internal${path}`, { headers: { authorization: `Bearer ${env.CRON_SECRET}` } });
       ctx.waitUntil(app.fetch(req, env, ctx).then(async (res) => console.log(label, res.status, (await res.text()).slice(0, 300))));
     };
+    // Every run: automatic Xero sync for agencies that switched it on.
+    run("/api/cron/accounting", "accounting");
     // Hourly: signature reminders (the route itself only emails during Sydney business hours).
     if (at.getUTCMinutes() < 10) run("/api/cron/sign-reminders", "sign-reminders");
     // Overnight case reviews: every run from 14:00 to 19:59 UTC (midnight to 6am Sydney, AEST/AEDT).

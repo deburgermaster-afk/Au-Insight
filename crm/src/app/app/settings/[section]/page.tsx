@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
 import { Guard } from "@/components/app/guard";
+import { Button } from "@/components/ui/button";
 import { CompareTable, PlanCards } from "@/components/app/plans";
 import { PageSkeleton } from "@/components/app/skeletons";
 import { AiMailCard } from "@/components/mail-ai/controls";
@@ -35,7 +36,9 @@ import { Mark } from "@/components/settings/marks";
 import { RefreshUsage } from "@/components/settings/refresh-usage";
 import { SettingsShell } from "@/components/settings/shell";
 import { UsageBars } from "@/components/settings/usage-meter";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { AccountingForm, ExportForm, SyncNowButton } from "@/components/settings/accounting";
+import { accountingFor } from "@/lib/accounting";
 import { db, schema as s } from "@/db";
 import { getSettings } from "@/lib/data";
 import { dmy } from "@/lib/format";
@@ -220,6 +223,60 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
         }
       />
     );
+  }
+
+  if (slug === "accounting") {
+    const canEdit = ctx.caps.includes("billing");
+    const cfg = await accountingFor(ctx.agencyId);
+    if (tab === "export") body = <Summary className="max-w-4xl" title="Export for MYOB or your accountant" description="Download invoices and receipts for any date range."><ExportForm /></Summary>;
+    else {
+      const [conn] = await db.select({ status: s.connectors.status, account: s.connectors.account, connectedByName: s.connectors.connectedByName, lastError: s.connectors.lastError }).from(s.connectors).where(and(eq(s.connectors.agencyId, ctx.agencyId), eq(s.connectors.kind, "xero")));
+      const [counts] = await db
+        .select({
+          synced: sql<number>`count(*) filter (where ${s.invoices.xeroId} is not null)::int`,
+          pending: sql<number>`count(*) filter (where ${s.invoices.status} <> 'draft' and (${s.invoices.xeroSyncedAt} is null or ${s.invoices.updatedAt} > ${s.invoices.xeroSyncedAt}))::int`,
+          failed: sql<number>`count(*) filter (where ${s.invoices.xeroError} is not null)::int`,
+          last: sql<string | null>`max(${s.invoices.xeroSyncedAt})::text`,
+        })
+        .from(s.invoices)
+        .where(eq(s.invoices.agencyId, ctx.agencyId));
+      const [firstError] = await db.select({ number: s.invoices.number, error: s.invoices.xeroError }).from(s.invoices).where(and(eq(s.invoices.agencyId, ctx.agencyId), isNotNull(s.invoices.xeroError))).limit(1);
+      const connected = conn?.status === "active";
+      body = (
+        <div className="grid max-w-4xl gap-4">
+          <Summary
+            title="Xero"
+            status={<Pill tone={connected ? "ok" : "warn"}>{connected ? `Connected · ${conn?.account ?? "Xero"}` : "Not connected"}</Pill>}
+            description="Sent invoices go to Xero as approved sales invoices with the client as the contact, and office receipts are applied as payments. GST, GST-free and government charges get the right tax type."
+            rows={
+              connected
+                ? [
+                    { label: "Invoices in Xero", value: String(counts?.synced ?? 0) },
+                    { label: "Waiting to sync", value: String(counts?.pending ?? 0) },
+                    { label: "Need attention", value: counts?.failed ? `${counts.failed} · ${firstError?.number}: ${firstError?.error}` : "None", missing: Boolean(counts?.failed) },
+                    { label: "Last sync", value: counts?.last ? new Date(counts.last).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" }) : "Never" },
+                    { label: "Automatic sync", value: cfg.autoSync ? "On, every 10 minutes" : "Off" },
+                  ]
+                : [{ label: "Status", value: xeroReady() ? "Connect your Xero organisation to start." : "Xero isn't set up on this Lodgely server yet (the Xero app keys are missing).", missing: true }]
+            }
+            action={
+              canEdit ? (
+                connected ? (
+                  <SyncNowButton />
+                ) : xeroReady() ? (
+                  <Button asChild size="sm">
+                    <a href="/api/connect/xero/start?from=accounting">Connect Xero</a>
+                  </Button>
+                ) : null
+              ) : null
+            }
+          />
+          <Summary title="Account codes" description="Where Lodgely posts in your chart of accounts. Change them to match yours.">
+            <AccountingForm value={{ salesAccount: cfg.salesAccount, disbursementAccount: cfg.disbursementAccount, bankAccount: cfg.bankAccount, autoSync: cfg.autoSync }} canEdit={canEdit} />
+          </Summary>
+        </div>
+      );
+    }
   }
 
   if (slug === "workflow") {
