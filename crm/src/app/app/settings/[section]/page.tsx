@@ -123,7 +123,7 @@ async function Section({ params, searchParams }: PageProps<"/app/settings/[secti
           action={
             ctx.role === "owner" ? (
               <Configure title="Practice rules" label="Change">
-                <PracticeRules requireSignoff={p?.requireSignoff ?? true} isOwner />
+                <PracticeRules requireSignoff={p?.requireSignoff ?? true} require2fa={p?.require2fa ?? false} isOwner />
               </Configure>
             ) : null
           }

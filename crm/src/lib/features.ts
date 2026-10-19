@@ -163,8 +163,8 @@ export const features: { group: string; items: Feature[] }[] = [
         "Audit log of every change",
       ),
       ...live("Invite by email with position and MARN", "Positions: principal, MARA agent, education agent, consultant, reception, accounts, HR", "Navigation and actions follow each person's position", "MARN expiry warnings"),
-      ...live("Per-role permission editor"),
-      ...next("Multiple offices and branches", "Two-factor authentication", "Single sign-on"),
+      ...live("Per-role permission editor", "Two-factor sign-in with an authenticator app, backup codes and trusted devices", "Owner can require two-factor for every staff member"),
+      ...next("Multiple offices and branches", "Single sign-on"),
     ],
   },
   {

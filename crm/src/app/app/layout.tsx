@@ -10,6 +10,9 @@ import { UndoButtons, UndoShortcuts } from "@/components/undo/undo";
 import { NavProgress } from "@/components/app/nav-progress";
 import { getNavData } from "@/lib/data";
 import { getCtx } from "@/lib/session";
+import { eq } from "drizzle-orm";
+import { db, schema as sch } from "@/db";
+import { TwoFactorGate } from "@/components/security/two-factor-gate";
 
 // The chrome is static and prerenders; the agency name, user menu and nav counts read the session,
 // each behind its own boundary, so navigation never waits on them.
@@ -24,6 +27,16 @@ async function UserChip() {
   return <UserMenu name={ctx.name} email={ctx.email} role={ctx.role} />;
 }
 
+/** Agencies can require two-factor: anyone who hasn't set it up is sent to Security first. */
+async function Gate() {
+  const ctx = await getCtx();
+  const [[p], [u]] = await Promise.all([
+    db.select({ required: sch.agencyProfile.require2fa }).from(sch.agencyProfile).where(eq(sch.agencyProfile.agencyId, ctx.agencyId)),
+    db.select({ on: sch.user.twoFactorEnabled }).from(sch.user).where(eq(sch.user.id, ctx.userId)),
+  ]);
+  return <TwoFactorGate mustSetUp={Boolean(p?.required) && !u?.on} />;
+}
+
 const agency = (
   <Suspense fallback={<span className="inline-block h-3 w-24 animate-pulse rounded bg-muted" />}>
     <AgencyName />
@@ -34,6 +47,9 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
   return (
     <SidebarProvider>
       <NavProgress />
+      <Suspense fallback={null}>
+        <Gate />
+      </Suspense>
       <AppSidebar
         agency={agency}
         nav={getNavData()}

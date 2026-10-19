@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { organization } from "better-auth/plugins";
+import { organization, twoFactor } from "better-auth/plugins";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 
@@ -16,6 +16,8 @@ export const auth = betterAuth({
       invitationExpiresIn: 60 * 60 * 24 * 7,
       // Agency roles: owner (CEO/principal), admin, supervisor, agent, staff (reception), client.
     }),
+    // Authenticator-app codes with backup codes. Trusted devices skip the code for 30 days.
+    twoFactor({ issuer: "Lodgely", backupCodeOptions: { amount: 10, length: 10 } }),
     nextCookies(),
   ],
 });

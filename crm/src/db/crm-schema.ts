@@ -102,6 +102,8 @@ export const agencyProfile = pgTable("agency_profile", {
   aiDocsEnabledBy: text("ai_docs_enabled_by"),
   /** Agency's own checklists, fees, assignment rules and pick lists (Settings → Workflow). */
   workflow: jsonb("workflow").$type<WorkflowConfig>(),
+  /** Every staff member must set up two-factor sign-in (authenticator app). */
+  require2fa: boolean("require_2fa").default(false).notNull(),
   /** Xero / MYOB account codes and whether invoices sync automatically. */
   accounting: jsonb("accounting").$type<AccountingSettings>(),
   ...stamps,

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsUpDown, LogOut, Moon, Settings, Sun, UserRoundCog } from "lucide-react";
+import { ChevronsUpDown, LogOut, Moon, Settings, ShieldCheck, Sun, UserRoundCog } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -35,6 +35,11 @@ export function UserMenu({ name, email, role }: { name: string; email: string; r
               <div className="truncate text-xs text-muted-foreground">{email}</div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/app/me/security">
+                <ShieldCheck /> Security
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/app/settings">
                 <Settings /> Agency settings

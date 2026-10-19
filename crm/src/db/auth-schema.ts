@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   index,
+  integer,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -14,12 +15,30 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
 });
+
+/** Authenticator-app secrets and backup codes (Better Auth two-factor plugin). Stored encrypted by the plugin. */
+export const twoFactor = pgTable(
+  "two_factor",
+  {
+    id: text("id").primaryKey(),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    verified: boolean("verified").default(true),
+    failedVerificationCount: integer("failed_verification_count").default(0),
+    lockedUntil: timestamp("locked_until"),
+  },
+  (t) => [index("two_factor_secret_idx").on(t.secret), index("two_factor_user_idx").on(t.userId)],
+);
 
 export const session = pgTable(
   "session",

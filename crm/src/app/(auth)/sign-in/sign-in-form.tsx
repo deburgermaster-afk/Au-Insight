@@ -25,9 +25,11 @@ export function SignInForm() {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
           setBusy(true);
-          const { error } = await authClient.signIn.email({ email: String(f.get("email")), password: String(f.get("password")) });
+          const { data, error } = await authClient.signIn.email({ email: String(f.get("email")), password: String(f.get("password")) });
           setBusy(false);
           if (error) return toast.error(error.message ?? "Couldn't sign in");
+          // Two-factor on: the auth client is already taking them to /two-factor.
+          if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) return;
           router.push(/^\/(?!\/)/.test(next) ? next : "/app");
         }}
       >
